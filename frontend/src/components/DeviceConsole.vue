@@ -11,7 +11,7 @@ import {
   RefreshCw,
   X,
 } from "@lucide/vue";
-import { api, ApiError, session } from "../api";
+import { api, ApiError, premiumAvailable, session } from "../api";
 import { model } from "../store";
 import {
   isAdmin,
@@ -77,7 +77,11 @@ const history = computed(() =>
 );
 const frozen = computed(
   () =>
-    !allowed.value || !device.value?.online || !!pending.value || busy.value,
+    !allowed.value ||
+    !premiumAvailable(props.now) ||
+    !device.value?.online ||
+    !!pending.value ||
+    busy.value,
 );
 const paused = computed(
   () => !!device.value?.localPaused || !!device.value?.remotePaused,
@@ -264,6 +268,9 @@ onUnmounted(() => clearInterval(poll));
         使用原标识安全重试
       </button>
     </div>
+    <p v-if="!premiumAvailable(now)" class="notice subtle">
+      设备绑定和自动同步免费可用。远程暂停、翻页及请求同步需要高级许可，可在“账号与许可”输入管理员提供的许可码。
+    </p>
     <div class="section-heading">
       <div class="segmented">
         <button

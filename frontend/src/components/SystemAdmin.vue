@@ -14,11 +14,19 @@ import {
 } from "@lucide/vue";
 import { api, session } from "../api";
 import { timeLabel } from "../domain";
+import AccountOnboarding from "./AccountOnboarding.vue";
+import LicenseManager from "./LicenseManager.vue";
 
-const emit = defineEmits<{ changed: []; restored: [string] }>();
+const emit = defineEmits<{
+  changed: [];
+  restored: [string];
+  createClass: [];
+}>();
 const tabs = [
   { id: "overview", name: "运行概况", icon: Monitor },
   { id: "users", name: "账号管理", icon: Users },
+  { id: "onboarding", name: "开通账号", icon: Plus },
+  { id: "licenses", name: "高级许可", icon: ScrollText },
   { id: "classes", name: "全部班级", icon: School },
   { id: "devices", name: "全部设备", icon: Monitor },
   { id: "settings", name: "站点设置", icon: Settings },
@@ -45,7 +53,29 @@ const userForm = reactive({
   password: "",
   systemAdmin: false,
   active: true,
+  canCreateClasses: false,
+  expiry: "",
 });
+const licenseUserId = ref(""),
+  activationResult = ref<any>(null);
+async function reissueActivation(item: any) {
+  await run(async () => {
+    activationResult.value = await api(
+      `/system/users/${item.id}/activation`,
+      "POST",
+    );
+  });
+}
+async function copyActivation() {
+  try {
+    await navigator.clipboard.writeText(
+      `账号：${activationResult.value.login}\n激活码：${activationResult.value.activationCode}`,
+    );
+    notice.value = "已复制激活信息。";
+  } catch {
+    error.value = "浏览器未允许复制，请手动选中复制。";
+  }
+}
 const classForm = reactive({ name: "", ownerId: "", archived: false }),
   ownerSearch = ref(""),
   ownerOptions = ref<any[]>([]);
@@ -57,6 +87,13 @@ const auditNames: Record<string, string> = {
   system_initialized: "初始化系统",
   system_settings_changed: "修改站点设置",
   user_created: "创建账号",
+  account_invited: "开通账号",
+  account_activated: "账号完成激活",
+  activation_reissued: "重发激活码",
+  license_issued: "签发高级许可",
+  license_redeemed: "兑换高级许可",
+  license_revoked: "作废许可码",
+  license_ended: "终止高级许可",
   user_updated: "修改账号",
   password_reset: "重置口令",
   class_updated: "修改班级",
@@ -107,6 +144,7 @@ async function load() {
   }
 }
 async function switchTab(id: string) {
+  activationResult.value = null;
   tab.value = id;
   search.value = "";
   offset.value = 0;
@@ -124,6 +162,10 @@ function open(kind: string, item: any = null) {
     password: "",
     active: item?.active ?? true,
     systemAdmin: item?.systemAdmin ?? false,
+    canCreateClasses: item?.canCreateClasses ?? false,
+    expiry: item?.expiresAt
+      ? new Date(item.expiresAt * 1000 + 8 * 3600000).toISOString().slice(0, 10)
+      : "",
   });
   if (kind === "class") {
     Object.assign(classForm, {
@@ -161,6 +203,10 @@ async function save() {
         name: userForm.name,
         active: userForm.active,
         systemAdmin: userForm.systemAdmin,
+        canCreateClasses: userForm.canCreateClasses,
+        expiresAt: userForm.expiry
+          ? new Date(`${userForm.expiry}T23:59:59+08:00`).getTime() / 1000
+          : 0,
       });
     } else if (mode.value === "password") {
       await api(`/system/users/${target.value.id}/reset-password`, "POST", {
@@ -254,7 +300,16 @@ async function download(name: string) {
     </p>
     <p v-if="notice" class="notice subtle" role="status">{{ notice }}</p>
     <template v-if="overview">
-      <template v-if="tab === 'overview'">
+      <AccountOnboarding
+        v-if="tab === 'onboarding'"
+        @changed="emit('changed')"
+      />
+      <LicenseManager
+        v-else-if="tab === 'licenses'"
+        :initial-user-id="licenseUserId"
+        @changed="emit('changed')"
+      />
+      <template v-else-if="tab === 'overview'">
         <div class="system-stats">
           <article class="panel">
             <span>教师与管理员</span><strong>{{ overview.users }}</strong
@@ -276,6 +331,25 @@ async function download(name: string) {
             }}</small>
           </article>
         </div>
+        <section class="panel admin-start">
+          <h2>开通老师的工作台</h2>
+          <p class="muted">
+            分配身份与班级，生成激活码交给本人；需要高级功能时，再签发许可码。
+          </p>
+          <div class="record-actions">
+            <button class="button primary" @click="switchTab('onboarding')">
+              开通班主任 / 老师账号</button
+            ><button
+              class="button secondary"
+              @click="
+                licenseUserId = '';
+                switchTab('licenses');
+              "
+            >
+              签发高级许可
+            </button>
+          </div>
+        </section>
         <section class="panel">
           <h2>服务状态</h2>
           <dl class="system-details">
@@ -320,15 +394,10 @@ async function download(name: string) {
               >站点名称<input
                 v-model.trim="settingsForm.siteName"
                 required
-                maxlength="80" /></label
-            ><label class="system-check"
-              ><input
-                type="checkbox"
-                v-model="settingsForm.registrationOpen"
-              />允许教师自行注册</label
-            >
+                maxlength="80"
+            /></label>
             <p class="muted">
-              关闭后由管理员在“账号管理”创建账号，已有账号正常登录。
+              老师使用管理员分配的账号和激活码。身份、账号期限和高级许可均由系统管理员管理。
             </p>
             <label class="field"
               >公开访问地址<input :value="overview.publicUrl" readonly
@@ -384,6 +453,13 @@ async function download(name: string) {
       </section>
       <section v-else class="panel">
         <div class="system-toolbar">
+          <button
+            v-if="tab === 'classes'"
+            class="button primary"
+            @click="emit('createClass')"
+          >
+            创建班级
+          </button>
           <form
             v-if="tab !== 'audit'"
             class="system-search"
@@ -404,9 +480,22 @@ async function download(name: string) {
             v-if="tab === 'users'"
             class="button primary"
             :disabled="busy"
-            @click="open('create')"
+            @click="switchTab('onboarding')"
           >
-            <Plus :size="16" />创建账号
+            <Plus :size="16" />开通账号
+          </button>
+        </div>
+        <div v-if="activationResult" class="issued-code">
+          <strong>{{ activationResult.login }} 的新激活码</strong
+          ><code>{{ activationResult.activationCode }}</code
+          ><small
+            >旧码已作废，新码在
+            {{
+              timeLabel(activationResult.expiresAt * 1000, true)
+            }}
+            前有效。</small
+          ><button class="button secondary" @click="copyActivation">
+            复制激活信息
           </button>
         </div>
         <p v-if="!rows.length" class="inline-empty">
@@ -418,11 +507,33 @@ async function download(name: string) {
               <h3>
                 {{ item.name }}
                 <span class="badge neutral">{{
-                  item.systemAdmin ? "系统管理员" : "教师"
+                  item.systemAdmin
+                    ? "系统管理员"
+                    : item.canCreateClasses
+                      ? "班主任"
+                      : "普通老师"
                 }}</span
-                ><span v-if="!item.active" class="badge">已停用</span>
+                ><span v-if="!item.active" class="badge">已停用</span
+                ><span v-else-if="!item.activated" class="badge amber-badge"
+                  >待激活</span
+                >
               </h3>
               <p class="muted">{{ item.login }}</p>
+              <p class="muted small">
+                账号：{{
+                  item.expiresAt
+                    ? timeLabel(item.expiresAt * 1000, true) + " 到期"
+                    : "长期有效"
+                }}
+                ·
+                {{
+                  item.systemAdmin
+                    ? "最高管理权限"
+                    : item.premiumActive
+                      ? "高级许可有效"
+                      : "基础版"
+                }}
+              </p>
             </div>
             <div class="record-actions">
               <button
@@ -432,6 +543,23 @@ async function download(name: string) {
               >
                 编辑账号</button
               ><button
+                v-if="!item.activated && item.active"
+                class="text-button"
+                :disabled="busy"
+                @click="reissueActivation(item)"
+              >
+                重发激活码</button
+              ><button
+                v-if="!item.systemAdmin"
+                class="text-button"
+                @click="
+                  licenseUserId = item.id;
+                  switchTab('licenses');
+                "
+              >
+                管理许可</button
+              ><button
+                v-if="item.activated"
                 class="text-button"
                 :disabled="busy"
                 @click="open('password', item)"
@@ -566,6 +694,16 @@ async function download(name: string) {
               v-model="userForm.systemAdmin"
               :disabled="target?.id === session.userId"
             />系统管理员</label
+          ><label class="system-check" v-if="!userForm.systemAdmin"
+            ><input
+              type="checkbox"
+              v-model="userForm.canCreateClasses"
+            />班主任：允许创建班级</label
+          ><label class="field"
+            >账号到期日（北京时间，留空为长期有效）<input
+              type="date"
+              v-model="userForm.expiry"
+              :disabled="target?.id === session.userId" /></label
           ><label v-if="mode === 'edit'" class="system-check"
             ><input
               type="checkbox"

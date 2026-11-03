@@ -159,7 +159,7 @@ def update_member(
     target = db.scalar(select(Membership).where(Membership.class_id == class_id, Membership.user_id == user_id))
     if not target or target.role == "owner":
         fail(403, "owner_protected", "不能修改或移除所有者，请使用所有权转移。")
-    if current.role != "owner" and (target.role == "admin" or body.role == "admin"):
+    if not user.system_admin and current.role != "owner" and (target.role == "admin" or body.role == "admin"):
         fail(403, "owner_required", "仅所有者可以任命、撤销或移除管理员。")
     if not set(body.subjects) <= set(c.data["subjects"]):
         fail(422, "subject_unknown", "包含未配置学科。")
@@ -173,7 +173,7 @@ def update_member(
 @router.post("/classes/{class_id}/transfers")
 def transfer(class_id: str, body: S.TransferInput, user: User = Depends(actor), db: Session = Depends(get_db)):
     c, current = member(db, user, class_id, write=True)
-    if current.role != "owner" or body.recipient == user.id:
+    if (current.role != "owner" and not user.system_admin) or body.recipient == c.owner_id:
         fail(403, "owner_required", "仅所有者可以向其他有效成员发起转移。")
     target = db.scalar(
         select(Membership).where(
@@ -188,7 +188,7 @@ def transfer(class_id: str, body: S.TransferInput, user: User = Depends(actor), 
     if not t:
         t = Transfer(class_id=c.id)
         db.add(t)
-    t.id, t.sender, t.recipient, t.state, t.expires = uid(), user.id, target.user_id, "pending", now() + 86400
+    t.id, t.sender, t.recipient, t.state, t.expires = uid(), c.owner_id, target.user_id, "pending", now() + 86400
     return {"id": t.id, "expiresAt": t.expires}
 
 
@@ -210,9 +210,17 @@ def finish_transfer(
     t = db.get(Transfer, class_id)
     if not t or t.id != transfer_id or t.state != "pending" or t.expires <= now() or c.owner_id != t.sender:
         fail(409, "transfer_invalid", "转移请求已失效。")
-    if action_name == "cancel" and user.id == t.sender:
+    if action_name == "cancel" and (user.id == t.sender or user.system_admin):
         t.state = "cancelled"
     elif action_name == "accept" and user.id == t.recipient:
+        # 系统管理员的全班访问身份是临时授权；交接必须更新真实成员记录。
+        m = db.scalar(
+            select(Membership).where(
+                Membership.class_id == c.id, Membership.user_id == user.id, Membership.active.is_(True)
+            )
+        )
+        if not m:
+            fail(409, "member_changed", "接收人的班级成员身份已改变。")
         old = db.scalar(
             select(Membership).where(
                 Membership.class_id == c.id, Membership.user_id == t.sender, Membership.active.is_(True)
@@ -230,7 +238,7 @@ def finish_transfer(
 @router.post("/classes/{class_id}/{action_name}")
 def lifecycle(class_id: str, action_name: str, user: User = Depends(actor), db: Session = Depends(get_db)):
     c, m = member(db, user, class_id)
-    if m.role != "owner":
+    if m.role != "owner" and not user.system_admin:
         fail(403, "owner_required", "仅所有者可以归档或恢复班级。")
     if action_name not in ("archive", "restore"):
         fail(404, "action_unknown", "操作不存在。")

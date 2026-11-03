@@ -19,8 +19,8 @@ def main():
     nsis = args.nsis or Path(os.environ["LOCALAPPDATA"]) / "tauri/NSIS/makensis.exe"
     if not nsis.is_file():
         raise SystemExit("请安装 NSIS 3，并通过 --nsis 指定 makensis.exe；脚本不会安装全局工具。")
-    payload = ROOT / "dist" / ("windows-qa" if args.qa else "windows-0.2.0")
-    output = ROOT / "dist" / ("ClassGlow-0.2.0-uninstall-QA.exe" if args.qa else "ClassGlow-0.2.0-win-x64-setup.exe")
+    payload = ROOT / "dist" / ("windows-qa" if args.qa else "windows-0.3.0")
+    output = ROOT / "dist" / ("ClassGlow-0.3.0-uninstall-QA.exe" if args.qa else "ClassGlow-0.3.0-win-x64-setup.exe")
     build = ROOT / ".qa" / ("installer-qa" if args.qa else "installer")
     build.mkdir(parents=True, exist_ok=True)
     command = [

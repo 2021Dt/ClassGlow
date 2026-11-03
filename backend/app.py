@@ -36,6 +36,7 @@ from .db import (
     sync_epoch,
     uid,
 )
+from .entitlements import class_entitlement, profile, require_premium
 from .middleware import BodyLimitMiddleware, body_limit
 from .security import actor, bearer, digest, fail, limit, member, passwords, secret
 from .system_service import ensure_setup_key, system_config
@@ -181,7 +182,7 @@ def session_result(db, user):
     )
     return {
         "token": token,
-        "user": {"id": user.id, "name": user.name, "login": user.login, "systemAdmin": user.system_admin},
+        "user": profile(user),
     }
 
 
@@ -205,12 +206,17 @@ def register(body: S.Credentials, request: Request, db: Session = Depends(get_db
     limit(f"register:{request.client.host}", 10, 3600)
     config = system_config(db)
     if not config.initialized:
-        fail(409, "setup_required", "请先完成服务器初始化。")
+        fail(409, "setup_required", "学校尚未开通，请联系管理员。")
     if not config.registration_open:
         fail(403, "registration_closed", "系统已关闭公开注册，请联系管理员创建账号。")
     if not body.name.strip():
         fail(422, "name_required", "请填写显示名称。")
-    user = User(login=body.login.casefold(), name=body.name.strip(), password=passwords.hash(body.password))
+    user = User(
+        login=body.login.casefold(),
+        name=body.name.strip(),
+        password=passwords.hash(body.password),
+        can_create_classes=False,
+    )
     db.add(user)
     db.flush()
     return session_result(db, user)
@@ -219,14 +225,16 @@ def register(body: S.Credentials, request: Request, db: Session = Depends(get_db
 @app.post("/auth/login")
 def login(body: S.Credentials, request: Request, db: Session = Depends(get_db)):
     if not system_config(db).initialized:
-        fail(409, "setup_required", "请先完成服务器初始化。")
+        fail(409, "setup_required", "学校尚未开通，请联系管理员。")
     limit(f"login-ip:{request.client.host}", 30, 300)
     limit(f"login:{request.client.host}:{body.login.casefold()}", 10, 300)
     user = db.scalar(select(User).where(User.login == body.login.casefold()))
-    if not user or not passwords.verify(body.password, user.password):
+    if not user or not user.activated or not passwords.verify(body.password, user.password):
         fail(401, "invalid_credentials", "账号或口令不正确。")
     if not user.active:
         fail(403, "account_disabled", "账号已停用，请联系系统管理员。")
+    if user.expires_at and user.expires_at <= now():
+        fail(403, "account_expired", "账号使用期限已到，请联系系统管理员续期。数据会保留。")
     return session_result(db, user)
 
 
@@ -238,12 +246,13 @@ def logout(authorization: str = Header(), user: User = Depends(actor), db: Sessi
     return {"ok": True}
 
 
-def class_view(c, m):
+def class_view(c, m, db):
     return {
         "id": c.id,
         "name": c.name,
         "stage": c.stage,
         "role": m.role,
+        **class_entitlement(db, c),
         "subjects": c.data["subjects"],
         "authorizedSubjects": c.data["subjects"] if m.role != "teacher" else m.subjects,
         "version": c.version,
@@ -270,6 +279,11 @@ def content_view(db, content, user_id=None):
 @app.get("/bootstrap")
 def bootstrap(user: User = Depends(actor), db: Session = Depends(get_db)):
     memberships = db.scalars(select(Membership).where(Membership.user_id == user.id, Membership.active.is_(True))).all()
+    if user.system_admin:
+        memberships = [
+            Membership(class_id=c.id, user_id=user.id, role="admin", subjects=c.data["subjects"])
+            for c in db.scalars(select(Classroom))
+        ]
     ids = [m.class_id for m in memberships]
     from .db import Command, Device
     from .devices import command_view, device_view
@@ -277,8 +291,8 @@ def bootstrap(user: User = Depends(actor), db: Session = Depends(get_db)):
     devices = db.scalars(select(Device).where(Device.class_id.in_(ids), Device.revoked.is_(False))).all()
     return {
         "schema": 1,
-        "user": {"id": user.id, "name": user.name, "login": user.login, "systemAdmin": user.system_admin},
-        "classes": [class_view(db.get(Classroom, m.class_id), m) for m in memberships],
+        "user": profile(user),
+        "classes": [class_view(db.get(Classroom, m.class_id), m, db) for m in memberships],
         "contents": [
             content_view(db, c, user.id)
             for c in db.scalars(select(Content).where(Content.class_id.in_(ids)).order_by(Content.id))
@@ -302,14 +316,18 @@ def bootstrap(user: User = Depends(actor), db: Session = Depends(get_db)):
 
 @app.get("/classes")
 def list_classes(user: User = Depends(actor), db: Session = Depends(get_db)):
+    if user.system_admin:
+        return [class_view(c, Membership(role="admin"), db) for c in db.scalars(select(Classroom))]
     return [
-        class_view(db.get(Classroom, m.class_id), m)
+        class_view(db.get(Classroom, m.class_id), m, db)
         for m in db.scalars(select(Membership).where(Membership.user_id == user.id, Membership.active.is_(True)))
     ]
 
 
 @app.post("/classes", status_code=201)
 def create_class(body: S.ClassInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+    if not (user.system_admin or user.can_create_classes):
+        fail(403, "class_creation_forbidden", "创建班级需要班主任或系统管理员权限，请联系管理员分配任教班级。")
     c = Classroom(
         owner_id=user.id,
         name=body.name,
@@ -330,7 +348,7 @@ def create_class(body: S.ClassInput, user: User = Depends(actor), db: Session = 
     m = Membership(class_id=c.id, user_id=user.id, role="owner", subjects=body.subjects)
     db.add(m)
     audit(db, c, user, "class_created")
-    return class_view(c, m)
+    return class_view(c, m, db)
 
 
 @app.get("/drafts")
@@ -417,6 +435,8 @@ def publish(
     if d.closed or d.revision != body.draftRevision:
         fail(409, "draft_revision_conflict", "草稿已改变，不能发布旧正文。")
     value = S.DraftInput.model_validate({**d.data, "revision": d.revision})
+    if len(value.classIds) > 1:
+        require_premium(user)
     if value.kind == "homework" and value.subject == "公共提醒":
         fail(422, "subject_invalid", "作业必须选择具体学科。")
     if not value.body.strip() or len(value.body) > (500 if value.kind == "homework" else 200):
@@ -551,12 +571,13 @@ def history(content_id: str, user: User = Depends(actor), db: Session = Depends(
 @app.put("/classes/{class_id}/layout")
 def layout(class_id: str, body: S.LayoutInput, user: User = Depends(actor), db: Session = Depends(get_db)):
     c, _ = member(db, user, class_id, admin=True, write=True)
+    require_premium(user)
     if c.data["layout"]["revision"] != body.revision:
         fail(409, "layout_revision_conflict", "布局已被修改，本次预览方案请保留。")
     value = body.model_dump()
     value["revision"] += 1
     before = c.data["layout"]
-    c.data = {**c.data, "layout": value}
+    c.data = {**c.data, "layout": value, "layoutLicenseUserId": user.id}
     c.version += 1
 
     def audit_layout(item):
@@ -654,8 +675,10 @@ def override(class_id: str, body: S.OverrideInput, user: User = Depends(actor), 
 
 
 from .devices import router as device_router
+from .licenses import router as license_router
 from .lifecycle import router as lifecycle_router
 from .maintenance import router as maintenance_router
+from .onboarding import router as onboarding_router
 from .queries import router as query_router
 from .system_admin import router as system_router
 
@@ -664,3 +687,5 @@ app.include_router(maintenance_router)
 app.include_router(lifecycle_router)
 app.include_router(query_router)
 app.include_router(system_router)
+app.include_router(onboarding_router)
+app.include_router(license_router)

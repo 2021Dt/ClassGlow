@@ -65,7 +65,7 @@ def revoke_invite(class_id: str, invitation_id: str, user: User = Depends(actor)
 @router.get("/classes/{class_id}/transfer")
 def transfer_state(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
     c, m = member(db, user, class_id)
-    if m.role != "owner":
+    if m.role != "owner" and not user.system_admin:
         fail(403, "owner_required", "仅所有者可查看待发起交接。")
     t = db.get(Transfer, c.id)
     if not t:

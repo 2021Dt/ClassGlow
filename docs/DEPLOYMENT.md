@@ -19,7 +19,7 @@
 | 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.2.0 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+| Windows 发布 | 0.3.0 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员初始化由用户持安装密钥在网页完成。
 
@@ -37,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/instal
 
 目前仓库公开，服务器默认通过 HTTPS 只读拉取，不需要 GitHub 私钥。如果以后将仓库设为私有，先为服务器配置只读 Deploy Key，再将 `/opt/classglow` 的 `origin` 改为 `git@github.com:2021Dt/ClassGlow.git`；首次 SSH 连接需在终端核对 GitHub 主机指纹。无需向服务器复制开发者私钥。
 
-安装成功后，通过 `sudo classglow setup-key` 单独读取一次性安装密钥，再打开 `https://teacher.dgplus.vip/` 完成初始化。密钥不会写入安装与自动更新日志。管理员账号和口令在网页上自行设置，没有默认口令。安装命令可再次运行，已有配置和数据卷保留。
+安装成功后，通过 `sudo classglow setup-key` 单独读取一次性安装密钥，再打开 `https://teacher.dgplus.vip/setup` 完成首次管理员开通。密钥不会写入安装与自动更新日志。管理员账号和口令在网页上自行设置，没有默认口令。安装命令可再次运行，已有配置和数据卷保留。
 
 ```bash
 # 手工一键更新：拉取 main、构建、备份、迁移、部署
@@ -155,7 +155,7 @@ curl --fail https://teacher.dgplus.vip/api/health
 dc exec api python -m scripts.setup_key
 ```
 
-打开网站的初始化向导，填写安装密钥、站点名称、管理员账号和口令。默认关闭教师自行注册，初始化完成后进入“系统管理 → 账号管理”创建教师账号，也可以在“站点设置”开放注册。初始化只允许成功一次，完成后即锁定；密钥存放在数据卷中的 `setup-key.txt`，不会通过网页或启动日志返回。
+打开 `/setup`，填写管理员账号、密码和管理员激活码（即上面读取的安装密钥）。首页不显示服务器命令。开通后进入“系统管理 → 开通账号”，分配老师身份、账号期限、班级和学科，再发放账号激活码；高级许可由管理员另行签发，详见 [账号与许可](ACCOUNT-LICENSES.md)。初始化只允许成功一次，完成后即锁定；密钥存放在数据卷中的 `setup-key.txt`，不会通过网页或启动日志返回。
 
 本机开发用 `uv run python -m scripts.setup_key` 读取。已有旧版数据升级后同样需要首次设置系统管理员：可以新建管理账号，或填写已有账号及其原口令进行升级，历史业务数据保留。
 
@@ -167,7 +167,7 @@ dc exec api python -m scripts.setup_key
 
 | 使用位置 | 地址或操作 |
 | --- | --- |
-| 教师电脑、Android Chrome、iPhone Safari | 打开 `https://teacher.dgplus.vip/` 登录；注册入口由系统管理员控制 |
+| 教师电脑、Android Chrome、iPhone Safari | 打开 `https://teacher.dgplus.vip/` 登录；首次使用选择“首次激活”，账号和激活码由系统管理员发放 |
 | 手机常用入口 | 底部“班级”“记录”“我的”；“我的”提供私人草稿、班级设置、大屏控制 |
 | 系统管理员入口 | 电脑左侧“系统管理”；手机“我的 → 系统管理” |
 | 手机展示布局 | 班级概览的展示预览入口；布局与主题须明确发布 |
@@ -245,7 +245,7 @@ dc run --rm --no-deps \
 
 2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。网页初始化尚未提交，没有预置管理员或演示数据。浏览器自动化在连接阶段超时，本次未进行线上登录后的交互复核；本地业务验证范围见 [验收记录](VERIFICATION.md)。
 
-Windows x64 0.2.0 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.2.0-win-x64-setup.exe)，大小 51,280,494 字节，SHA-256 为 `b741f02c5da47aa4d6cbce55967c793c14d19b151ff78d6d68402edce9797ec2`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
+Windows x64 0.3.0 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.3.0-win-x64-setup.exe)，大小 51,268,799 字节，SHA-256 为 `47a67c46e3bae55eff3bf2cf0a232a1b335bbae705c06a239edd82a6e1363a3e`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
 
 | 现象 | 检查方向 |
 | --- | --- |
@@ -256,4 +256,4 @@ Windows x64 0.2.0 当前用户安装包提供[公网下载](https://teacher.dgpl
 | 保存冲突 | 保留本机输入，在页面比较最新版本；不要清浏览器存储来解决冲突 |
 | 客户端已缓存但未应用 | 本机是否启用展示、是否暂停、是否仍有课件处于前台 |
 
-可重复运行的移动端用例在 `frontend/e2e/mobile.pw.ts`：先在独立测试环境完成初始化并开放注册，安装前端依赖，执行 `npx playwright install chromium`，将 `KANBAN_TEST_URL` 指向该环境，再运行 `npm run test:e2e`。它会创建明确标为测试数据的账号与班级，不应定期对真实教学数据运行。
+`frontend/e2e/mobile.pw.ts` 是旧版公开注册流程的历史用例，不适用于当前激活入口。本次使用隔离账号验收新的身份导航和 390px 页面；后端关键权限与期限检查见 `backend/tests/test_access_licenses.py`，不要对生产账号运行测试。

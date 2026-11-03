@@ -33,6 +33,7 @@ from .db import (
     uid,
 )
 from .devices import device_view
+from .entitlements import profile
 from .security import fail, limit, passwords, system_admin
 from .system_service import log_system, setup_key_file, system_config
 
@@ -59,6 +60,8 @@ class UserUpdate(S.Input):
     name: str = Field(min_length=1, max_length=40)
     active: bool
     systemAdmin: bool
+    canCreateClasses: bool | None = None
+    expiresAt: float | None = Field(default=None, ge=0, le=4102444800)
 
 
 class PasswordInput(S.Input):
@@ -77,13 +80,7 @@ class RestoreInput(S.Input):
 
 
 def user_view(user):
-    return {
-        "id": user.id,
-        "login": user.login,
-        "name": user.name,
-        "active": user.active,
-        "systemAdmin": user.system_admin,
-    }
+    return {**profile(user), "active": user.active}
 
 
 @router.get("/setup/status")
@@ -104,7 +101,7 @@ def initialize(body: SetupInput, request: Request, db: Session = Depends(get_db)
         fail(409, "already_initialized", "系统已初始化，安装入口已锁定。")
     key = setup_key_file().read_text(encoding="utf-8").strip()
     if not secrets.compare_digest(key.encode(), body.setupKey.strip().encode()):
-        fail(403, "setup_key_invalid", "安装密钥不正确。请从服务器终端读取。")
+        fail(403, "setup_key_invalid", "管理员激活码不正确，请联系部署人员核对。")
     user = db.scalar(select(User).where(User.login == body.login.casefold()))
     if user:
         if not passwords.verify(body.password, user.password):
@@ -112,7 +109,7 @@ def initialize(body: SetupInput, request: Request, db: Session = Depends(get_db)
     else:
         user = User(login=body.login.casefold(), name=body.name.strip(), password=passwords.hash(body.password))
         db.add(user)
-    user.system_admin, user.active = True, True
+    user.system_admin, user.active, user.activated = True, True, True
     config.initialized, config.initialized_at = True, now()
     config.site_name, config.registration_open = body.siteName.strip(), body.registrationOpen
     log_system(db, user.login, "system_initialized", config.site_name)
@@ -187,6 +184,14 @@ def create_user(body: UserInput, user: User = Depends(system_admin), db: Session
     return user_view(target)
 
 
+@router.get("/system/users/{user_id}")
+def get_user(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+    target = db.get(User, user_id)
+    if not target:
+        fail(404, "user_missing", "账号不存在。")
+    return user_view(target)
+
+
 @router.put("/system/users/{user_id}")
 def edit_user(user_id: str, body: UserUpdate, user: User = Depends(system_admin), db: Session = Depends(get_db)):
     target = db.get(User, user_id)
@@ -195,6 +200,12 @@ def edit_user(user_id: str, body: UserUpdate, user: User = Depends(system_admin)
     if target.id == user.id and (not body.active or not body.systemAdmin):
         fail(409, "current_admin", "不能停用或降级当前管理员，请由其他系统管理员处理。")
     target.name, target.active, target.system_admin = body.name.strip(), body.active, body.systemAdmin
+    if body.canCreateClasses is not None:
+        target.can_create_classes = body.canCreateClasses
+    if body.expiresAt is not None:
+        if target.id == user.id and body.expiresAt:
+            fail(409, "current_admin", "不能给当前管理员设置到期时间，请由其他系统管理员处理。")
+        target.expires_at = body.expiresAt
     if not target.active or not target.system_admin:
         db.execute(delete(Token).where(Token.user_id == target.id))
     log_system(db, user.login, "user_updated", target.login, body.model_dump())
@@ -240,6 +251,7 @@ def list_classes(
                     .select_from(Membership)
                     .where(Membership.class_id == c.id, Membership.active.is_(True))
                 ),
+                "subjects": c.data["subjects"],
             }
             for c in rows
         ],

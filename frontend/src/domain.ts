@@ -26,6 +26,9 @@ export interface Layout {
   grid: Record<GridKey, GridRect>;
 }
 export interface Classroom {
+  premiumActive?: boolean;
+  premiumUntil?: number;
+  licenseOwner?: string;
   authorizedSubjects?: string[];
   id: string;
   name: string;
@@ -191,7 +194,7 @@ export const uid = () => crypto.randomUUID();
 export const isAdmin = (c?: Classroom) =>
   !!c && (c.role === "owner" || c.role === "admin");
 export const roleLabel = (r: Role) =>
-  ({ owner: "班级所有者", admin: "管理员", teacher: "科任老师" })[r];
+  ({ owner: "班主任", admin: "班主任", teacher: "普通老师" })[r];
 export function defaultLayout(): Layout {
   return {
     theme: "mica_light",

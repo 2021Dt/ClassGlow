@@ -30,6 +30,8 @@ def client(tmp_path):
 
     app.dependency_overrides[get_db] = database
     _buckets.clear()
-    yield TestClient(app), engine
+    test_client = TestClient(app)
+    test_client.test_engine = engine
+    yield test_client, engine
     app.dependency_overrides.clear()
     engine.dispose()

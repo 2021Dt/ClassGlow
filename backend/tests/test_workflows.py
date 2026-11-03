@@ -3,13 +3,19 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from backend.db import Device, Membership
+from backend.db import Device, Membership, User, now
 
 
 def user(c, name="teacher"):
     r = c.post("/auth/register", json={"login": name, "name": name, "password": "CorrectPass!123"})
     assert r.status_code == 201, r.text
     data = r.json()
+    # 旧业务用例的测试账号显式具有建班与高级许可；免费版边界由专门流程验证。
+    with Session(c.test_engine) as db:
+        target = db.get(User, data["user"]["id"])
+        target.can_create_classes = True
+        target.premium_until = now() + 86400
+        db.commit()
     return {"Authorization": f"Bearer {data['token']}"}, data["user"]["id"]
 
 

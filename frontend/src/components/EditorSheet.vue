@@ -25,6 +25,7 @@ import {
 import {
   api,
   ApiError,
+  premiumAvailable,
   localDraftKey,
   persistInput,
   removeInput,
@@ -327,7 +328,12 @@ onUnmounted(() => {
                     type="checkbox"
                     :value="c.id"
                     v-model="form.classIds"
-                    :disabled="!!form.sourceId"
+                    :disabled="
+                      !!form.sourceId ||
+                      (!premiumAvailable() &&
+                        form.classIds.length >= 1 &&
+                        !form.classIds.includes(c.id))
+                    "
                   />{{ c.name }}</label
                 ><label
                   v-for="id in missingTargets"
@@ -341,7 +347,11 @@ onUnmounted(() => {
                   />失效目标 · 取消选择后可继续</label
                 >
               </div>
-              <small>每班生成独立记录，之后逐班修改。</small>
+              <small>{{
+                premiumAvailable()
+                  ? "每班生成独立记录，之后逐班修改。"
+                  : "基础版每次发布到一个班级。多班批量发布需高级许可；旧草稿可取消其他班级后发布。"
+              }}</small>
             </fieldset>
             <label class="field"
               >{{ form.kind === "homework" ? "科目" : "提醒范围" }}

@@ -163,7 +163,7 @@ public sealed class Engine : IDisposable
         State.Snapshot = snapshot.DeepClone().AsObject(); State.CachedVersion = version; State.ETag = etag; State.LastContentSync = Utc+State.ClockOffset;
         try { Save(); }
         catch { State.Snapshot = previousSnapshot; State.CachedVersion = previousVersion; State.ETag = previousEtag; State.LastContentSync = previousSync; throw; }
-        changed |= newer;
+        changed |= newer || previousEtag != etag;
         requireFullSnapshot=false;
         foreach (var cmd in (snapshot["commands"] as JsonArray ?? new()).OfType<JsonObject>()) await Execute(cmd);
     }
@@ -219,11 +219,12 @@ public sealed class Engine : IDisposable
         var monitor = wallpaper.Read(State.MonitorIndex);
         if (State.OriginalCaptured && State.OriginalMonitor != monitor.Id) throw new InvalidOperationException("显示器目标已变化，请先恢复旧目标，再重新选择。");
         if (!State.OriginalCaptured || !ClientLifecycle.OwnedWallpaper(monitor.Original, store.DirectoryPath)) { State.OriginalMonitor = monitor.Id; State.OriginalWallpaper = monitor.Original; State.OriginalCaptured = true; Save(); }
-        var layout = State.Snapshot!["classroom"]!["layout"]!;
+        var layout = Renderer.EffectiveLayout(State, Clock);
         int interval = Math.Max(15, layout.Int("interval", 20));
         if(State.ManualUntil>0 && State.ManualUntil<=Clock.ToUnixTimeSeconds()) { State.ManualUntil=0; State.AutoPageStartedAt=Clock.ToUnixTimeSeconds(); }
         double phase=State.ManualUntil>Clock.ToUnixTimeSeconds() ? -State.Page : State.PageCount>1 ? Math.Floor(Math.Max(0,Clock.ToUnixTimeSeconds()-State.AutoPageStartedAt)/interval) : 0;
-        string renderKey = $"{State.CachedVersion}:{Clock:yyyyMMddHHmm}:{phase}:{State.ReduceEffects}:{System.Windows.SystemParameters.HighContrast}:{System.Windows.SystemParameters.ClientAreaAnimation}";
+        bool licenseFallback = !ReferenceEquals(layout, State.Snapshot!["classroom"]!["layout"]);
+        string renderKey = $"{State.CachedVersion}:{State.ETag}:{licenseFallback}:{Clock:yyyyMMddHHmm}:{phase}:{State.ReduceEffects}:{System.Windows.SystemParameters.HighContrast}:{System.Windows.SystemParameters.ClientAreaAnimation}";
         if (!force && !changed && renderKey == lastRenderKey) return true;
         Frame frame;
         try { frame = renderer.Render(State, Clock, monitor.Rect.Right - monitor.Rect.Left, monitor.Rect.Bottom - monitor.Rect.Top, requestedPage); }

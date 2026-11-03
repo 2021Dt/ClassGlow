@@ -25,6 +25,7 @@ from .db import (
     now,
     sync_epoch,
 )
+from .entitlements import account_available, class_entitlement, has_premium, require_premium
 from .security import actor, bearer, device_actor, digest, fail, limit, member, secret
 
 router = APIRouter()
@@ -154,12 +155,19 @@ def valid_commands(db, d):
     ).all()
     result = []
     for command in commands:
+        author = db.get(User, command.actor_id)
         membership = db.scalar(
             select(Membership).where(
                 Membership.class_id == d.class_id, Membership.user_id == command.actor_id, Membership.active.is_(True)
             )
         )
-        if command.binding != d.binding or command.epoch != d.epoch or not membership or membership.role == "teacher":
+        if (
+            command.binding != d.binding
+            or command.epoch != d.epoch
+            or not account_available(author)
+            or not has_premium(author)
+            or not (author.system_admin or membership and membership.role != "teacher")
+        ):
             command.state = "rejected"
             command.data = {**command.data, "detail": "绑定或操作权限已失效"}
         elif command.expires <= now():
@@ -178,12 +186,18 @@ def snapshot(
     if_none_match: str | None = Header(default=None), d: Device = Depends(device_actor), db: Session = Depends(get_db)
 ):
     c = db.get(Classroom, d.class_id)
+    entitlement = class_entitlement(db, c)
     commands = valid_commands(db, d)
-    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}"'
+    # 许可状态进入 ETag；到期必须返回新快照，不能被内容版本未变的 304 遮住。
+    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}"'
     # 即使内容未变，只要有待确认命令也必须返回 200，不能让 304 吞掉控制。
     if if_none_match == etag and not commands:
         return Response(status_code=304, headers={"ETag": etag})
-    from .app import content_view
+    from .app import content_view, layout_default
+
+    basic = layout_default()
+    classroom_data = {k: v for k, v in c.data.items() if k not in ("layoutLicenseUserId", "_displayPremium")}
+    classroom_data["layout"] = c.data["layout"] if entitlement["premiumActive"] else basic
 
     contents = db.scalars(select(Content).where(Content.class_id == c.id, Content.state == "published")).all()
     return Response(
@@ -195,7 +209,13 @@ def snapshot(
                 "syncEpoch": d.epoch,
                 "classVersion": c.version,
                 "serverTime": now(),
-                "classroom": {"id": c.id, "name": c.name, **c.data},
+                "classroom": {
+                    "id": c.id,
+                    "name": c.name,
+                    **classroom_data,
+                    "premiumUntil": entitlement["premiumUntil"],
+                    "basicLayout": basic,
+                },
                 "contents": [content_view(db, item) for item in contents],
                 "commands": [command_view(cmd) for cmd in commands],
             },
@@ -266,6 +286,7 @@ def command(
     if not d:
         fail(404, "device_not_found", "设备不存在。")
     member(db, user, d.class_id, admin=True, write=True)
+    require_premium(user)
     # 锁定后刷新，防止并发请求使用相同控制修订。
     d = db.scalar(
         select(Device).where(Device.id == device_id).with_for_update().execution_options(populate_existing=True)
@@ -303,7 +324,11 @@ def command(
         seq=d.control_revision,
         action=body.action,
         group=group,
-        expires=now() + (120 if group == "pause" else 60),
+        expires=min(
+            [now() + (120 if group == "pause" else 60)]
+            + ([user.premium_until] if not user.system_admin else [])
+            + ([user.expires_at] if user.expires_at else [])
+        ),
         data={
             "page": body.page,
             "pageSetId": body.pageSetId,

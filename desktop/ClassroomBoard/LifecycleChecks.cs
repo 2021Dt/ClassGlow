@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ClassroomBoard;
 
@@ -46,7 +47,17 @@ public static class LifecycleChecks
             Check(ClientLifecycle.CleanupData(data, false), "未报告保留的其他文件");
             Check(Directory.GetFiles(data).Length == 1 && File.ReadAllText(personal) == "keep", "未正确区分程序文件与其他文件");
             File.Delete(personal); Check(!ClientLifecycle.CleanupData(data, false), "空数据目录未移除");
-            File.WriteAllText(System.IO.Path.Combine(root, "result.json"), JsonSerializer.Serialize(new { passed = true, checks = 6, physicalWallpaperChanged = false, registryChanged = false }));
+            var expiry = DateTimeOffset.UtcNow;
+            state.Snapshot = new JsonObject { ["classroom"] = new JsonObject { ["premiumUntil"] = expiry.ToUnixTimeSeconds(), ["layout"] = new JsonObject { ["backgroundMode"] = "image" }, ["basicLayout"] = new JsonObject { ["backgroundMode"] = "mica" } } };
+            // 走实际快照的 JSON 反序列化边界，避免测试对象中的 CLR 数值类型影响读取。
+            state.Snapshot = JsonNode.Parse(state.Snapshot.ToJsonString())!.AsObject();
+            state.ClockUncertain = false;
+            Check(Renderer.EffectiveLayout(state, expiry.AddSeconds(-1)).Str("backgroundMode") == "image", "有效期内丢失定制布局");
+            Check(Renderer.EffectiveLayout(state, expiry).Str("backgroundMode") == "mica", "离线到期没有恢复默认布局");
+            Check(state.Snapshot["classroom"]!["layout"].Str("backgroundMode") == "image", "到期删除了定制方案");
+            state.ClockUncertain = true;
+            Check(Renderer.EffectiveLayout(state, expiry.AddSeconds(-1)).Str("backgroundMode") == "mica", "时钟异常时仍使用限时高级布局");
+            File.WriteAllText(System.IO.Path.Combine(root, "result.json"), JsonSerializer.Serialize(new { passed = true, checks = 10, physicalWallpaperChanged = false, registryChanged = false }));
             return 0;
         } catch (Exception e) {
             File.WriteAllText(System.IO.Path.Combine(root, "failure.txt"), e.ToString()); return 1;

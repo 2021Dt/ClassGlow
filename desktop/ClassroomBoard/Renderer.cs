@@ -72,10 +72,18 @@ public sealed class Renderer(string directory)
         }
         return pages;
     }
+    public static JsonNode EffectiveLayout(ClientState state, DateTimeOffset clock)
+    {
+        var classroom = state.Snapshot!["classroom"]!;
+        double until = classroom.Num("premiumUntil");
+        // 离线时也遵守已同步的许可期限；保留定制快照，使用服务端给出的默认布局回退。
+        bool expired = until > 0 && (state.ClockUncertain || clock.ToUnixTimeSeconds() >= until);
+        return expired && classroom["basicLayout"] is JsonObject basic ? basic : classroom["layout"]!;
+    }
     public Frame Render(ClientState state, DateTimeOffset clock, int width, int height, int requestedPage = 0)
     {
         var snapshot = state.Snapshot ?? throw new InvalidDataException("没有可用快照。");
-        var classroom = snapshot["classroom"]!; var layout = classroom["layout"]!; var modules = layout["modules"]!;
+        var classroom = snapshot["classroom"]!; var layout = EffectiveLayout(state, clock); var modules = layout["modules"]!;
         bool highContrast = SystemParameters.HighContrast;
         string theme = highContrast ? "system_high_contrast" : layout.Str("theme", "mica_light");
         bool dark = theme == "mica_dark";

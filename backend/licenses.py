@@ -1,0 +1,128 @@
+"""只有系统管理员可签发许可；许可码绑定账号、一次兑换，数据库只保存摘要。"""
+
+import secrets
+
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from . import schemas as S
+from .db import FeatureLicense, User, get_db, now, sync_epoch
+from .entitlements import account_available, profile
+from .security import actor, digest, fail, limit, system_admin
+from .system_service import log_system
+
+router = APIRouter()
+
+
+class Issue(S.Input):
+    userId: str
+    days: int = Field(ge=1, le=3660)
+
+
+class Redeem(S.Input):
+    code: str = Field(min_length=12, max_length=40)
+
+
+@router.post("/system/licenses", status_code=201)
+def issue(body: Issue, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+    target = db.get(User, body.userId)
+    if not target or not target.active or target.system_admin:
+        fail(422, "license_target", "请选择启用的班主任或教师账号。系统管理员无需兑换高级许可。")
+    raw = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(20))
+    entry = FeatureLicense(
+        user_id=target.id, code_hash=digest(raw), epoch=sync_epoch(db), days=body.days, expires=now() + 30 * 86400
+    )
+    db.add(entry)
+    db.flush()
+    log_system(db, user.login, "license_issued", target.login, {"licenseId": entry.id, "days": body.days})
+    return {
+        "id": entry.id,
+        "code": "-".join(raw[i : i + 5] for i in range(0, 20, 5)),
+        "login": target.login,
+        "days": entry.days,
+        "expiresAt": entry.expires,
+    }
+
+
+@router.get("/system/licenses")
+def listing(
+    userId: str, offset: int = Query(0, ge=0), user: User = Depends(system_admin), db: Session = Depends(get_db)
+):
+    entries = db.scalars(
+        select(FeatureLicense)
+        .where(FeatureLicense.user_id == userId)
+        .order_by(FeatureLicense.expires.desc(), FeatureLicense.id)
+        .offset(offset)
+        .limit(20)
+    )
+    return {
+        "items": [
+            {
+                "id": e.id,
+                "days": e.days,
+                "expiresAt": e.expires,
+                "usedAt": e.used_at,
+                "revoked": e.revoked,
+                "expired": e.expires <= now() or e.epoch != sync_epoch(db),
+            }
+            for e in entries
+        ]
+    }
+
+
+@router.post("/system/licenses/{license_id}/revoke")
+def revoke(license_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+    entry = db.scalar(select(FeatureLicense).where(FeatureLicense.id == license_id).with_for_update())
+    if not entry or entry.used_at:
+        fail(409, "license_used", "许可码不存在或已经兑换；如需停用已生效许可，请在账号许可管理中终止。")
+    entry.revoked = True
+    log_system(db, user.login, "license_revoked", entry.user_id, {"licenseId": entry.id})
+    return {"ok": True}
+
+
+@router.post("/system/users/{user_id}/license/revoke")
+def revoke_entitlement(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+    target = db.scalar(select(User).where(User.id == user_id).with_for_update())
+    if not target or target.system_admin:
+        fail(422, "license_target", "请选择班主任或教师账号。")
+    target.premium_until = 0
+    for entry in db.scalars(
+        select(FeatureLicense).where(FeatureLicense.user_id == target.id, FeatureLicense.used_at == 0)
+    ):
+        entry.revoked = True
+    log_system(db, user.login, "license_ended", target.login)
+    return {"ok": True}
+
+
+@router.get("/account/license")
+def license_status(user: User = Depends(actor)):
+    return profile(user)
+
+
+@router.post("/account/license/redeem")
+def redeem(body: Redeem, request: Request, user: User = Depends(actor), db: Session = Depends(get_db)):
+    limit(f"license:{user.id}", 10, 300)
+    # 同一账号的不同许可码串行续期，迁移 PostgreSQL 后也不会丢失续期天数。
+    user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
+    if not account_available(user):
+        fail(401, "account_unavailable", "账号已停用或到期，请联系管理员。")
+    raw = body.code.replace("-", "").replace(" ", "").upper()
+    entry = db.scalar(select(FeatureLicense).where(FeatureLicense.code_hash == digest(raw)).with_for_update())
+    if (
+        not entry
+        or entry.user_id != user.id
+        or entry.revoked
+        or entry.expires <= now()
+        or entry.epoch != sync_epoch(db)
+    ):
+        fail(400, "license_invalid", "许可码不匹配、已失效或已被撤销，请联系管理员核对。")
+    # 响应丢失后可重复查询同一个已兑换码，不重复延长许可。
+    if not entry.used_at:
+        user.premium_until = max(now(), user.premium_until) + entry.days * 86400
+        entry.used_at = now()
+        log_system(
+            db, user.login, "license_redeemed", user.login, {"licenseId": entry.id, "premiumUntil": user.premium_until}
+        )
+    return profile(user)

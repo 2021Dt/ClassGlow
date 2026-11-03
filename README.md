@@ -36,9 +36,9 @@ npm ci
 npm run dev
 ```
 
-打开 [教师管理端](http://127.0.0.1:5173/)；API 文档位于 [本地接口文档](http://127.0.0.1:8000/docs)。首次打开会进入服务器初始化向导，先执行 `uv run python -m scripts.setup_key` 读取安装密钥，再填写站点名称和首个系统管理员账号。没有预置管理员或默认口令。
+打开 [教师管理端](http://127.0.0.1:5173/)；API 文档位于 [本地接口文档](http://127.0.0.1:8000/docs)。首页为账号登录 / 首次激活。部署人员执行 `uv run python -m scripts.setup_key` 读取管理员激活码，在 `/setup` 输入管理员账号、密码、激活码完成首次开通。没有预置管理员或默认口令。
 
-初始化后入口锁定。系统管理员从左侧“系统管理”（手机“我的 → 系统管理”）进入后台，可创建或停用账号、重置口令、管理全部班级和设备、设置公开注册、查看系统审计，以及备份、下载和恢复 SQLite 数据库。默认关闭公开注册，由管理员创建教师账号；可以在站点设置中开放。升级已有数据库时可填写已有账号及其原口令，将其设为首个系统管理员，已有班级和正文保留。
+首次开通后入口锁定。管理员登录进入系统工作台，从“开通账号”分配班主任 / 普通老师身份、班级和学科，生成一次性激活码；老师首次设置密码后，日常只需账密登录。管理员可管理账号有效期、签发高级许可、维护全部班级和设备、查看审计和备份恢复。身份和许可期限彼此独立，详见 [账号与许可说明](docs/ACCOUNT-LICENSES.md)。旧账号升级后保留登录和原有建班权限，账号默认长期有效；普通旧账号的高级功能需领取许可，已保存数据保留。
 
 当前默认使用 `data/kanban.db`，开发启动时自动运行 Alembic 迁移；SQLAlchemy 数据层、事务规则和迁移脚本均保留数据库切换能力。SQLite 写请求使用事务锁，并显式启用外键检查。`.env`、数据库、浏览器测试截图和本机工具目录均已忽略，不提交凭证。
 
@@ -78,7 +78,7 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj
 dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x64 --self-contained true -o dist/windows
 ```
 
-交付推荐使用 [Windows x64 0.2.0 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.2.0-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行先显示中文隐私说明；同意前不联网、不创建业务数据。Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
+交付推荐使用 [Windows x64 0.3.0 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.3.0-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行先显示中文隐私说明；同意前不联网、不创建业务数据。Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
 
 构建安装包需要 .NET 10 SDK、Python 和 NSIS 3；脚本不会安装全局工具：
 
@@ -86,11 +86,11 @@ dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x6
 uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
 ```
 
-输出 `dist/ClassGlow-0.2.0-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
+输出 `dist/ClassGlow-0.3.0-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
 
 ## 已实现的关键行为
 
-- 首次安装向导与一次性初始化、系统管理员后台、全局账号管理、班级所有者调整、全局设备撤销、注册设置、运行概况、系统审计，以及 SQLite 网页备份恢复。
+- 首次安装向导与一次性初始化、系统管理员后台、全局账号管理、班级所有者调整、全局设备撤销、账号激活与高级许可、运行概况、系统审计，以及 SQLite 网页备份恢复。
 - 账号登录、可撤销会话、多班与学科权限、邀请申请审批、成员权限维护、所有权转移、归档与恢复接口。
 - 私人云草稿、停顿保存、本机未同步副本、最终输入保存、草稿与正式记录修订校验、多班原子发布与幂等结果查询。
 - 作业、提醒、完成与恢复、撤回、代改原因与修改历史；时间使用北京时间解释，存储带时区时间。

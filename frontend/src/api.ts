@@ -8,7 +8,28 @@ export const session = reactive({
   name: "",
   login: "",
   systemAdmin: false,
+  canCreateClasses: false,
+  expiresAt: 0,
+  premiumUntil: 0,
+  clockOffset: 0,
 });
+export function updateProfile(value: any) {
+  session.userId = value.id;
+  session.name = value.name;
+  session.login = value.login;
+  session.systemAdmin = value.systemAdmin;
+  session.canCreateClasses = value.canCreateClasses;
+  session.expiresAt = value.expiresAt;
+  session.premiumUntil = value.premiumUntil;
+  session.clockOffset = value.serverTime * 1000 - Date.now();
+}
+export function premiumAvailable(time = Date.now()) {
+  const serverNow = time + session.clockOffset;
+  return (
+    (!session.expiresAt || session.expiresAt * 1000 > serverNow) &&
+    (session.systemAdmin || session.premiumUntil * 1000 > serverNow)
+  );
+}
 const localDraftRevision = ref(0);
 export class ApiError extends Error {
   constructor(
@@ -80,10 +101,7 @@ export async function refreshModel(): Promise<Model> {
       "schema_incompatible",
     );
   }
-  session.userId = value.user.id;
-  session.name = value.user.name;
-  session.login = value.user.login;
-  session.systemAdmin = value.user.systemAdmin;
+  updateProfile(value.user);
   value.classes = value.classes.map((c: any) => ({
     ...c,
     layout: {

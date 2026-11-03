@@ -27,6 +27,34 @@ class User(Base):
     password: Mapped[str] = mapped_column(String(300))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     system_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    activated: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 旧账号保留原有建班能力；新开通的科任教师由管理员明确设为 False。
+    can_create_classes: Mapped[bool] = mapped_column(Boolean, default=True)
+    expires_at: Mapped[float] = mapped_column(Float, default=0)
+    premium_until: Mapped[float] = mapped_column(Float, default=0)
+
+
+class AccountActivation(Base):
+    __tablename__ = "account_activations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    epoch: Mapped[str] = mapped_column(String(36))
+    expires: Mapped[float] = mapped_column(Float)
+    used_at: Mapped[float] = mapped_column(Float, default=0)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class FeatureLicense(Base):
+    __tablename__ = "feature_licenses"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    epoch: Mapped[str] = mapped_column(String(36))
+    days: Mapped[int] = mapped_column(Integer)
+    expires: Mapped[float] = mapped_column(Float)
+    used_at: Mapped[float] = mapped_column(Float, default=0)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Token(Base):

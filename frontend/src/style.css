@@ -2803,3 +2803,343 @@ dialog::backdrop {
     flex-wrap: wrap;
   }
 }
+/* 账号入口保持简短：教师只处理账号信息，不展示运维步骤。 */
+.access-shell {
+  gap: clamp(40px, 7vw, 110px);
+  padding: 40px 28px;
+  background:
+    radial-gradient(ellipse at 12% 20%, #e8f0eb, transparent 65%), #f5f7f5;
+}
+.access-intro {
+  width: 470px;
+}
+.access-intro > .eyebrow {
+  margin-top: 48px;
+  color: #527666;
+}
+.access-intro h1 {
+  font-size: clamp(34px, 3.4vw, 49px);
+  line-height: 1.45;
+  color: #244e40;
+  letter-spacing: -1.5px;
+}
+.access-intro > p:not(.eyebrow) {
+  color: #6c7f75;
+  font-size: 14px;
+}
+.access-card {
+  max-width: 440px;
+  padding: 34px;
+  background: #fff;
+  border: 1px solid #e0e8e2;
+  box-shadow: 0 20px 65px #244e4009;
+}
+.access-card .field {
+  margin-bottom: 20px;
+}
+.access-card input {
+  font-size: 15px;
+  min-height: 48px;
+}
+.access-card h2 {
+  font-size: 28px;
+  margin: 26px 0 10px;
+}
+.access-card > .muted {
+  line-height: 1.8;
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+.access-card .full {
+  min-height: 48px;
+  margin-top: 12px;
+}
+.access-card .auth-switch {
+  font-size: 12px;
+  justify-content: center;
+  margin: 18px 0 0;
+}
+.access-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #f2f5f3;
+  padding: 4px;
+  border-radius: 11px;
+}
+.access-tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  min-height: 42px;
+  color: #6b7f73;
+  font: inherit;
+  cursor: pointer;
+}
+.access-tabs button.active {
+  background: #fff;
+  color: #265b48;
+  box-shadow: 0 2px 6px #1d453c0d;
+  font-weight: 600;
+}
+.access-help,
+.access-pending {
+  font-size: 12px;
+  color: #6c7e72;
+  line-height: 1.8;
+  margin: 20px 0 0;
+}
+.access-pending {
+  padding: 12px;
+  background: #f3f6f3;
+  border-radius: 9px;
+  margin-bottom: 6px;
+}
+.access-icon {
+  width: 40px;
+  height: 40px;
+  background: #e7f0eb;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2e6752;
+}
+.access-icon.amber {
+  background: #f5eddc;
+  color: #a47b37;
+}
+.access-scenes {
+  display: grid;
+  gap: 12px;
+  margin: 30px 0 22px;
+  max-width: 390px;
+}
+.access-scenes > div {
+  display: grid;
+  grid-template-columns: 40px 1fr 18px;
+  column-gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #ffffff;
+  border-radius: 15px;
+  background: #ffffffb0;
+  align-items: center;
+}
+.access-scenes .access-icon {
+  grid-row: span 2;
+}
+.access-scenes strong {
+  font-size: 14px;
+}
+.access-scenes small {
+  grid-column: 2;
+  font-size: 12px;
+  color: #7e8d83;
+  margin-top: 5px;
+}
+.access-scenes > div > svg {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  color: #789c88;
+}
+.access-caption {
+  font-size: 12px !important;
+}
+.license-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 20px 0 8px;
+  padding: 13px 17px;
+  border: 1px solid #e0e9e2;
+  border-radius: 12px;
+  background: #f7faf7;
+  text-align: left;
+  color: var(--green);
+  cursor: pointer;
+}
+.license-nav small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.license-nav.active {
+  background: #e7efe9;
+}
+.license-page {
+  display: grid;
+  gap: 22px;
+}
+.license-page .page-heading {
+  margin-bottom: 0;
+}
+.license-summary,
+.license-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.license-summary article > strong {
+  display: block;
+  color: var(--green);
+  margin: 18px 0;
+  font-size: 17px;
+}
+.license-summary h2 {
+  margin-top: 14px;
+}
+.license-page .muted,
+.onboarding-form > .muted,
+.license-manager > .muted {
+  line-height: 1.8;
+  margin: 12px 0 20px;
+}
+.license-redeem form,
+.license-issue {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.license-redeem .field {
+  flex: 1;
+  min-width: min(100%, 240px);
+  margin: 0;
+}
+.license-issue .field {
+  margin: 0;
+}
+.license-features {
+  margin: 20px 0;
+}
+.license-features > div {
+  background: #f6f8f6;
+  border: 1px solid #e7ece7;
+  border-radius: 12px;
+  padding: 18px;
+}
+.license-features p {
+  line-height: 1.8;
+  font-size: 13px;
+  margin-top: 10px;
+  color: var(--muted);
+}
+.onboarding-form {
+  max-width: 850px;
+}
+.onboarding-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.onboarding-form h3,
+.license-manager h3 {
+  margin: 22px 0 14px;
+}
+.grant-list {
+  max-height: 290px;
+  overflow-y: auto;
+  border: 1px solid #e4eae4;
+  border-radius: 12px;
+  padding: 8px 16px;
+  margin: 16px 0;
+}
+.grant-list article + article {
+  border-top: 1px solid #e9ede9;
+}
+.subject-grants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 0 0 16px 27px;
+}
+.subject-grants label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.issued-code {
+  display: grid;
+  gap: 13px;
+  margin: 22px 0;
+  padding: 22px;
+  border: 1px solid #cddfd1;
+  background: #f3f8f4;
+  border-radius: 14px;
+}
+.issued-code code {
+  font-size: clamp(15px, 2vw, 22px);
+  letter-spacing: 1px;
+  overflow-wrap: anywhere;
+  user-select: all;
+  color: #245a43;
+}
+.issued-code small {
+  color: var(--muted);
+  line-height: 1.8;
+}
+.issued-code .button {
+  justify-self: start;
+}
+.admin-start {
+  margin-bottom: 22px;
+}
+.admin-start p {
+  margin: 14px 0 22px;
+}
+@media (max-width: 650px) {
+  .access-shell {
+    padding: 24px 18px 36px;
+    gap: 24px;
+    align-items: stretch;
+  }
+  .access-intro {
+    width: 100%;
+    max-width: none;
+  }
+  .access-intro > .eyebrow,
+  .access-scenes,
+  .access-caption {
+    display: none;
+  }
+  .access-intro h1 {
+    font-size: 29px;
+    margin: 23px 0 12px;
+    line-height: 1.35;
+  }
+  .access-intro h1 br {
+    display: none;
+  }
+  .access-intro > p:not(.eyebrow) {
+    font-size: 13px;
+    margin-bottom: 0;
+  }
+  .access-card {
+    max-width: none;
+    padding: 24px;
+  }
+  .access-card h2 {
+    font-size: 24px;
+  }
+  .license-summary,
+  .license-features {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .license-redeem form,
+  .license-issue {
+    align-items: stretch;
+  }
+  .license-redeem .button {
+    width: 100%;
+  }
+  .onboarding-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .issued-code {
+    padding: 16px;
+  }
+}

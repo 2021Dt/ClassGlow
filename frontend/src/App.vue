@@ -32,10 +32,18 @@ import LayoutEditor from "./components/LayoutEditor.vue";
 import SettingsPage from "./components/SettingsPage.vue";
 import ContentRecords from "./components/ContentRecords.vue";
 import DeviceConsole from "./components/DeviceConsole.vue";
-import SetupWizard from "./components/SetupWizard.vue";
+import AccessGate from "./components/AccessGate.vue";
+import AccountLicense from "./components/AccountLicense.vue";
 import SystemAdmin from "./components/SystemAdmin.vue";
 import { model, replaceModel, clone } from "./store";
-import { api, ApiError, pendingInputs, refreshModel, session } from "./api";
+import {
+  api,
+  ApiError,
+  pendingInputs,
+  premiumAvailable,
+  refreshModel,
+  session,
+} from "./api";
 import {
   addDays,
   dateKey,
@@ -44,7 +52,6 @@ import {
   isAdmin,
   layoutIssue,
   newDraft,
-  roleLabel,
   statusLabel,
   timeLabel,
   visible,
@@ -72,7 +79,9 @@ async function initialized(token: string) {
   await run(async () => {
     await readSite();
     await refresh();
-    page.value = "system";
+    page.value = session.systemAdmin ? "system" : "overview";
+    history.replaceState(null, "", "/" + location.search);
+    await handleEntry();
   });
 }
 async function systemSignedOut(message: string) {
@@ -90,7 +99,7 @@ const page = ref("overview"),
   error = ref(""),
   notice = ref(""),
   now = ref(Date.now());
-const nav = [
+const allNav = [
   { id: "overview", label: "班级概览", icon: LayoutDashboard },
   { id: "contents", label: "作业与提醒", icon: BookOpen },
   { id: "drafts", label: "私人草稿", icon: FilePenLine },
@@ -103,6 +112,45 @@ const current = computed(() =>
 );
 const admin = computed(
   () => isAdmin(current.value) && !current.value?.archived,
+);
+const premium = computed(() => premiumAvailable(now.value));
+const effectiveLayout = computed(() =>
+  current.value?.premiumActive ? current.value.layout : defaultLayout(),
+);
+const identity = computed(() =>
+  session.systemAdmin
+    ? "系统管理员"
+    : admin.value || session.canCreateClasses
+      ? "班主任"
+      : "普通老师",
+);
+const nav = computed(() =>
+  allNav
+    .filter((item) =>
+      current.value
+        ? admin.value || ["overview", "contents", "drafts"].includes(item.id)
+        : !session.systemAdmin && ["overview", "drafts"].includes(item.id),
+    )
+    .map((item) =>
+      item.id === "overview"
+        ? { ...item, label: admin.value ? "班级工作台" : "教学工作台" }
+        : item,
+    ),
+);
+watch(
+  [
+    () => current.value?.role,
+    () => session.systemAdmin,
+    () => current.value?.id,
+  ],
+  () => {
+    if (
+      page.value !== "license" &&
+      !(page.value === "system" && session.systemAdmin) &&
+      !nav.value.some((item) => item.id === page.value)
+    )
+      page.value = session.systemAdmin ? "system" : "overview";
+  },
 );
 const today = dateKey(),
   selectedDate = ref(today);
@@ -145,7 +193,6 @@ const editor = ref<Draft | null>(null),
   previewPage = ref(1),
   pageCount = ref(1);
 const recordsView = ref<InstanceType<typeof ContentRecords>>();
-const auth = reactive({ register: false, login: "", password: "", name: "" });
 const classDialog = ref<HTMLDialogElement>(),
   bindDialog = ref<HTMLDialogElement>(),
   confirmDialog = ref<HTMLDialogElement>(),
@@ -280,23 +327,6 @@ async function refresh() {
     value.selected = value.classes[0]?.id ?? "";
   replaceModel(value);
   if (page.value === "contents") await recordsView.value?.reload();
-}
-async function authenticate() {
-  loading.value = true;
-  await run(async () => {
-    const result = await api(
-      `/auth/${auth.register ? "register" : "login"}`,
-      "POST",
-      { login: auth.login, password: auth.password, name: auth.name || "老师" },
-    );
-    session.token = result.token;
-    sessionStorage.setItem("kanban-session", result.token);
-    auth.password = "";
-    await refresh();
-    if (session.systemAdmin) page.value = "system";
-    await handleEntry();
-  });
-  loading.value = false;
 }
 async function handleEntry() {
   const invite = new URLSearchParams(location.search).get("invite");
@@ -536,6 +566,7 @@ onMounted(async () => {
     await run(async () => {
       try {
         await refresh();
+        page.value = session.systemAdmin ? "system" : "overview";
         await handleEntry();
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
@@ -567,88 +598,18 @@ onUnmounted(() => {
       重新连接
     </button>
   </main>
-  <SetupWizard v-else-if="!site.initialized" @initialized="initialized" />
-  <div v-else-if="!session.token" class="auth-shell">
-    <div class="auth-intro">
-      <div class="brand">
-        <span class="brand-mark"><School :size="24" /></span>{{ site.siteName }}
-      </div>
-      <p class="eyebrow">让信息安静到达</p>
-      <h1>班级里的每件小事，<br />都有清楚的位置。</h1>
-      <p>
-        老师随时编辑，教室静默更新。<br />作业、提醒与课表，在桌面上井然有序。
-      </p>
-      <div class="auth-illustration" aria-hidden="true">
-        <div class="illustration-top"><span></span><i></i><i></i></div>
-        <div class="illustration-grid">
-          <div><strong>今日作业</strong><i></i><i></i><i></i></div>
-          <div><strong>今日提醒</strong><i></i><i></i></div>
-        </div>
-      </div>
-      <small>云母浅灰与云母深灰 · 以课堂可读性为先</small>
-    </div>
-    <main class="auth-card">
-      <p class="eyebrow">教师管理端</p>
-      <h2>{{ auth.register ? "创建教师账号" : "欢迎回来" }}</h2>
-      <p class="muted">
-        {{
-          auth.register
-            ? "一个账号，管理你任教的多个班级。"
-            : "登录后，继续维护你的班级信息。"
-        }}
-      </p>
-      <form @submit.prevent="authenticate">
-        <label v-if="auth.register" class="field"
-          >老师姓名<input
-            v-model="auth.name"
-            required
-            maxlength="40"
-            autocomplete="name" /></label
-        ><label class="field"
-          >账号<input
-            v-model="auth.login"
-            required
-            minlength="3"
-            maxlength="80"
-            autocomplete="username"
-            placeholder="字母、数字、邮箱或下划线" /></label
-        ><label class="field"
-          >口令<input
-            v-model="auth.password"
-            type="password"
-            required
-            minlength="10"
-            maxlength="128"
-            :autocomplete="auth.register ? 'new-password' : 'current-password'"
-            placeholder="至少 10 个字符"
-        /></label>
-        <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-        <button class="button primary full" :disabled="loading">
-          {{ loading ? "正在连接…" : auth.register ? "创建账号并进入" : "登录"
-          }}<ArrowRight :size="18" />
-        </button>
-      </form>
-      <button
-        v-if="site.registrationOpen"
-        class="text-button auth-switch"
-        @click="
-          auth.register = !auth.register;
-          error = '';
-        "
-      >
-        {{ auth.register ? "已有账号？返回登录" : "还没有账号？注册" }}
-      </button>
-      <p v-if="!site.registrationOpen" class="muted small">
-        暂未开放自行注册，请联系系统管理员创建账号。
-      </p>
-      <small>教室设备使用独立绑定码，不保存教师登录信息。</small>
-    </main>
-  </div>
+  <AccessGate
+    v-else-if="!session.token"
+    :site="site"
+    @authenticated="initialized"
+  />
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-mark"><School :size="23" /></span
-        ><span>{{ site.siteName }}<small>教师工作台</small></span>
+        ><span
+          >{{ site.siteName }}<small>{{ identity }}工作台</small></span
+        >
       </div>
       <div class="workspace-label">我的工作空间</div>
       <nav aria-label="主要导航">
@@ -677,6 +638,17 @@ onUnmounted(() => {
           <ShieldCheck :size="19" />系统管理
         </button>
       </nav>
+      <button
+        class="license-nav"
+        :class="{ active: page === 'license' }"
+        @click="page = 'license'"
+      >
+        <ShieldCheck :size="18" /><span
+          >账号与许可<small>{{
+            premium ? "高级功能可用" : "基础版 · 免费使用"
+          }}</small></span
+        >
+      </button>
       <div class="sidebar-bottom">
         <div class="quiet-tip">
           <ShieldCheck :size="20" /><strong>为课堂保留安静</strong>
@@ -691,7 +663,10 @@ onUnmounted(() => {
     </aside>
     <div class="workspace">
       <header class="topbar">
-        <div class="class-selector">
+        <div
+          v-if="page !== 'system' && model.classes.length"
+          class="class-selector"
+        >
           <School :size="19" /><select
             v-model="model.selected"
             aria-label="切换当前班级"
@@ -704,14 +679,15 @@ onUnmounted(() => {
         </div>
         <button
           class="text-button"
+          v-if="session.canCreateClasses && page !== 'system'"
           aria-label="创建班级"
           @click="classDialog?.showModal()"
         >
           <Plus :size="16" /><span class="create-class-label">创建班级</span>
         </button>
         <div class="topbar-right">
-          <span v-if="current" class="role-label"
-            ><ShieldCheck :size="15" />{{ roleLabel(current.role) }}</span
+          <span class="role-label"
+            ><ShieldCheck :size="15" />{{ identity }}</span
           ><button
             class="icon-button"
             aria-label="刷新班级数据"
@@ -758,6 +734,7 @@ onUnmounted(() => {
         </div>
         <SystemAdmin
           v-else-if="page === 'system' && session.systemAdmin"
+          @create-class="classDialog?.showModal()"
           @changed="
             run(async () => {
               await readSite();
@@ -765,6 +742,10 @@ onUnmounted(() => {
             })
           "
           @restored="systemSignedOut"
+        />
+        <AccountLicense
+          v-else-if="page === 'license'"
+          @changed="run(refresh)"
         />
         <section v-else-if="!current && page === 'drafts'" class="panel">
           <h1>私人草稿</h1>
@@ -779,6 +760,19 @@ onUnmounted(() => {
               继续编辑本人草稿
             </button>
           </article>
+        </section>
+        <section
+          v-else-if="!current && !session.canCreateClasses"
+          class="first-run"
+        >
+          <span class="large-icon"><School :size="36" /></span>
+          <h1>等待分配任教班级</h1>
+          <p>
+            账号已就绪，请联系管理员为你分配班级和学科。分配完成后点击刷新即可。
+          </p>
+          <button class="button secondary" @click="run(refresh)">
+            <RefreshCw :size="18" />刷新我的班级
+          </button>
         </section>
         <section v-else-if="!current" class="first-run">
           <span class="large-icon"><School :size="36" /></span>
@@ -824,6 +818,7 @@ onUnmounted(() => {
               v-if="page === 'overview' || page === 'contents'"
             >
               <button
+                v-if="admin"
                 class="button secondary"
                 :disabled="current.archived"
                 @click="edit('todo')"
@@ -839,7 +834,7 @@ onUnmounted(() => {
             </div>
           </div>
           <template v-if="page === 'overview'">
-            <div class="sync-strip">
+            <div v-if="admin" class="sync-strip">
               <span
                 class="status-dot"
                 :class="{ amber: !devices.some((d) => d.online) }"
@@ -969,6 +964,7 @@ onUnmounted(() => {
                       }}</span>
                     </h2>
                     <button
+                      v-if="admin"
                       class="text-button"
                       :disabled="current.archived"
                       @click="edit('todo')"
@@ -1027,7 +1023,7 @@ onUnmounted(() => {
                     v-if="previewClass"
                     :classroom="previewClass"
                     :contents="active"
-                    :layout="current.layout"
+                    :layout="effectiveLayout"
                     :now="now"
                   />
                   <div class="preview-card-footer">
@@ -1043,7 +1039,11 @@ onUnmounted(() => {
                           ? "柔和材质"
                           : "纯色"
                       }}</span
-                    ><button class="text-button" @click="page = 'appearance'">
+                    ><button
+                      v-if="admin"
+                      class="text-button"
+                      @click="page = 'appearance'"
+                    >
                       调整展示<ArrowUpRight :size="14" />
                     </button>
                   </div>
@@ -1085,7 +1085,10 @@ onUnmounted(() => {
                   <span>给今天的一句话</span>
                   <p>
                     {{
-                      current.message || "在班级设置中，写下给同学们的寄语。"
+                      current.message ||
+                      (admin
+                        ? "在班级设置中，写下给同学们的寄语。"
+                        : "班主任还没有设置寄语。")
                     }}
                   </p>
                   <span class="note-decoration" aria-hidden="true">✳</span>
@@ -1148,7 +1151,7 @@ onUnmounted(() => {
               </div>
             </article>
           </section>
-          <template v-else-if="page === 'appearance'"
+          <template v-else-if="page === 'appearance' && admin"
             ><div class="design-workspace">
               <section class="panel design-preview">
                 <div class="section-heading">
@@ -1188,11 +1191,25 @@ onUnmounted(() => {
                 <p class="muted small">
                   调整仅影响此预览。正式发布后，设备按自己的分辨率排版并静默应用。
                 </p>
-                <LayoutEditor v-model="layoutDraft" :disabled="!admin" />
+                <LayoutEditor
+                  v-model="layoutDraft"
+                  :disabled="!admin || !premium"
+                />
               </section>
               <section class="panel design-controls">
                 <h2>外观与布局</h2>
-                <fieldset :disabled="!admin">
+                <p v-if="!premium" class="notice subtle">
+                  自定义背景和布局需要高级许可，默认看板可免费使用。<button
+                    class="text-button"
+                    @click="page = 'license'"
+                  >
+                    输入许可码
+                  </button>
+                </p>
+                <p v-if="!current.premiumActive" class="muted small">
+                  当前教室使用默认看板，已保存的定制方案仍保留。
+                </p>
+                <fieldset :disabled="!admin || !premium">
                   <legend>主题</legend>
                   <div class="theme-options">
                     <button
@@ -1224,7 +1241,7 @@ onUnmounted(() => {
                     </select></label
                   ><BackgroundControls
                     v-model="layoutDraft"
-                    :disabled="!admin"
+                    :disabled="!admin || !premium"
                   /><label class="field"
                     >正文字号<select v-model="layoutDraft.font">
                       <option value="small">小 · 32 像素</option>
@@ -1286,7 +1303,7 @@ onUnmounted(() => {
             </div></template
           >
           <DeviceConsole
-            v-else-if="page === 'devices'"
+            v-else-if="page === 'devices' && admin"
             :classroom="current"
             :devices="devices"
             :now="now"
@@ -1297,7 +1314,7 @@ onUnmounted(() => {
             "
             @design="page = 'appearance'"
           />
-          <template v-else-if="page === 'settings'"
+          <template v-else-if="page === 'settings' && admin"
             ><SettingsPage :classroom="current" @refresh="run(refresh)"
           /></template>
         </template>
@@ -1375,7 +1392,16 @@ onUnmounted(() => {
         <X :size="20" />
       </button>
     </header>
-    <p class="muted">账号：{{ session.login }}</p>
+    <p class="muted">账号：{{ session.login }} · {{ identity }}</p>
+    <button
+      class="button secondary"
+      @click="
+        page = 'license';
+        accountDialog?.close();
+      "
+    >
+      账号期限与高级许可
+    </button>
     <div class="account-shortcuts">
       <button
         v-if="session.systemAdmin"
@@ -1389,7 +1415,7 @@ onUnmounted(() => {
       </button>
       <button
         class="button secondary"
-        :disabled="!current"
+        v-if="admin"
         @click="
           page = 'settings';
           accountDialog?.close();
@@ -1406,7 +1432,7 @@ onUnmounted(() => {
         私人草稿</button
       ><button
         class="button secondary"
-        :disabled="!current"
+        v-if="admin"
         @click="
           page = 'devices';
           accountDialog?.close();

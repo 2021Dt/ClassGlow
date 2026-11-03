@@ -57,8 +57,10 @@ def actor(authorization: str | None = Header(default=None), db: Session = Depend
         fail(401, "session_expired", "登录已失效，请重新登录。")
     # 同一账号写入串行化，也使相同幂等键的并发重试取得同一结果。
     user = db.scalar(select(User).where(User.id == session.user_id).with_for_update())
-    if not user or not user.active:
+    if not user or not user.active or not user.activated:
         fail(401, "session_expired", "账号不可用。")
+    if user.expires_at and user.expires_at <= now():
+        fail(401, "account_expired", "账号使用期限已到，请联系系统管理员续期。数据会保留。")
     return user
 
 
@@ -76,6 +78,9 @@ def member(db: Session, user: User, class_id: str, admin=False, write=False) -> 
             Membership.class_id == class_id, Membership.user_id == user.id, Membership.active.is_(True)
         )
     )
+    if c and user.system_admin:
+        # 最高管理员可管理全部班级；不为了访问而永久改写班级成员或所有权。
+        m = Membership(class_id=c.id, user_id=user.id, role="admin", subjects=c.data["subjects"])
     if not c or not m:
         fail(403, "class_forbidden", "无权访问该班级。")
     if admin and m.role not in ("owner", "admin"):
