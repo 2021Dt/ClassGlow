@@ -19,6 +19,7 @@ const emit = defineEmits<{ pages: [number] }>();
 const holder = ref<HTMLElement>(),
   scale = ref(0.4);
 let observer: ResizeObserver;
+let resizeFrame = 0;
 const measureContext = document.createElement("canvas").getContext("2d")!;
 const items = computed(
   () => props.layout.canvas?.filter((i) => i.visible) ?? [],
@@ -110,11 +111,19 @@ function entries(item: CanvasWidget) {
 }
 onMounted(() => {
   observer = new ResizeObserver((entries) => {
-    scale.value = entries[0]!.contentRect.width / 1920;
+    const width = entries[0]!.contentRect.width;
+    // 下一帧再更新缩放，避免在尺寸通知中触发嵌套的布局刷新。
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      scale.value = width / 1920;
+    });
   });
   if (holder.value) observer.observe(holder.value);
 });
-onUnmounted(() => observer?.disconnect());
+onUnmounted(() => {
+  observer?.disconnect();
+  cancelAnimationFrame(resizeFrame);
+});
 </script>
 <template>
   <div

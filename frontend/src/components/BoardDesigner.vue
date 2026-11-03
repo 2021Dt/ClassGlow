@@ -95,6 +95,7 @@ watch(
   },
 );
 let viewportObserver: ResizeObserver;
+let resizeFrame = 0;
 const palette = [
   { kind: "homework", icon: BookOpen },
   { kind: "todo", icon: Bell },
@@ -366,16 +367,23 @@ const regionStyle = computed(() => ({
 onMounted(() => {
   viewportObserver = new ResizeObserver((entries) => {
     const bounds = entries[0]!.contentRect;
-    fitWidth.value = Math.max(
-      120,
-      Math.min(bounds.width, (bounds.height * 16) / 9),
-    );
+    // 画布会影响子预览的尺寸，延后到下一帧统一调整，避免通知循环。
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      fitWidth.value = Math.max(
+        120,
+        Math.min(bounds.width, (bounds.height * 16) / 9),
+      );
+    });
   });
   if (viewport.value) viewportObserver.observe(viewport.value);
   if (props.modelValue.editor !== "canvas" && !props.disabled)
     emit("update:modelValue", toCanvas(props.modelValue));
 });
-onUnmounted(() => viewportObserver?.disconnect());
+onUnmounted(() => {
+  viewportObserver?.disconnect();
+  cancelAnimationFrame(resizeFrame);
+});
 </script>
 <template>
   <section

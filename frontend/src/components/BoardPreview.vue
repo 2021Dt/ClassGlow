@@ -20,6 +20,7 @@ const emit = defineEmits<{ pages: [number] }>();
 const holder = ref<HTMLElement>(),
   scale = ref(0.45);
 let observer: ResizeObserver;
+let resizeFrame = 0;
 const fontSize = computed(
   () => ({ small: 32, medium: 36, large: 40 })[props.layout.font],
 );
@@ -109,11 +110,19 @@ const dateText = computed(() =>
 );
 onMounted(() => {
   observer = new ResizeObserver((entries) => {
-    scale.value = entries[0]!.contentRect.width / 1920;
+    const width = entries[0]!.contentRect.width;
+    // 下一帧再更新缩放，避免在尺寸通知中触发嵌套的布局刷新。
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      scale.value = width / 1920;
+    });
   });
   if (holder.value) observer.observe(holder.value);
 });
-onUnmounted(() => observer?.disconnect());
+onUnmounted(() => {
+  observer?.disconnect();
+  cancelAnimationFrame(resizeFrame);
+});
 import { watch } from "vue";
 watch(
   () => (props.layout.editor === "canvas" ? null : pages.value.count),
