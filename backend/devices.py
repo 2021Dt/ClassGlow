@@ -1,4 +1,5 @@
 import base64
+import binascii
 import json
 import re
 import secrets
@@ -7,7 +8,8 @@ from io import BytesIO
 
 import qrcode
 from fastapi import APIRouter, Depends, Header, Request, Response
-from sqlalchemy import select
+from PIL import Image, UnidentifiedImageError
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from . import schemas as S
@@ -18,6 +20,7 @@ from .db import (
     Command,
     Content,
     Device,
+    DeviceDisplay,
     Idempotency,
     Membership,
     Pairing,
@@ -25,6 +28,7 @@ from .db import (
     get_db,
     now,
     sync_epoch,
+    uid,
 )
 from .entitlements import account_available, class_entitlement, has_premium, require_premium
 from .security import actor, bearer, device_actor, digest, fail, limit, member, secret
@@ -200,7 +204,9 @@ def snapshot(
     # 许可状态进入 ETag；到期必须返回新快照，不能被内容版本未变的 304 遮住。
     etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}:{int(canvas_supported)}"'
     # 即使内容未变，只要有待确认命令也必须返回 200，不能让 304 吞掉控制。
-    if if_none_match == etag and not commands:
+    display = db.get(DeviceDisplay, d.id)
+    display_request = pending_display(display)
+    if if_none_match == etag and not commands and not display_request:
         return Response(status_code=304, headers={"ETag": etag})
     from .app import content_view, layout_default
 
@@ -230,6 +236,7 @@ def snapshot(
                 },
                 "contents": [content_view(db, item) for item in contents],
                 "commands": [command_view(cmd) for cmd in commands],
+                "displayRequest": display_request,
             },
             ensure_ascii=False,
         ),
@@ -254,7 +261,8 @@ def apply_report(db, d, body: S.ReportInput):
         fail(409, "local_epoch_stale", "现场操作世代不能倒退。")
     d.report_seq = body.stateReportSeq
     d.state = body.model_dump(
-        exclude={"bindingId", "syncEpoch", "stateReportSeq", "commandId", "result", "startedAt", "finishedAt"}
+        include=set(S.ReportInput.model_fields),
+        exclude={"bindingId", "syncEpoch", "stateReportSeq", "commandId", "result", "startedAt", "finishedAt"},
     )
     return True
 
@@ -264,6 +272,103 @@ def apply_report(db, d, body: S.ReportInput):
 def heartbeat(body: S.ReportInput, d: Device = Depends(device_actor), db: Session = Depends(get_db)):
     accepted = apply_report(db, d, body)
     return {"accepted": accepted, "serverTime": now()}
+
+
+def pending_display(display):
+    if display and display.request_id != display.data.get("requestId") and display.requested_at > now() - 90:
+        return display.request_id
+    return ""
+
+
+def display_device(db, user, device_id):
+    d = db.get(Device, device_id)
+    if not d:
+        fail(404, "device_not_found", "设备不存在。")
+    member(db, user, d.class_id)
+    if d.revoked or d.epoch != sync_epoch(db):
+        fail(409, "device_revoked", "设备已解绑，不能查看原设备画面。")
+    return d
+
+
+def display_view(display):
+    if not display:
+        return {"requestId": "", "requestedAt": 0, "receivedAt": 0, "pending": False, "report": {}}
+    return {
+        "requestId": display.request_id,
+        "requestedAt": display.requested_at,
+        "receivedAt": display.received_at,
+        "pending": bool(pending_display(display)),
+        "report": display.data,
+    }
+
+
+@router.post("/devices/{device_id}/display-request")
+def request_display(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+    # 查看画面是基础能力；只能读取本班看板，不授予暂停、翻页等控制权限。
+    d = display_device(db, user, device_id)
+    if now() - d.last_seen > 90:
+        fail(409, "device_offline", "教室电脑离线，恢复联网后再刷新。")
+    version = re.match(r"^(\d+)\.(\d+)\.(\d+)", d.state.get("clientVersion", ""))
+    if not version or tuple(map(int, version.groups())) < (0, 4, 6):
+        fail(409, "client_update_required", "请先将教室电脑升级到 Windows 0.4.6 或更新版本。")
+    display = db.get(DeviceDisplay, d.id)
+    if not display:
+        display = DeviceDisplay(device_id=d.id, data={})
+        db.add(display)
+    # 多位老师同时刷新共用一次回传，防止后来的请求让前一位一直等待。
+    if not display.requested_at or display.requested_at < now() - (45 if pending_display(display) else 5):
+        display.request_id, display.requested_at = uid(), now()
+    db.flush()
+    return display_view(display)
+
+
+@router.get("/devices/{device_id}/display")
+def get_display(device_id: str, after: float = 0, user: User = Depends(actor), db: Session = Depends(get_db)):
+    d = display_device(db, user, device_id)
+    display = db.get(DeviceDisplay, d.id)
+    result = display_view(display)
+    # 轮询只返回状态；仅收到新画面时传图片，避免每次刷新重复传输。
+    if display and display.received_at > after:
+        result["image"] = "data:image/jpeg;base64," + base64.b64encode(display.image).decode() if display.image else ""
+    result["device"] = device_view(d)
+    result["classVersion"] = db.get(Classroom, d.class_id).version
+    return result
+
+
+@router.post("/device/display")
+def receive_display(body: S.DeviceDisplayInput, d: Device = Depends(device_actor), db: Session = Depends(get_db)):
+    display = db.get(DeviceDisplay, d.id)
+    if not display or pending_display(display) != body.requestId:
+        return {"accepted": False}
+    image = b""
+    if body.availability == "displayed":
+        if body.localPaused or body.remotePaused or not body.appliedVersion:
+            fail(422, "display_state_invalid", "暂停或尚未应用的设备不能报告正在展示。")
+        try:
+            image = base64.b64decode(body.imageBase64, validate=True)
+            if len(image) > 400000:
+                raise ValueError()
+            with Image.open(BytesIO(image)) as preview:
+                if preview.format != "JPEG" or not (1 <= preview.width <= 1280 and 1 <= preview.height <= 1280):
+                    raise ValueError()
+                preview.verify()
+        except (ValueError, binascii.Error, OSError, UnidentifiedImageError, Image.DecompressionBombError):
+            fail(422, "display_image_invalid", "看板回传图片无效或超过大小限制。")
+    elif body.imageBase64:
+        fail(422, "display_state_invalid", "未展示时不应上传图片。")
+    if not apply_report(db, d, body):
+        return {"accepted": False}
+    display.image, display.received_at = image, now()
+    display.data = {
+        "requestId": body.requestId,
+        "availability": body.availability,
+        "appliedVersion": body.appliedVersion,
+        "renderedAt": body.renderedAt,
+        "page": body.page,
+        "pageCount": body.pageCount,
+        "applyState": body.applyState,
+    }
+    return {"accepted": True}
 
 
 @router.get("/devices/{device_id}/control")
@@ -400,6 +505,7 @@ def revoke(device_id: str, user: User = Depends(actor), db: Session = Depends(ge
         fail(404, "device_not_found", "设备不存在。")
     c, _ = member(db, user, d.class_id, admin=True, write=True)
     d.revoked = True
+    db.execute(delete(DeviceDisplay).where(DeviceDisplay.device_id == d.id))
     for cmd in db.scalars(
         select(Command).where(Command.device_id == d.id, Command.state.in_(["accepted", "deferred"]))
     ):
@@ -420,6 +526,7 @@ def uninstall_device(authorization: str = Header(), db: Session = Depends(get_db
         p.expires = 0
     if d and not d.revoked:
         d.revoked = True
+        db.execute(delete(DeviceDisplay).where(DeviceDisplay.device_id == d.id))
         for cmd in db.scalars(
             select(Command).where(Command.device_id == d.id, Command.state.in_(["accepted", "deferred"]))
         ):

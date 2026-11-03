@@ -290,6 +290,12 @@ class ReportInput(Input):
     error: str = Field(default="", max_length=200)
 
 
+class DeviceDisplayInput(ReportInput):
+    requestId: str = Field(min_length=1, max_length=36)
+    availability: Literal["displayed", "paused", "disabled", "replaced", "unavailable"]
+    imageBase64: str = Field(default="", max_length=550000)
+
+
 class CommandAck(ReportInput):
     commandId: str = Field(max_length=36)
     result: Literal["executed", "deferred", "rejected"]

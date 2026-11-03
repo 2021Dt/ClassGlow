@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from . import schemas as S
@@ -10,6 +10,7 @@ from .db import (
     Command,
     Content,
     Device,
+    DeviceDisplay,
     History,
     Invitation,
     Membership,
@@ -248,6 +249,7 @@ def lifecycle(class_id: str, action_name: str, user: User = Depends(actor), db: 
     if c.archived:
         for d in db.scalars(select(Device).where(Device.class_id == c.id)):
             d.revoked = True
+            db.execute(delete(DeviceDisplay).where(DeviceDisplay.device_id == d.id))
             for cmd in db.scalars(
                 select(Command).where(Command.device_id == d.id, Command.state.in_(["accepted", "deferred"]))
             ):

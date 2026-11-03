@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DatePicker from "./DatePicker.vue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { api } from "../api";
 const emit = defineEmits<{ changed: []; working: [boolean] }>();
@@ -155,7 +156,7 @@ function again() {
             </select></label
           >
           <label class="field"
-            >账号到期日（北京时间，留空为长期有效）<input
+            >账号到期日（北京时间，留空为长期有效）<DatePicker
               type="date"
               v-model="form.expiry"
           /></label>

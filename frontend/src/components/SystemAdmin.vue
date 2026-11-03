@@ -26,6 +26,7 @@ import {
 } from "@lucide/vue";
 import { api, session } from "../api";
 import { adminDate, auditNames, fileSize } from "../admin";
+import BackupList from "./BackupList.vue";
 import AccountOnboarding from "./AccountOnboarding.vue";
 import LicenseManager from "./LicenseManager.vue";
 import AdminOverview from "./AdminOverview.vue";
@@ -526,72 +527,16 @@ defineExpose({ reload: () => load(true) });
               </dl>
             </section>
           </div>
-          <section v-else-if="tab === 'backups'" class="admin-card">
-            <div class="admin-backup-intro">
-              <span class="metric-icon blue"><Database :size="22" /></span>
-              <div>
-                <h2>数据库备份</h2>
-                <p>包含账号、班级、许可与教学内容。下载的备份请妥善保管。</p>
-              </div>
-              <span class="admin-pill muted">{{ rows.length }} 份备份</span>
-            </div>
-            <p v-if="!backupSupported" class="admin-feedback info">
-              当前使用 PostgreSQL，请通过服务器菜单备份与恢复。
-            </p>
-            <div v-if="!rows.length" class="admin-empty">
-              <Database :size="30" />
-              <h3>还没有备份</h3>
-              <button
-                class="button secondary"
-                :disabled="busy || !backupSupported"
-                @click="backup"
-              >
-                创建第一份备份
-              </button>
-            </div>
-            <div v-else class="admin-table-wrap">
-              <table class="admin-table">
-                <thead>
-                  <tr>
-                    <th>备份文件</th>
-                    <th>创建时间</th>
-                    <th>大小</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in rows" :key="item.name">
-                    <td data-label="备份文件" class="primary-cell">
-                      <Database :size="18" /><span class="file-name">{{
-                        item.name
-                      }}</span>
-                    </td>
-                    <td data-label="创建时间">
-                      {{ adminDate(item.at, true) }}
-                    </td>
-                    <td data-label="大小">{{ fileSize(item.bytes) }}</td>
-                    <td data-label="操作" class="table-actions">
-                      <button @click="download(item.name)" :disabled="busy">
-                        <Download :size="14" />下载</button
-                      ><button
-                        class="destructive"
-                        :disabled="busy || !backupSupported"
-                        @click="editDrawer?.open('restore', item)"
-                      >
-                        恢复
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="admin-tip">
-              <ShieldCheck :size="17" />
-              <p>
-                恢复会替换全站数据，并让当前账号与设备退出登录。操作前系统会自动保留当前数据库副本。
-              </p>
-            </div>
-          </section>
+          <BackupList
+            v-else-if="tab === 'backups'"
+            :rows="rows"
+            :supported="backupSupported"
+            :busy="busy"
+            @create="backup"
+            @download="download"
+            @restore="(item) => editDrawer?.open('restore', item)"
+            @changed="refreshPage"
+          />
           <section
             v-else
             class="admin-card admin-list-card"

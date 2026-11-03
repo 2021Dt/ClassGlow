@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DatePicker from "./DatePicker.vue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { CalendarDays, Copy, Plus, Trash2 } from "@lucide/vue";
 import { api } from "../api";
@@ -242,9 +243,9 @@ async function cancelTemplate(template: any) {
         <fieldset :disabled="!allowed || busy">
           <div class="form-grid">
             <label class="field"
-              >开始生效<input v-model="from" type="date" required /></label
+              >开始生效<DatePicker v-model="from" type="date" required /></label
             ><label class="field"
-              >结束日期<input v-model="until" type="date" required
+              >结束日期<DatePicker v-model="until" type="date" required
             /></label>
           </div>
           <div class="weekday-tabs" role="tablist" aria-label="课表星期">
@@ -354,7 +355,7 @@ async function cancelTemplate(template: any) {
         </p>
         <fieldset :disabled="!allowed || busy">
           <label class="field"
-            >日期<input type="date" v-model="override.date" /></label
+            >日期<DatePicker type="date" v-model="override.date" /></label
           ><label class="field"
             >调整方式<select v-model="override.mode">
               <option value="closed">当日停课</option>

@@ -41,6 +41,7 @@ export const auditNames: Record<string, string> = {
   license_ended: "终止高级许可",
   class_updated: "修改班级",
   device_revoked: "解绑教室设备",
+  backup_deleted: "删除备份",
   backup_created: "创建备份",
   backup_restored: "恢复备份",
 };

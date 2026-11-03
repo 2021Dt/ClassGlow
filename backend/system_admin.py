@@ -1,7 +1,9 @@
 """首次安装与全站管理接口。系统管理员不直接读取教师私人草稿。"""
 
 import shutil
+import sqlite3
 import time
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -19,6 +21,7 @@ from .db import (
     Classroom,
     Command,
     Device,
+    DeviceDisplay,
     Invitation,
     Membership,
     Meta,
@@ -357,6 +360,7 @@ def list_devices(
 
 def revoke_device(db, device):
     device.revoked = True
+    db.execute(delete(DeviceDisplay).where(DeviceDisplay.device_id == device.id))
     db.execute(
         update(Command)
         .where(Command.device_id == device.id, Command.state.in_(["accepted", "deferred"]))
@@ -410,7 +414,7 @@ def backup_path(name):
     if Path(name).name != name or not name.startswith("backup-") or not name.endswith(".db"):
         fail(404, "backup_missing", "备份不存在。")
     path = backup_dir() / name
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         fail(404, "backup_missing", "备份不存在。")
     return path
 
@@ -422,10 +426,10 @@ def sqlite_source(db):
     return Path(url.database)
 
 
-def make_backup(db):
+def make_backup(db, reason="manual"):
     from scripts.sqlite_backup import backup
 
-    filename = f"backup-{datetime.now(UTC):%Y%m%d-%H%M%S}-{uid()[:8]}.db"
+    filename = f"backup-{reason}-{datetime.now(UTC):%Y%m%d-%H%M%S}-{uid()[:8]}.db"
     backup(sqlite_source(db), backup_dir() / filename)
     return filename
 
@@ -435,8 +439,9 @@ def backups(user: User = Depends(system_admin), db: Session = Depends(get_db)):
     return {
         "supported": db.get_bind().dialect.name == "sqlite",
         "items": [
-            {"name": p.name, "bytes": p.stat().st_size, "at": p.stat().st_mtime}
-            for p in sorted(backup_dir().glob("backup-*.db"), reverse=True)
+            {"name": p.name, "bytes": p.stat().st_size, "at": p.stat().st_mtime, "source": backup_source(p.name)}
+            for p in sorted(backup_dir().glob("backup-*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if p.is_file() and not p.is_symlink()
         ],
     }
 
@@ -451,6 +456,67 @@ def create_backup(user: User = Depends(system_admin), db: Session = Depends(get_
 @router.get("/system/backups/{name}/download")
 def download_backup(name: str, user: User = Depends(system_admin)):
     return FileResponse(backup_path(name), filename=name, media_type="application/octet-stream")
+
+
+def backup_source(name):
+    for prefix, label in (
+        ("before-deploy-", "部署前自动备份"),
+        ("before-restore-", "恢复前自动备份"),
+        ("manual-", "管理员手动备份"),
+    ):
+        if name.startswith("backup-" + prefix):
+            return label
+    return "历史备份"
+
+
+@router.get("/system/backups/{name}")
+def backup_details(name: str, user: User = Depends(system_admin)):
+    path = backup_path(name)
+    # 只读打开指定副本，只返回记录数量，不展开账号、口令摘要或教师私人草稿。
+    categories = [
+        ("users", "账号"),
+        ("classrooms", "班级"),
+        ("memberships", "班级成员关系"),
+        ("contents", "作业与提醒"),
+        ("drafts", "教师草稿"),
+        ("devices", "教室设备"),
+        ("feature_licenses", "高级许可"),
+        ("audit_log", "教学操作记录"),
+        ("system_audit", "管理操作记录"),
+        ("device_displays", "设备回传记录"),
+    ]
+    try:
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as source:
+            tables = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            counts = [
+                {"label": label, "count": source.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]}
+                for table, label in categories
+                if table in tables
+            ]
+            version = (
+                source.execute("SELECT version_num FROM alembic_version").fetchone()
+                if "alembic_version" in tables
+                else None
+            )
+    except sqlite3.DatabaseError:
+        fail(422, "backup_unreadable", "无法读取这份备份，请下载后由管理员检查。")
+    return {
+        "name": name,
+        "source": backup_source(name),
+        "counts": counts,
+        "schemaVersion": version[0] if version else "未知",
+    }
+
+
+@router.delete("/system/backups/{name}")
+def delete_backup(name: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+    path = backup_path(name)
+    # 即使运维误将当前数据库放入备份目录，也不能从此入口删除它。
+    if db.get_bind().dialect.name == "sqlite" and path.samefile(sqlite_source(db)):
+        fail(409, "backup_in_use", "这是正在使用的数据库，不能删除。")
+    path.unlink()
+    log_system(db, user.login, "backup_deleted", name)
+    return {"ok": True}
 
 
 @router.post("/system/backups/{name}/restore")
@@ -475,7 +541,7 @@ def restore_backup(name: str, body: RestoreInput, user: User = Depends(system_ad
             )
             if not cfg or not cfg["initialized"] or not admins:
                 fail(409, "backup_admin_missing", "备份没有可登录的系统管理员。")
-            before = make_backup(db)
+            before = make_backup(db, "before-restore")
             # 单次数据库事务完成替换，其他请求等待事务提交；恢复前副本留在备份列表。
             tables = Base.metadata.sorted_tables
             for table in reversed(tables):
@@ -485,6 +551,7 @@ def restore_backup(name: str, body: RestoreInput, user: User = Depends(system_ad
                 if rows:
                     db.execute(table.insert(), rows)
             db.execute(update(Meta).where(Meta.key == "sync_epoch").values(value=uid()))
+            db.execute(delete(DeviceDisplay))
             db.execute(delete(Token))
             db.execute(update(Device).values(revoked=True))
             db.execute(update(Pairing).values(expires=0))

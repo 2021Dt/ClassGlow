@@ -105,11 +105,7 @@ const myDrafts = computed(() =>
         ><strong>草稿箱</strong><ArrowRight :size="16" />
       </button>
     </div>
-    <div
-      v-if="canManage"
-      class="class-connection"
-      :class="{ disconnected: !devices.length }"
-    >
+    <div class="class-connection" :class="{ disconnected: !devices.length }">
       <span class="connection-led" :class="{ connected: online > 0 }"></span>
       <span>{{
         !devices.length
@@ -119,7 +115,13 @@ const myDrafts = computed(() =>
             : "教室电脑暂时离线"
       }}</span>
       <button @click="emit('devices')">
-        {{ devices.length ? "查看设备" : "连接电脑" }}<ArrowRight :size="14" />
+        {{
+          devices.length
+            ? "查看当前看板"
+            : canManage
+              ? "连接电脑"
+              : "查看连接状态"
+        }}<ArrowRight :size="14" />
       </button>
     </div>
     <div v-if="myDrafts.length" class="resume-draft">

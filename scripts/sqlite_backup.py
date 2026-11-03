@@ -46,6 +46,8 @@ def restore(source: Path, output: Path):
             raise ValueError("备份结构不兼容，不能用于班级看板。")
         # 开放服务前更换同步世代，旧设备和旧会话不因备份还原而重新获得权限。
         db.execute("UPDATE metadata SET value=? WHERE key='sync_epoch'", (str(uuid4()),))
+        if "device_displays" in tables:
+            db.execute("DELETE FROM device_displays")
         db.execute("DELETE FROM sessions")
         db.execute("UPDATE devices SET revoked=1")
         db.execute("UPDATE device_commands SET state='rejected' WHERE state IN ('accepted','deferred')")

@@ -64,6 +64,7 @@ def migrate(source_url: str, target_url: str):
             target.execute(
                 update(tables["metadata"]).where(tables["metadata"].c.key == "sync_epoch").values(value=str(uuid4()))
             )
+            target.execute(delete(tables["device_displays"]))
             target.execute(delete(tables["sessions"]))
             target.execute(update(tables["devices"]).values(revoked=True))
             target.execute(update(tables["pairings"]).values(expires=0))

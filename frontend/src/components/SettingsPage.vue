@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DatePicker from "./DatePicker.vue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { Download, X } from "@lucide/vue";
 import ClassMaintenance from "./ClassMaintenance.vue";
@@ -163,7 +164,7 @@ async function archive() {
                   maxlength="40"
                   placeholder="例如期末考试" /></label
               ><label class="field"
-                >目标日期<input v-model="form.eventDate" type="date"
+                >目标日期<DatePicker v-model="form.eventDate" type="date"
               /></label>
             </div>
             <button class="button primary">发布展示信息</button

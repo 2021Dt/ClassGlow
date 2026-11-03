@@ -6,24 +6,26 @@
 
 ## 106 服务器交接记录
 
-记录日期：2026-11-03。本机已按“已有 Nginx 的共享服务器”方案部署，日常使用 `sudo classglow` 运维命令即可，不要重复执行独立服务器安装步骤。
+记录日期：2026-11-04。本机已按“已有 Nginx 的共享服务器”方案部署，日常使用 `sudo classglow` 运维命令即可，不要重复执行独立服务器安装步骤。
 
 | 项目 | 已部署配置 |
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | 0.4.5，安装目录与中文说明修复、直连配对、教师首页与独立画布引导；准确提交通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.4.6，备份详情与删除、统一日历、教室看板按需回传；准确提交通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
 | 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.4.5 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+| Windows 发布 | 0.4.6 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
 
-0.4.5 沿用 SQLite 与迁移版本 `c091d27b681e`。自由画布存在布局 JSON 中，不需要新增数据库表。Nginx 和 Caddy 的布局请求上限统一为 2 MiB，其他接口在应用层仍限 128 KiB；升级现有 Nginx 部署时，应同步更新本项目 `.deploy/nginx.conf` 的 `client_max_body_size 2m`，先 `nginx -t` 再重载。只修改本项目站点配置。Windows 旧客户端继续展示基础看板，升级后自动取得自由画布；服务端更新不会自动替换教室电脑程序。
+0.4.6 沿用 SQLite，迁移到 `d1529b3fc804`，新增 `device_displays` 表。每台设备最多保留一张 400 KB 的 JPEG 回传图及状态，没有新增上传目录、服务或端口。布局接口上限为 2 MiB，回传接口为 600,000 字节，其他接口保持 128 KiB；已有 Nginx/Caddy 的 2 MiB 网关上限可继续使用。普通班级成员可查看本班回传，远程控制仍按角色和高级许可限制。客户端需手动升级到 0.4.6 并确认修订后的隐私说明，服务端更新不会自动替换教室电脑程序。
+
+部署脚本在迁移前停止本项目 API 与 Web 并保留数据库备份；原有账号、班级和设备绑定不因本次新增表迁移而失效。旧结构备份仍可下载、查看数量或删除；恢复前需要先在隔离副本上迁移到当前结构，不要直接覆盖在线数据库。恢复和数据库迁移会清除当前回传，并维持原有重新登录、重新绑定要求。
 
 停用、日常空间清理和彻底移除的顺序见 [服务器后期清理](SERVER-CLEANUP.md)。两份文档随代码存放在服务器 `/opt/classglow/docs/`，不包含安装密钥、口令或私钥。
 
@@ -266,7 +268,7 @@ dc run --rm --no-deps \
 
 2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。生产管理员由使用者在服务器菜单自行创建，没有预置管理员或演示数据。公网登录后的真实学校业务仍待开户后验收；本地隔离验证范围见 [验收记录](VERIFICATION.md)。
 
-Windows x64 0.4.5 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.5-win-x64-setup.exe)，大小 53,284,989 字节，SHA-256 为 `1b021e268029ff36932055255d76c3734285619b53bb9030a208969011a1d6d8`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
+Windows x64 0.4.6 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.6-win-x64-setup.exe)，大小 53,283,837 字节，SHA-256 为 `c0bdd3e0ba0aac8384607fae82315ce24b9d47466ee16e4a01691a127d49fe9f`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
 
 | 现象 | 检查方向 |
 | --- | --- |

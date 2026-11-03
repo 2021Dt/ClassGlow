@@ -1,7 +1,18 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, UniqueConstraint, create_engine, event
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    UniqueConstraint,
+    create_engine,
+    event,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from .config import settings
@@ -153,6 +164,18 @@ class Device(Base):
     control_revision: Mapped[int] = mapped_column(Integer, default=0)
     report_seq: Mapped[int] = mapped_column(Integer, default=0)
     state: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class DeviceDisplay(Base):
+    """每台设备只保留最近一次回传；二进制字段可随 SQLite / PostgreSQL 迁移。"""
+
+    __tablename__ = "device_displays"
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(36), default="")
+    requested_at: Mapped[float] = mapped_column(Float, default=0)
+    received_at: Mapped[float] = mapped_column(Float, default=0)
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    image: Mapped[bytes] = mapped_column(LargeBinary, default=b"", deferred=True)
 
 
 class Command(Base):

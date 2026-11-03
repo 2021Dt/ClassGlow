@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DatePicker from "./DatePicker.vue";
 import {
   computed,
   nextTick,
@@ -422,13 +423,13 @@ onUnmounted(() => {
               <p class="muted small">北京时间 · 展示以“结束展示”为准</p>
               <div class="form-grid">
                 <label class="field"
-                  >开始展示<input
+                  >开始展示<DatePicker
                     type="datetime-local"
                     v-model="fromInput"
                     required
                     @change="changeFrom" /></label
                 ><label class="field"
-                  >结束展示<input
+                  >结束展示<DatePicker
                     type="datetime-local"
                     v-model="untilInput"
                     required
@@ -438,7 +439,7 @@ onUnmounted(() => {
               <label class="field"
                 >{{ form.kind === "homework" ? "提交截止" : "活动时间"
                 }}<span class="optional">选填</span
-                ><input
+                ><DatePicker
                   type="datetime-local"
                   v-model="dueInput"
                   @change="form.due = dueInput ? toInstant(dueInput) : ''"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DatePicker from "./DatePicker.vue";
 import { reactive, ref } from "vue";
 import { X, Search, ArrowUpRight, Database, Monitor } from "@lucide/vue";
 import { api, session } from "../api";
@@ -195,7 +196,7 @@ defineExpose({ open });
             </p>
             <h3 class="admin-form-section">账号期限与状态</h3>
             <label class="field"
-              >账号到期日<input
+              >账号到期日<DatePicker
                 type="date"
                 v-model="userForm.expiry"
                 :disabled="target?.id === session.userId"

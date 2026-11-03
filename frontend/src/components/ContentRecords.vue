@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DatePicker from "./DatePicker.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ChevronLeft, ChevronRight, RefreshCw, Search } from "@lucide/vue";
 import { api, session } from "../api";
@@ -107,7 +108,7 @@ const mayEdit = (c: Content) =>
           <option v-for="s in classroom.subjects" :key="s">{{ s }}</option>
         </select></label
       ><label class="field"
-        >某日展示范围<input type="date" v-model="date" /></label
+        >某日展示范围<DatePicker type="date" v-model="date" /></label
       ><label class="search-field"
         ><Search :size="17" /><input
           v-model="search"

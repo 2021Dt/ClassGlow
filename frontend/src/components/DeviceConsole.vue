@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ClassroomDisplay from "./ClassroomDisplay.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   ChevronLeft,
@@ -26,6 +27,7 @@ const props = defineProps<{
   classroom: Classroom;
   devices: Device[];
   now: number;
+  reload: () => Promise<void>;
 }>();
 const emit = defineEmits<{ refresh: []; bind: []; design: [] }>();
 const selected = ref(""),
@@ -274,7 +276,7 @@ onUnmounted(() => clearInterval(poll));
         重试
       </button>
     </div>
-    <p v-if="!premiumAvailable(now)" class="notice subtle">
+    <p v-if="allowed && !premiumAvailable(now)" class="notice subtle">
       远程控制需高级许可。
     </p>
     <div class="section-heading">
@@ -288,18 +290,16 @@ onUnmounted(() => clearInterval(poll));
           <Laptop :size="16" />{{ d.name }}
         </button>
       </div>
-      <button
-        class="button secondary"
-        :disabled="!allowed"
-        @click="emit('bind')"
-      >
+      <button class="button secondary" v-if="allowed" @click="emit('bind')">
         <Plus :size="17" />绑定教室电脑
       </button>
     </div>
+    <ClassroomDisplay v-if="device" :device="device" :reload="reload" />
     <section v-if="!device" class="panel empty-state">
       <Monitor :size="36" />
       <h2>尚未绑定教室电脑</h2>
-      <ol class="connect-guide">
+      <p v-if="!allowed" class="muted">请联系班主任绑定教室电脑。</p>
+      <ol v-else class="connect-guide">
         <li>
           <span>1</span>
           <div>
@@ -324,11 +324,11 @@ onUnmounted(() => clearInterval(poll));
           </div>
         </li>
       </ol>
-      <button class="button primary" :disabled="!allowed" @click="emit('bind')">
+      <button v-if="allowed" class="button primary" @click="emit('bind')">
         输入绑定码
       </button>
     </section>
-    <div v-else class="device-grid">
+    <div v-else-if="allowed" class="device-grid">
       <section class="panel">
         <div class="section-heading">
           <h2><Monitor :size="20" />{{ device.name }}</h2>

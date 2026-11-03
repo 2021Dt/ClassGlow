@@ -4,6 +4,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace ClassroomBoard;
 
@@ -27,6 +29,8 @@ public sealed class Engine : IDisposable
     private readonly CancellationTokenSource shutdown = new();
     private bool changed = true;
     private bool requireFullSnapshot = true;
+    private string pendingDisplayRequest = "";
+    private double nextDisplayUpload;
     private static double Utc => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
     private DateTimeOffset Clock => DateTimeOffset.UtcNow.AddSeconds(State.ClockOffset).ToOffset(TimeSpan.FromHours(8));
 
@@ -135,6 +139,14 @@ public sealed class Engine : IDisposable
                 catch (DeviceAuthorizationException) { Unbind(); }
                 catch (Exception e) when (e is HttpRequestException or OperationCanceledException) { nextHeartbeat = Utc + 10; }
             }
+            if (State.BindingId.Length > 0 && pendingDisplayRequest.Length > 0 && Utc >= nextDisplayUpload) {
+                try { await UploadDisplay(); pendingDisplayRequest = ""; }
+                catch (DeviceAuthorizationException) { Unbind(); }
+                catch (Exception e) when (e is HttpRequestException or OperationCanceledException or IOException or InvalidOperationException or NotSupportedException or ArgumentException or System.Runtime.InteropServices.COMException) {
+                    // 回传失败不影响本机展示；请求保留并限频重试，网页会明确显示等待或超时。
+                    nextDisplayUpload = Utc + 10;
+                }
+            }
         } finally { busy = false; }
     }
     private async Task PollSnapshot()
@@ -168,7 +180,37 @@ public sealed class Engine : IDisposable
         catch { State.Snapshot = previousSnapshot; State.CachedVersion = previousVersion; State.ETag = previousEtag; State.LastContentSync = previousSync; throw; }
         changed |= newer || previousEtag != etag;
         requireFullSnapshot=false;
+        pendingDisplayRequest = snapshot.Str("displayRequest");
         foreach (var cmd in (snapshot["commands"] as JsonArray ?? new()).OfType<JsonObject>()) await Execute(cmd);
+    }
+    private async Task UploadDisplay()
+    {
+        string availability = State.LocalPaused || State.RemotePaused ? "paused" : !State.EnableWallpaper ? "disabled" : "unavailable";
+        string image = "";
+        if (availability == "unavailable" && State.AppliedVersion > 0 && ClientLifecycle.OwnedWallpaper(State.AppliedWallpaper, store.DirectoryPath) && File.Exists(State.AppliedWallpaper)) {
+            // 只读取已成功设置的本程序 PNG。绝不捕获桌面、其他窗口或用户原壁纸。
+            bool current = string.Equals(wallpaper.Current(State.OriginalMonitor), State.AppliedWallpaper, StringComparison.OrdinalIgnoreCase);
+            availability = current ? "displayed" : "replaced";
+            if (current) {
+                using var source = File.OpenRead(State.AppliedWallpaper);
+                var bitmap = BitmapFrame.Create(source, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                double scale = Math.Min(1, 1280d / Math.Max(bitmap.PixelWidth, bitmap.PixelHeight));
+                BitmapSource thumbnail = scale < 1 ? new TransformedBitmap(bitmap, new ScaleTransform(scale, scale)) : bitmap;
+                using var buffer = new MemoryStream();
+                var encoder = new JpegBitmapEncoder { QualityLevel = 72 };
+                encoder.Frames.Add(BitmapFrame.Create(thumbnail)); encoder.Save(buffer);
+                if (buffer.Length > 400000) {
+                    buffer.SetLength(0); buffer.Position = 0;
+                    encoder = new JpegBitmapEncoder { QualityLevel = 45 };
+                    encoder.Frames.Add(BitmapFrame.Create(thumbnail)); encoder.Save(buffer);
+                }
+                if (buffer.Length > 400000) throw new InvalidDataException("看板缩略图超过回传上限。");
+                image = Convert.ToBase64String(buffer.ToArray());
+            }
+        }
+        var report = Report(); report["requestId"] = pendingDisplayRequest;
+        report["availability"] = availability; report["imageBase64"] = image;
+        await Request("/device/display", "POST", report);
     }
     private string Group(string action) => action == "sync" ? "sync" : action is "pause" or "resume" ? "pause" : "page";
     private async Task Execute(JsonObject command)
@@ -278,6 +320,7 @@ public sealed class Engine : IDisposable
     }
     public void Unbind()
     {
+        pendingDisplayRequest = "";
         State.PendingRestore = State.EnableWallpaper && State.OriginalCaptured;
         string restoreError = "";
         if (State.PendingRestore && wallpaper.SafeToApply()) {

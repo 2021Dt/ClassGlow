@@ -1,6 +1,7 @@
 """真实 Windows 客户端联调：独立本机服务，可选缓存验证或可视化渲染，均不设置系统壁纸。"""
 
 import argparse
+import base64
 import json
 import os
 import shutil
@@ -129,6 +130,24 @@ try:
     cached = wait_for(lambda: v if (v := state())["device"]["cached"] >= published["results"][0]["version"] else None)
     if args.render_preview:
         wait_for(lambda: state()["device"]["applied"] >= published["results"][0]["version"])
+
+        def readback(availability):
+            pending = request("POST", f"/devices/{device['id']}/display-request", headers=headers)
+
+            def received():
+                result = request("GET", f"/devices/{device['id']}/display", headers=headers)
+                return result if result["report"].get("requestId") == pending["requestId"] else None
+
+            result = wait_for(received)
+            assert result["report"]["availability"] == availability, result["report"]
+            if availability == "displayed":
+                assert result["report"]["appliedVersion"] == result["classVersion"]
+                (output / "readback.jpg").write_bytes(base64.b64decode(result["image"].split(",", 1)[1]))
+            else:
+                assert result["image"] == "", "暂停时不能把历史图当作当前展示"
+            return result
+
+        readback("displayed")
     else:
         assert cached["device"]["applied"] == 0, "未启用壁纸时不能伪报已应用"
     sync = request(
@@ -149,6 +168,7 @@ try:
     wait_for(lambda: any(c["id"] == pause["id"] and c["state"] == pause_result for c in state()["commands"]))
     if args.render_preview:
         assert state()["device"]["remotePaused"]
+        readback("paused")
         for action in ("resume", "set_page", "auto_page"):
             current = state()["device"]
             payload = {"action": action, "expectedControlRevision": current["revision"]}
@@ -168,6 +188,7 @@ try:
             )
             if action == "set_page":
                 assert state()["device"]["page"] == 2
+        readback("displayed")
     result = {
         "passed": True,
         "classId": classroom["id"],
@@ -180,6 +201,7 @@ try:
         "resumePageAndAuto": "executed" if args.render_preview else "not-tested",
         "output": "isolated-window" if args.render_preview else "cache-only",
         "wallpaperChanged": False,
+        "displayReadback": "displayed-paused-resumed" if args.render_preview else "not-tested",
     }
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False), flush=True)

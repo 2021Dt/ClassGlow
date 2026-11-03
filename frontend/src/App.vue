@@ -138,7 +138,8 @@ const nav = computed(() =>
   allNav
     .filter((item) =>
       current.value
-        ? admin.value || ["overview", "contents", "drafts"].includes(item.id)
+        ? admin.value ||
+          ["overview", "contents", "drafts", "devices"].includes(item.id)
         : !session.systemAdmin && ["overview", "drafts"].includes(item.id),
     )
     .map((item) =>
@@ -818,9 +819,10 @@ onUnmounted(() => {
             </article>
           </section>
           <DeviceConsole
-            v-else-if="page === 'devices' && admin"
+            v-else-if="page === 'devices'"
             :classroom="current"
             :devices="devices"
+            :reload="refresh"
             :now="now"
             @refresh="run(refresh)"
             @bind="
