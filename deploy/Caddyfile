@@ -1,0 +1,29 @@
+{
+	# 保留运行错误日志，不启用带邀请秘密和查询参数的访问日志。
+	admin off
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+	}
+	# Windows 客户端服务地址也应填写 https://域名/api/，统一从此处进入。
+	handle_path /api/* {
+		request_body {
+			max_size 128KB
+		}
+		reverse_proxy {$API_UPSTREAM:api:8000}
+	}
+	handle {
+		root * {$WEB_ROOT:/srv}
+		# 防止旧首页引用已删除的资源；带哈希的资源仍可由浏览器正常缓存。
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

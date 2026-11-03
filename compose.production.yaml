@@ -1,0 +1,63 @@
+name: classroom-board
+x-api: &api
+  image: classroom-board-api:local
+  build:
+    context: .
+    dockerfile: deploy/Dockerfile.api
+  environment:
+    KANBAN_ENVIRONMENT: production
+    KANBAN_DATABASE_URL: ${KANBAN_DATABASE_URL:-sqlite:////app/data/kanban.db}
+    KANBAN_ALLOW_SQLITE_PRODUCTION: ${KANBAN_ALLOW_SQLITE_PRODUCTION:-true}
+    KANBAN_PUBLIC_URL: https://${KANBAN_DOMAIN:?请先在 deploy/.env 中设置域名}
+    KANBAN_ALLOWED_ORIGINS: '["https://${KANBAN_DOMAIN}"]'
+  volumes: ["app_data:/app/data"]
+  networks: [backend]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: ["/tmp"]
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  migrate:
+    <<: *api
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+  api:
+    <<: *api
+    restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 15s
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${KANBAN_DOMAIN:?请先在 deploy/.env 中设置域名}
+    ports: ["80:80", "443:443"]
+    volumes: ["caddy_data:/data", "caddy_config:/config"]
+    networks: [edge, backend]
+    depends_on:
+      api: {condition: service_healthy}
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+networks:
+  edge:
+  # API 不发布主机端口，可信转发头只接受这一隔离网络中的网关。
+  backend:
+    internal: true
+volumes:
+  app_data:
+  caddy_data:
+  caddy_config:

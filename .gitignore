@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Frontend and local verification
+node_modules/
+frontend/dist/
+.qa/
+*.log
+.tools/
+.env
+deploy/.migration.env
+.env.*
+!.env.example
+.idea/
+.pytest_cache/
+.ruff_cache/
+.deploy/
+backups/
+data/
+desktop/**/bin/
+desktop/**/obj/
+frontend/test-results/
+frontend/playwright-report/

@@ -1,0 +1,1541 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import {
+  LayoutDashboard,
+  BookOpen,
+  FilePenLine,
+  Monitor,
+  Palette,
+  Settings,
+  ChevronDown,
+  Plus,
+  Bell,
+  ArrowUpRight,
+  Check,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  X,
+  Send,
+  Users,
+  ShieldCheck,
+  Eye,
+  School,
+  ArrowRight,
+  RotateCcw,
+} from "@lucide/vue";
+import BoardPreview from "./components/BoardPreview.vue";
+import EditorSheet from "./components/EditorSheet.vue";
+import LayoutEditor from "./components/LayoutEditor.vue";
+import SettingsPage from "./components/SettingsPage.vue";
+import ContentRecords from "./components/ContentRecords.vue";
+import DeviceConsole from "./components/DeviceConsole.vue";
+import SetupWizard from "./components/SetupWizard.vue";
+import SystemAdmin from "./components/SystemAdmin.vue";
+import { model, replaceModel, clone } from "./store";
+import { api, ApiError, pendingInputs, refreshModel, session } from "./api";
+import {
+  addDays,
+  dateKey,
+  defaultLayout,
+  emptyModel,
+  isAdmin,
+  layoutIssue,
+  newDraft,
+  roleLabel,
+  statusLabel,
+  timeLabel,
+  visible,
+  type Content,
+  type Draft,
+  type Kind,
+  type Layout,
+} from "./domain";
+
+const localStorage = window.localStorage;
+const siteReady = ref(false);
+const site = reactive({
+  initialized: false,
+  registrationOpen: false,
+  siteName: "班级看板",
+});
+async function readSite() {
+  Object.assign(site, await api("/setup/status"));
+  document.title = `${site.siteName} · 教师工作台`;
+  siteReady.value = true;
+}
+async function initialized(token: string) {
+  session.token = token;
+  sessionStorage.setItem("kanban-session", token);
+  await run(async () => {
+    await readSite();
+    await refresh();
+    page.value = "system";
+  });
+}
+async function systemSignedOut(message: string) {
+  session.token = "";
+  session.systemAdmin = false;
+  sessionStorage.removeItem("kanban-session");
+  replaceModel(emptyModel());
+  page.value = "overview";
+  await run(readSite);
+  flash(message);
+}
+
+const page = ref("overview"),
+  loading = ref(false),
+  error = ref(""),
+  notice = ref(""),
+  now = ref(Date.now());
+const nav = [
+  { id: "overview", label: "班级概览", icon: LayoutDashboard },
+  { id: "contents", label: "作业与提醒", icon: BookOpen },
+  { id: "drafts", label: "私人草稿", icon: FilePenLine },
+  { id: "appearance", label: "展示设计", icon: Palette },
+  { id: "devices", label: "大屏控制", icon: Monitor },
+  { id: "settings", label: "班级设置", icon: Settings },
+];
+const current = computed(() =>
+  model.classes.find((c) => c.id === model.selected),
+);
+const admin = computed(
+  () => isAdmin(current.value) && !current.value?.archived,
+);
+const today = dateKey(),
+  selectedDate = ref(today);
+const inClass = computed(() =>
+  model.contents.filter((c) => c.classId === current.value?.id),
+);
+const active = computed(() =>
+  inClass.value.filter((c) => visible(c, now.value)),
+);
+const dated = computed(() => {
+  const start = new Date(`${selectedDate.value}T00:00:00+08:00`).getTime();
+  const end = start + 86400000;
+  // 按北京时间的半开区间查询，当日零点已结束的内容不混入下一天。
+  return inClass.value.filter(
+    (c) =>
+      c.state === "published" &&
+      new Date(c.from).getTime() < end &&
+      new Date(c.until).getTime() > start,
+  );
+});
+const drafts = computed(() => {
+  const local = pendingInputs();
+  const combined = model.drafts.map(
+    (d) => local.find((l) => l.id === d.id) ?? d,
+  );
+  return [
+    ...combined,
+    ...local.filter((d) => !combined.some((v) => v.id === d.id)),
+  ]
+    .filter(
+      (d) => page.value === "drafts" || d.classIds.includes(model.selected),
+    )
+    .sort((a, b) => b.updated.localeCompare(a.updated));
+});
+const devices = computed(() =>
+  model.devices.filter((d) => d.classId === model.selected),
+);
+const editor = ref<Draft | null>(null),
+  layoutDraft = ref<Layout>(defaultLayout()),
+  previewPage = ref(1),
+  pageCount = ref(1);
+const recordsView = ref<InstanceType<typeof ContentRecords>>();
+const auth = reactive({ register: false, login: "", password: "", name: "" });
+const classDialog = ref<HTMLDialogElement>(),
+  bindDialog = ref<HTMLDialogElement>(),
+  confirmDialog = ref<HTMLDialogElement>(),
+  detailsDialog = ref<HTMLDialogElement>();
+const accountDialog = ref<HTMLDialogElement>(),
+  incomingTransfers = ref<any[]>([]);
+const joinDialog = ref<HTMLDialogElement>(),
+  joinInfo = ref<any>(null),
+  inviteToken = ref("");
+const passwordForm = reactive({ oldPassword: "", newPassword: "" });
+const classForm = reactive({ name: "", stage: "小学" }),
+  pairCode = ref(new URLSearchParams(location.search).get("pair") ?? ""),
+  pairName = ref("");
+const detailTitle = ref(""),
+  details = ref<unknown>(null),
+  confirmTitle = ref(""),
+  confirmBody = ref("");
+let confirmAction: (() => Promise<void>) | undefined;
+const dateText = computed(() =>
+  new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(now.value),
+);
+let hydratingLayout = false;
+const layoutKey = () =>
+  `kanban-layout-input-${session.userId}-${model.selected}`;
+function loadLayout() {
+  if (!current.value) return;
+  hydratingLayout = true;
+  try {
+    const stored = JSON.parse(localStorage.getItem(layoutKey()) ?? "null");
+    layoutDraft.value =
+      stored && !layoutIssue(stored) && Number.isInteger(stored.revision)
+        ? stored
+        : clone(current.value.layout);
+    if (stored)
+      flash(
+        stored.revision === current.value.layout.revision
+          ? "已恢复本机未发布的布局预览。"
+          : "已保留旧修订的本机布局，请与正式布局比较后再发布。",
+      );
+  } catch {
+    layoutDraft.value = clone(current.value.layout);
+  } finally {
+    hydratingLayout = false;
+  }
+}
+watch(
+  layoutDraft,
+  () => {
+    if (hydratingLayout || page.value !== "appearance" || !admin.value) return;
+    try {
+      localStorage.setItem(layoutKey(), JSON.stringify(layoutDraft.value));
+    } catch {
+      error.value = "本机无法保存布局预览，请保持此页打开。";
+    }
+  },
+  { deep: true, flush: "sync" },
+);
+const previewClass = computed(() => {
+  const c = current.value;
+  if (!c) return undefined;
+  const key = dateKey(now.value),
+    weekday = new Date(`${key}T12:00:00+08:00`).getUTCDay() || 7;
+  const template = c.templates?.find(
+    (t) => t.effectiveFrom <= key && key <= t.effectiveUntil,
+  );
+  const override = c.overrides?.[key];
+  const periods =
+    override?.mode === "closed"
+      ? []
+      : override?.mode === "custom"
+        ? override.periods
+        : (template?.weekdays[
+            String(override?.mode === "weekday" ? override.weekday : weekday)
+          ] ?? []);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now.value);
+  const currentPeriod = periods.findIndex(
+    (p) => p.start <= time && time < p.end,
+  );
+  const next = periods.find((p) => p.start > time);
+  return {
+    ...c,
+    timetable: periods.map((p) => p.subject),
+    currentPeriod,
+    nextPeriod:
+      currentPeriod < 0 && next ? `下一节 ${next.subject} ${next.start}` : "",
+    timetableState:
+      template || override?.mode === "closed" || override?.mode === "custom"
+        ? "configured"
+        : "pending",
+  };
+});
+watch(
+  () => current.value?.id,
+  () => {
+    if (current.value) {
+      loadLayout();
+      previewPage.value = 1;
+      localStorage.setItem(`kanban-class-${session.userId}`, model.selected);
+    }
+  },
+);
+let noticeTimer: ReturnType<typeof setTimeout>;
+function flash(message: string) {
+  notice.value = message;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => (notice.value = ""), 6000);
+}
+async function run(action: () => Promise<void>) {
+  error.value = "";
+  try {
+    await action();
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+async function refresh() {
+  now.value = Date.now();
+  const selected = model.selected;
+  const value = await refreshModel();
+  if (value.classes.some((c) => c.id === selected)) value.selected = selected;
+  if (!value.classes.some((c) => c.id === value.selected))
+    value.selected = value.classes[0]?.id ?? "";
+  replaceModel(value);
+  if (page.value === "contents") await recordsView.value?.reload();
+}
+async function authenticate() {
+  loading.value = true;
+  await run(async () => {
+    const result = await api(
+      `/auth/${auth.register ? "register" : "login"}`,
+      "POST",
+      { login: auth.login, password: auth.password, name: auth.name || "老师" },
+    );
+    session.token = result.token;
+    sessionStorage.setItem("kanban-session", result.token);
+    auth.password = "";
+    await refresh();
+    if (session.systemAdmin) page.value = "system";
+    await handleEntry();
+  });
+  loading.value = false;
+}
+async function handleEntry() {
+  const invite = new URLSearchParams(location.search).get("invite");
+  if (invite) {
+    inviteToken.value = invite;
+    joinInfo.value = await api(`/invites/${encodeURIComponent(invite)}`);
+    joinDialog.value?.showModal();
+  } else if (pairCode.value && current.value) bindDialog.value?.showModal();
+}
+async function applyToClass() {
+  await run(async () => {
+    const value = await api(
+      `/invites/${encodeURIComponent(inviteToken.value)}/apply`,
+      "POST",
+    );
+    joinDialog.value?.close();
+    flash(value.message);
+    history.replaceState(null, "", "/");
+  });
+}
+async function logout() {
+  if (pendingInputs().length) {
+    ask(
+      "退出前处理本机输入",
+      "当前有未同步的本机草稿。确认退出将清除本账号的本机副本；已同步云草稿保留。",
+      async () => {
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith(`kanban-input-${session.userId}-`))
+          .forEach((k) => localStorage.removeItem(k));
+        await finishLogout();
+      },
+    );
+    return;
+  }
+  await finishLogout();
+}
+async function finishLogout() {
+  try {
+    await api("/auth/logout", "POST");
+  } catch {
+    /* 网络中断或会话已失效时仍须允许退出本机。 */
+  } finally {
+    session.token = "";
+    session.systemAdmin = false;
+    sessionStorage.removeItem("kanban-session");
+    replaceModel(emptyModel());
+    page.value = "overview";
+    error.value = "";
+    await run(readSite);
+  }
+}
+async function openAccount() {
+  accountDialog.value?.showModal();
+  await run(async () => {
+    incomingTransfers.value = await api("/transfers");
+  });
+}
+async function changePassword() {
+  await run(async () => {
+    await api("/auth/change-password", "POST", passwordForm);
+    passwordForm.oldPassword = passwordForm.newPassword = "";
+    session.token = "";
+    sessionStorage.removeItem("kanban-session");
+    replaceModel(emptyModel());
+    accountDialog.value?.close();
+    flash("口令已修改，原会话已撤销，请重新登录。");
+  });
+}
+async function acceptTransfer(t: any) {
+  await run(async () => {
+    await api(`/classes/${t.classId}/transfers/${t.id}/accept`, "POST");
+    await refresh();
+    incomingTransfers.value = await api("/transfers");
+    flash("所有权已接受，原所有者保留管理员身份。");
+  });
+}
+async function createClass() {
+  await run(async () => {
+    const c = await api("/classes", "POST", classForm);
+    await refresh();
+    model.selected = c.id;
+    classDialog.value?.close();
+    classForm.name = "";
+    flash("班级已创建，先发布一条内容或绑定教室设备。");
+  });
+}
+function edit(kind: Kind, draft?: Draft, source?: Content) {
+  if (draft) {
+    editor.value = clone(draft);
+    return;
+  }
+  if (!current.value || current.value.archived) return;
+  if (draft) editor.value = clone(draft);
+  else {
+    const previousSubject =
+      localStorage.getItem(
+        `kanban-subject-${session.userId}-${model.selected}`,
+      ) ?? "";
+    const d = newDraft(
+      model.selected,
+      kind,
+      (current.value.authorizedSubjects ?? current.value.subjects).includes(
+        previousSubject,
+      )
+        ? previousSubject
+        : (current.value.authorizedSubjects ?? current.value.subjects)[0],
+    );
+    if (kind === "todo" && !isAdmin(current.value))
+      d.subject =
+        (current.value.authorizedSubjects ?? current.value.subjects)[0] ?? "";
+    if (source)
+      Object.assign(d, {
+        subject: source.subject,
+        body: source.body,
+        from: source.state === "published" ? source.from : d.from,
+        until: source.state === "published" ? source.until : d.until,
+        due: source.state === "published" ? source.due : "",
+        sourceId: source.state === "published" ? source.id : undefined,
+        baseRevision:
+          source.state === "published" ? source.revision : undefined,
+        priority: source.priority ?? false,
+      });
+    editor.value = d;
+  }
+}
+async function published(count: number) {
+  editor.value = null;
+  await run(refresh);
+  flash(`已发布到 ${count} 个班，设备同步与应用状态请在控制台查看。`);
+}
+function ask(title: string, body: string, action: () => Promise<void>) {
+  confirmTitle.value = title;
+  confirmBody.value = body;
+  confirmAction = action;
+  confirmDialog.value?.showModal();
+}
+async function confirmed() {
+  await run(async () => {
+    await confirmAction?.();
+    confirmDialog.value?.close();
+  });
+}
+async function changeContent(c: Content, action: string) {
+  let reason = "";
+  if (c.authorId !== session.userId) {
+    reason = window.prompt("管理员代改需要填写原因（1 至 100 字）") ?? "";
+    if (!reason.trim()) return;
+  }
+  ask(
+    action === "withdraw"
+      ? "撤回正式内容"
+      : action === "complete"
+        ? "标记提醒完成"
+        : "恢复提醒",
+    `${current.value?.name} · ${c.subject}。操作将更新正式版本，历史记录保留。`,
+    async () => {
+      let until: string | undefined;
+      if (action === "restore" && new Date(c.until).getTime() <= now.value) {
+        const input = window.prompt(
+          "展示已结束，请输入新的结束时间，例如 2026-11-04T18:00",
+        );
+        if (!input) return;
+        until = new Date(`${input}:00+08:00`).toISOString();
+      }
+      await api(`/contents/${c.id}/${action}`, "POST", {
+        revision: c.revision,
+        reason,
+        ...(until ? { until } : {}),
+      });
+      await refresh();
+      flash("正式记录已更新，等待设备应用。");
+    },
+  );
+}
+async function showHistory(c: Content) {
+  await run(async () => {
+    details.value = await api(`/contents/${c.id}/history`);
+    detailTitle.value = `${c.subject} · 修改历史`;
+    detailsDialog.value?.showModal();
+  });
+}
+function publishLayout() {
+  if (!current.value) return;
+  const issue = layoutIssue(layoutDraft.value);
+  if (issue) {
+    error.value = issue;
+    return;
+  }
+  ask(
+    "发布布局与主题",
+    `将更新${current.value.name}的 ${devices.value.length} 台绑定设备。离线设备恢复后同步；现场材质限制继续生效。`,
+    async () => {
+      await api(
+        `/classes/${model.selected}/layout`,
+        "PUT",
+        clone(layoutDraft.value),
+      );
+      await refresh();
+      hydratingLayout = true;
+      layoutDraft.value = clone(current.value!.layout);
+      hydratingLayout = false;
+      try {
+        localStorage.removeItem(layoutKey());
+      } catch {
+        /* 正式发布已确认，不因本机清理失败重复发布。 */
+      }
+      flash("布局已发布，设备按无打扰规则应用。");
+    },
+  );
+}
+async function inspectPair() {
+  await run(async () => {
+    const r = await api("/device-pairings/inspect", "POST", {
+      classId: model.selected,
+      code: pairCode.value,
+    });
+    pairName.value = r.name;
+  });
+}
+async function bind() {
+  await run(async () => {
+    await api("/device-pairings/confirm", "POST", {
+      classId: model.selected,
+      code: pairCode.value,
+    });
+    await refresh();
+    bindDialog.value?.close();
+    pairName.value = "";
+    flash("设备绑定成功，等待首次快照应用。");
+  });
+}
+let ticker: ReturnType<typeof setInterval>;
+onMounted(async () => {
+  await run(readSite);
+  if (session.token && site.initialized) {
+    loading.value = true;
+    await run(async () => {
+      try {
+        await refresh();
+        await handleEntry();
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) {
+          session.token = "";
+          sessionStorage.removeItem("kanban-session");
+        }
+        throw e;
+      }
+    });
+    loading.value = false;
+  }
+  if (current.value) loadLayout();
+  ticker = setInterval(() => {
+    now.value = Date.now();
+  }, 5000);
+});
+
+onUnmounted(() => {
+  clearInterval(ticker);
+  clearTimeout(noticeTimer);
+});
+</script>
+
+<template>
+  <main v-if="!siteReady" class="empty-state">
+    <h2>正在连接看板服务</h2>
+    <p v-if="error" class="field-error">{{ error }}</p>
+    <button v-if="error" class="button secondary" @click="run(readSite)">
+      重新连接
+    </button>
+  </main>
+  <SetupWizard v-else-if="!site.initialized" @initialized="initialized" />
+  <div v-else-if="!session.token" class="auth-shell">
+    <div class="auth-intro">
+      <div class="brand">
+        <span class="brand-mark"><School :size="24" /></span>{{ site.siteName }}
+      </div>
+      <p class="eyebrow">让信息安静到达</p>
+      <h1>班级里的每件小事，<br />都有清楚的位置。</h1>
+      <p>
+        老师随时编辑，教室静默更新。<br />作业、提醒与课表，在桌面上井然有序。
+      </p>
+      <div class="auth-illustration" aria-hidden="true">
+        <div class="illustration-top"><span></span><i></i><i></i></div>
+        <div class="illustration-grid">
+          <div><strong>今日作业</strong><i></i><i></i><i></i></div>
+          <div><strong>今日提醒</strong><i></i><i></i></div>
+        </div>
+      </div>
+      <small>云母浅灰与云母墨绿 · 以课堂可读性为先</small>
+    </div>
+    <main class="auth-card">
+      <p class="eyebrow">教师管理端</p>
+      <h2>{{ auth.register ? "创建教师账号" : "欢迎回来" }}</h2>
+      <p class="muted">
+        {{
+          auth.register
+            ? "一个账号，管理你任教的多个班级。"
+            : "登录后，继续维护你的班级信息。"
+        }}
+      </p>
+      <form @submit.prevent="authenticate">
+        <label v-if="auth.register" class="field"
+          >老师姓名<input
+            v-model="auth.name"
+            required
+            maxlength="40"
+            autocomplete="name" /></label
+        ><label class="field"
+          >账号<input
+            v-model="auth.login"
+            required
+            minlength="3"
+            maxlength="80"
+            autocomplete="username"
+            placeholder="字母、数字、邮箱或下划线" /></label
+        ><label class="field"
+          >口令<input
+            v-model="auth.password"
+            type="password"
+            required
+            minlength="10"
+            maxlength="128"
+            :autocomplete="auth.register ? 'new-password' : 'current-password'"
+            placeholder="至少 10 个字符"
+        /></label>
+        <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+        <button class="button primary full" :disabled="loading">
+          {{ loading ? "正在连接…" : auth.register ? "创建账号并进入" : "登录"
+          }}<ArrowRight :size="18" />
+        </button>
+      </form>
+      <button
+        v-if="site.registrationOpen"
+        class="text-button auth-switch"
+        @click="
+          auth.register = !auth.register;
+          error = '';
+        "
+      >
+        {{ auth.register ? "已有账号？返回登录" : "还没有账号？注册" }}
+      </button>
+      <p v-if="!site.registrationOpen" class="muted small">
+        暂未开放自行注册，请联系系统管理员创建账号。
+      </p>
+      <small>教室设备使用独立绑定码，不保存教师登录信息。</small>
+    </main>
+  </div>
+  <div v-else class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark"><School :size="23" /></span
+        ><span>{{ site.siteName }}<small>教师工作台</small></span>
+      </div>
+      <div class="workspace-label">我的工作空间</div>
+      <nav aria-label="主要导航">
+        <button
+          v-for="item in nav"
+          :key="item.id"
+          :aria-label="item.label"
+          :title="item.label"
+          :class="{ active: page === item.id }"
+          @click="page = item.id"
+        >
+          <component :is="item.icon" :size="19" />{{ item.label
+          }}<span
+            v-if="item.id === 'drafts' && drafts.length"
+            class="nav-count"
+            >{{ drafts.length }}</span
+          >
+        </button>
+        <button
+          v-if="session.systemAdmin"
+          :class="{ active: page === 'system' }"
+          aria-label="系统管理"
+          title="系统管理"
+          @click="page = 'system'"
+        >
+          <ShieldCheck :size="19" />系统管理
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="quiet-tip">
+          <ShieldCheck :size="20" /><strong>为课堂保留安静</strong>
+          <p>远程更新在后台接收，<br />教室老师继续使用课件。</p>
+        </div>
+        <button class="user-control" @click="logout">
+          <span class="avatar">{{ session.name.slice(0, 1) }}</span
+          ><span>{{ session.name }}<small>退出登录</small></span
+          ><LogOut :size="17" />
+        </button>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="class-selector">
+          <School :size="19" /><select
+            v-model="model.selected"
+            aria-label="切换当前班级"
+          >
+            <option v-if="!model.classes.length" value="">我的班级</option>
+            <option v-for="c in model.classes" :key="c.id" :value="c.id">
+              {{ c.name }}{{ c.archived ? "（已归档）" : "" }}
+            </option></select
+          ><ChevronDown :size="15" />
+        </div>
+        <button
+          class="text-button"
+          aria-label="创建班级"
+          @click="classDialog?.showModal()"
+        >
+          <Plus :size="16" /><span class="create-class-label">创建班级</span>
+        </button>
+        <div class="topbar-right">
+          <span v-if="current" class="role-label"
+            ><ShieldCheck :size="15" />{{ roleLabel(current.role) }}</span
+          ><button
+            class="icon-button"
+            aria-label="刷新班级数据"
+            @click="run(refresh)"
+          >
+            <RefreshCw :size="18" /></button
+          ><button
+            class="avatar small-avatar account-avatar"
+            aria-label="我的账号"
+            @click="openAccount"
+          >
+            {{ session.name.slice(0, 1) }}
+          </button>
+        </div>
+      </header>
+      <main class="main-content">
+        <div v-if="error" class="notice danger" role="alert">
+          <span>{{ error }}</span
+          ><button
+            class="icon-button"
+            aria-label="关闭错误提示"
+            @click="error = ''"
+          >
+            <X :size="16" />
+          </button>
+        </div>
+        <div v-if="current?.archived" class="notice warning">
+          班级已归档，历史只读。恢复后需重新绑定设备。<button
+            v-if="current.role === 'owner'"
+            class="text-button"
+            @click="
+              run(async () => {
+                await api(`/classes/${model.selected}/restore`, 'POST');
+                await refresh();
+              })
+            "
+          >
+            恢复班级
+          </button>
+        </div>
+        <div v-if="loading" class="empty-state">
+          <RefreshCw :size="30" />
+          <h2>正在读取班级信息</h2>
+        </div>
+        <SystemAdmin
+          v-else-if="page === 'system' && session.systemAdmin"
+          @changed="
+            run(async () => {
+              await readSite();
+              await refresh();
+            })
+          "
+          @restored="systemSignedOut"
+        />
+        <section v-else-if="!current && page === 'drafts'" class="panel">
+          <h1>私人草稿</h1>
+          <p class="notice subtle">
+            草稿正文仍归你保存。失去目标班级权限后无法发布，可继续编辑本人草稿。
+          </p>
+          <p v-if="!drafts.length" class="empty-state">暂无私人草稿。</p>
+          <article v-for="d in drafts" :key="d.id" class="record-row">
+            <h3>{{ d.subject }}</h3>
+            <p class="record-body">{{ d.body }}</p>
+            <button class="text-button" @click="edit(d.kind, d)">
+              继续编辑本人草稿
+            </button>
+          </article>
+        </section>
+        <section v-else-if="!current" class="first-run">
+          <span class="large-icon"><School :size="36" /></span>
+          <p class="eyebrow">从一个班级开始</p>
+          <h1>给班级信息一个清楚的家</h1>
+          <p>
+            创建班级后，邀请科任老师一起维护作业，<br />再绑定教室电脑，让信息安静地出现在桌面上。
+          </p>
+          <button class="button primary" @click="classDialog?.showModal()">
+            <Plus :size="18" />创建第一个班级
+          </button>
+          <div class="onboarding-steps">
+            <span><b>01</b> 创建班级</span><span><b>02</b> 发布内容</span
+            ><span><b>03</b> 绑定电脑</span>
+          </div>
+        </section>
+        <template v-else>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">
+                {{ dateText }}<span class="heading-dot">·</span
+                >{{ current.name }}
+              </p>
+              <h1>{{ nav.find((n) => n.id === page)?.label }}</h1>
+              <p class="muted">
+                {{
+                  page === "overview"
+                    ? "安排好今天，让每条信息都清楚到达。"
+                    : page === "appearance"
+                      ? "先预览，再发布。每一次调整都由你确认。"
+                      : page === "devices"
+                        ? "关注设备的真实状态，现场操作始终优先。"
+                        : page === "drafts"
+                          ? "私人草稿仅本人可见，发布前不会出现在大屏。"
+                          : page === "settings"
+                            ? "维护班级配置、教学安排与成员权限。"
+                            : "按科目维护作业与提醒，保留每次正式修改。"
+                }}
+              </p>
+            </div>
+            <div
+              class="heading-actions"
+              v-if="page === 'overview' || page === 'contents'"
+            >
+              <button
+                class="button secondary"
+                :disabled="current.archived"
+                @click="edit('todo')"
+              >
+                <Bell :size="17" />发布提醒</button
+              ><button
+                class="button primary"
+                :disabled="current.archived"
+                @click="edit('homework')"
+              >
+                <Plus :size="18" />发布作业
+              </button>
+            </div>
+          </div>
+          <template v-if="page === 'overview'">
+            <div class="sync-strip">
+              <span
+                class="status-dot"
+                :class="{ amber: !devices.some((d) => d.online) }"
+              ></span
+              ><strong>{{
+                devices.length
+                  ? `${devices.filter((d) => d.online).length} 台设备在线`
+                  : "尚未绑定教室设备"
+              }}</strong
+              ><span>{{
+                devices.length
+                  ? "缓存与画面应用分别反馈；课件可能覆盖桌面。"
+                  : "发布的内容会保留，绑定后即可同步。"
+              }}</span
+              ><button class="text-button" @click="page = 'devices'">
+                {{ devices.length ? "控制大屏" : "前往绑定"
+                }}<ArrowUpRight :size="15" />
+              </button>
+            </div>
+            <div class="overview-grid">
+              <div>
+                <section class="panel content-panel">
+                  <div class="section-heading">
+                    <h2>
+                      <BookOpen :size="20" />今日作业<span class="count-pill">{{
+                        dated.filter((c) => c.kind === "homework").length
+                      }}</span>
+                    </h2>
+                    <div class="date-control">
+                      <button
+                        class="icon-button"
+                        aria-label="查看前一天"
+                        @click="selectedDate = addDays(selectedDate, -1)"
+                      >
+                        <ChevronLeft :size="16" /></button
+                      ><input
+                        type="date"
+                        v-model="selectedDate"
+                        aria-label="查看作业日期"
+                      /><button
+                        class="icon-button"
+                        aria-label="查看后一天"
+                        @click="selectedDate = addDays(selectedDate, 1)"
+                      >
+                        <ChevronRight :size="16" />
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    v-if="selectedDate !== today"
+                    class="notice subtle small"
+                  >
+                    只切换查看日期，不改变大屏日期。<button
+                      class="text-button"
+                      @click="selectedDate = today"
+                    >
+                      返回今天
+                    </button>
+                  </div>
+                  <div
+                    v-if="!dated.some((c) => c.kind === 'homework')"
+                    class="empty-state compact"
+                  >
+                    <BookOpen :size="28" />
+                    <h3>还没有作业</h3>
+                    <p>各科老师发布后，会按科目汇总在这里。</p>
+                    <button
+                      class="text-button"
+                      :disabled="current.archived"
+                      @click="edit('homework')"
+                    >
+                      发布第一条作业<ArrowRight :size="15" />
+                    </button>
+                  </div>
+                  <article
+                    v-for="c in dated.filter((c) => c.kind === 'homework')"
+                    :key="c.id"
+                    class="homework-row"
+                  >
+                    <div
+                      class="subject-icon"
+                      :class="{
+                        blue: c.subject === '数学',
+                        gold: c.subject === '英语',
+                      }"
+                    >
+                      {{ c.subject.slice(0, 1) }}
+                    </div>
+                    <div class="homework-body">
+                      <div class="row-heading">
+                        <h3>{{ c.subject }}</h3>
+                        <span class="record-meta"
+                          >{{ c.author }} · {{ timeLabel(c.created) }}</span
+                        >
+                      </div>
+                      <p>{{ c.body }}</p>
+                      <div class="row-footer">
+                        <span
+                          >{{ statusLabel(c, now) }} · 展示至
+                          {{ timeLabel(c.until, true) }}</span
+                        ><button
+                          class="text-button"
+                          :disabled="
+                            current.archived ||
+                            (!admin && c.authorId !== session.userId)
+                          "
+                          @click="edit('homework', undefined, c)"
+                        >
+                          编辑<ArrowUpRight :size="13" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                </section>
+                <section class="panel reminders-panel">
+                  <div class="section-heading">
+                    <h2>
+                      <Bell :size="19" />班级提醒<span class="count-pill">{{
+                        dated.filter((c) => c.kind === "todo").length
+                      }}</span>
+                    </h2>
+                    <button
+                      class="text-button"
+                      :disabled="current.archived"
+                      @click="edit('todo')"
+                    >
+                      <Plus :size="16" />添加
+                    </button>
+                  </div>
+                  <p
+                    v-if="!dated.some((c) => c.kind === 'todo')"
+                    class="inline-empty"
+                  >
+                    暂无提醒。重要事项发布后会出现在这里。
+                  </p>
+                  <article
+                    v-for="c in dated.filter((c) => c.kind === 'todo')"
+                    :key="c.id"
+                    class="todo-row"
+                  >
+                    <button
+                      class="todo-check"
+                      aria-label="标记提醒完成"
+                      :disabled="
+                        current.archived ||
+                        (!admin && c.authorId !== session.userId)
+                      "
+                      @click="changeContent(c, 'complete')"
+                    >
+                      <Check :size="14" />
+                    </button>
+                    <div>
+                      <p>{{ c.body }}</p>
+                      <small>{{ c.subject }} · {{ c.author }}</small>
+                    </div>
+                    <span
+                      v-if="c.due && new Date(c.due).getTime() < now"
+                      class="badge amber-badge"
+                      >已逾期</span
+                    >
+                  </article>
+                </section>
+              </div>
+              <div class="overview-side">
+                <section class="panel preview-card">
+                  <div class="section-heading">
+                    <h2><Monitor :size="19" />大屏预览</h2>
+                    <span class="badge neutral">预览</span>
+                  </div>
+                  <BoardPreview
+                    v-if="previewClass"
+                    :classroom="previewClass"
+                    :contents="active"
+                    :layout="current.layout"
+                    :now="now"
+                  />
+                  <div class="preview-card-footer">
+                    <span
+                      >{{
+                        current.layout.theme === "mica_light"
+                          ? "云母浅灰"
+                          : "云母墨绿"
+                      }}
+                      ·
+                      {{
+                        current.layout.material === "subtle"
+                          ? "柔和材质"
+                          : "纯色"
+                      }}</span
+                    ><button class="text-button" @click="page = 'appearance'">
+                      调整展示<ArrowUpRight :size="14" />
+                    </button>
+                  </div>
+                  <p class="preview-disclaimer">
+                    根据正式内容生成，非教室实时截图。
+                  </p>
+                </section>
+                <section class="panel draft-card">
+                  <div class="section-heading">
+                    <h2><FilePenLine :size="19" />继续草稿</h2>
+                    <span class="count-pill">{{ drafts.length }}</span>
+                  </div>
+                  <p v-if="!drafts.length" class="inline-empty">
+                    暂时没有未发布的草稿。
+                  </p>
+                  <button
+                    v-for="d in drafts.slice(0, 2)"
+                    :key="d.id"
+                    class="draft-link"
+                    @click="edit(d.kind, d)"
+                  >
+                    <span class="draft-mini-icon"
+                      ><FilePenLine :size="19" /></span
+                    ><span
+                      ><strong
+                        >{{ d.subject
+                        }}{{ d.kind === "homework" ? "作业" : "提醒" }}</strong
+                      ><small
+                        >{{ timeLabel(d.updated, true) }} ·
+                        {{ d.revision ? "可继续编辑" : "本机未同步" }}</small
+                      ></span
+                    ><ArrowRight :size="17" />
+                  </button>
+                  <p class="quiet-caption">
+                    <ShieldCheck :size="13" />仅你可见，尚未进入正式展示
+                  </p>
+                </section>
+                <div class="daily-note">
+                  <span>给今天的一句话</span>
+                  <p>
+                    {{
+                      current.message || "在班级设置中，写下给同学们的寄语。"
+                    }}
+                  </p>
+                  <span class="note-decoration" aria-hidden="true">✳</span>
+                </div>
+              </div>
+            </div>
+          </template>
+          <ContentRecords
+            v-else-if="page === 'contents'"
+            ref="recordsView"
+            :classroom="current"
+            :now="now"
+            @edit="edit($event.kind, undefined, $event)"
+            @history="showHistory"
+            @action="changeContent"
+          />
+          <section v-else-if="page === 'drafts'" class="panel">
+            <div v-if="!drafts.length" class="empty-state">
+              <FilePenLine :size="34" />
+              <h2>还没有草稿</h2>
+              <p>编辑时会自动保存，未发布的内容仅你可见。</p>
+            </div>
+            <article v-for="d in drafts" :key="d.id" class="record-row">
+              <div class="record-top">
+                <span class="subject-tag">{{ d.subject }}</span
+                ><span class="badge neutral">私人草稿</span
+                ><small>{{ timeLabel(d.updated, true) }}</small>
+              </div>
+              <p class="record-body">{{ d.body || "尚未填写正文" }}</p>
+              <p class="record-meta">
+                {{
+                  model.classes
+                    .filter((c) => d.classIds.includes(c.id))
+                    .map((c) => c.name)
+                    .join("、")
+                }}
+                · {{ d.sourceId ? "正式内容的修改草稿" : "新建内容" }}
+              </p>
+              <div class="record-actions">
+                <button class="text-button" @click="edit(d.kind, d)">
+                  继续编辑<ArrowRight :size="15" /></button
+                ><button
+                  class="text-button destructive"
+                  @click="
+                    ask(
+                      '放弃私人草稿',
+                      '本次操作不会撤回已经发布的正式内容。',
+                      async () => {
+                        await api(`/drafts/${d.id}`, 'DELETE');
+                        localStorage.removeItem(
+                          `kanban-input-${session.userId}-${d.id}`,
+                        );
+                        await refresh();
+                      },
+                    )
+                  "
+                >
+                  放弃草稿
+                </button>
+              </div>
+            </article>
+          </section>
+          <template v-else-if="page === 'appearance'"
+            ><div class="design-workspace">
+              <section class="panel design-preview">
+                <div class="section-heading">
+                  <h2><Eye :size="19" />布局预览</h2>
+                  <span class="badge amber-badge">未发布的预览</span>
+                </div>
+                <BoardPreview
+                  v-if="previewClass"
+                  :classroom="previewClass"
+                  :contents="active"
+                  :layout="layoutDraft"
+                  :now="now"
+                  :page="previewPage"
+                  @pages="
+                    pageCount = $event;
+                    previewPage = 1;
+                  "
+                />
+                <div class="preview-pagination">
+                  <button
+                    class="icon-button"
+                    aria-label="预览上一页"
+                    :disabled="previewPage <= 1"
+                    @click="previewPage--"
+                  >
+                    <ChevronLeft :size="18" /></button
+                  ><span>{{ previewPage }} / {{ pageCount }}</span
+                  ><button
+                    class="icon-button"
+                    aria-label="预览下一页"
+                    :disabled="previewPage >= pageCount"
+                    @click="previewPage++"
+                  >
+                    <ChevronRight :size="18" /></button
+                  ><small>1920 × 1080 · 缩放预览</small>
+                </div>
+                <p class="muted small">
+                  调整仅影响此预览。正式发布后，设备按自己的分辨率排版并静默应用。
+                </p>
+                <LayoutEditor v-model="layoutDraft" :disabled="!admin" />
+              </section>
+              <section class="panel design-controls">
+                <h2>外观与布局</h2>
+                <fieldset :disabled="!admin">
+                  <legend>主题</legend>
+                  <div class="theme-options">
+                    <button
+                      type="button"
+                      :class="{ selected: layoutDraft.theme === 'mica_light' }"
+                      @click="layoutDraft.theme = 'mica_light'"
+                    >
+                      <span class="theme-swatch light-swatch"></span
+                      >云母浅灰<Check
+                        v-if="layoutDraft.theme === 'mica_light'"
+                        :size="15"
+                      /></button
+                    ><button
+                      type="button"
+                      :class="{ selected: layoutDraft.theme === 'mica_dark' }"
+                      @click="layoutDraft.theme = 'mica_dark'"
+                    >
+                      <span class="theme-swatch dark-swatch"></span
+                      >云母墨绿<Check
+                        v-if="layoutDraft.theme === 'mica_dark'"
+                        :size="15"
+                      />
+                    </button>
+                  </div>
+                  <label class="field"
+                    >材质效果<select v-model="layoutDraft.material">
+                      <option value="subtle">柔和</option>
+                      <option value="solid">纯色</option>
+                    </select></label
+                  ><label class="field"
+                    >正文字号<select v-model="layoutDraft.font">
+                      <option value="small">小 · 32 像素</option>
+                      <option value="medium">中 · 36 像素</option>
+                      <option value="large">大 · 40 像素</option>
+                    </select></label
+                  ><label class="field"
+                    >桌面图标留白<select v-model="layoutDraft.iconMargin">
+                      <option value="left">左侧 12%</option>
+                      <option value="right">右侧 12%</option>
+                      <option value="none">不保留</option>
+                    </select></label
+                  ><label class="field"
+                    >自动翻页间隔<select v-model.number="layoutDraft.interval">
+                      <option :value="15">15 秒</option>
+                      <option :value="20">20 秒</option>
+                      <option :value="30">30 秒</option>
+                    </select></label
+                  >
+                  <div class="module-options">
+                    <strong>展示模块</strong
+                    ><label
+                      v-for="(label, key) in {
+                        datetime: '日期与时间',
+                        homework: '今日作业',
+                        todo: '班级提醒',
+                        timetable: '今日课表',
+                        countdown: '事件倒计时',
+                        message: '班主任寄语',
+                      }"
+                      :key="key"
+                      ><span>{{ label }}</span
+                      ><input
+                        type="checkbox"
+                        v-model="layoutDraft.modules[key]" /></label
+                    ><label
+                      ><span>作业与右侧模块互换</span
+                      ><input type="checkbox" v-model="layoutDraft.reverse"
+                    /></label>
+                  </div>
+                  <button
+                    class="text-button"
+                    @click="
+                      layoutDraft = {
+                        ...defaultLayout(),
+                        revision: current.layout.revision,
+                      }
+                    "
+                  >
+                    <RotateCcw :size="15" />恢复默认预览</button
+                  ><button class="button primary full" @click="publishLayout">
+                    <Send :size="16" />发布布局与主题
+                  </button>
+                </fieldset>
+                <p v-if="!admin" class="notice subtle">
+                  当前身份只可查看，布局发布需要管理权限。
+                </p>
+              </section>
+            </div></template
+          >
+          <DeviceConsole
+            v-else-if="page === 'devices'"
+            :classroom="current"
+            :devices="devices"
+            :now="now"
+            @refresh="run(refresh)"
+            @bind="
+              pairName = '';
+              bindDialog?.showModal();
+            "
+            @design="page = 'appearance'"
+          />
+          <template v-else-if="page === 'settings'"
+            ><SettingsPage :classroom="current" @refresh="run(refresh)"
+          /></template>
+        </template>
+        <footer class="workspace-footer">
+          <span>班级看板</span><span>安静更新 · 清楚展示</span>
+        </footer>
+      </main>
+    </div>
+    <nav class="mobile-nav" aria-label="手机底部导航">
+      <button
+        :class="{
+          active: ['overview', 'appearance', 'devices'].includes(page),
+        }"
+        @click="page = 'overview'"
+      >
+        <School :size="21" />班级</button
+      ><button
+        :class="{ active: ['contents', 'drafts'].includes(page) }"
+        @click="page = 'contents'"
+      >
+        <BookOpen :size="21" />记录</button
+      ><button :class="{ active: page === 'settings' }" @click="openAccount">
+        <Users :size="21" />我的
+      </button>
+    </nav>
+  </div>
+  <div v-if="notice" class="toast" role="status">
+    <Check :size="18" />{{ notice }}
+  </div>
+  <EditorSheet
+    v-if="editor"
+    :key="editor.id"
+    :draft="editor"
+    @close="
+      editor = null;
+      run(refresh);
+    "
+    @published="published"
+  />
+  <dialog ref="joinDialog" class="modal">
+    <header class="section-heading">
+      <h2>申请加入班级</h2>
+      <button
+        class="icon-button"
+        aria-label="关闭入班申请"
+        @click="joinDialog?.close()"
+      >
+        <X :size="20" />
+      </button>
+    </header>
+    <template v-if="joinInfo"
+      ><h3>{{ joinInfo.className }}</h3>
+      <p class="muted">授权学科：{{ joinInfo.subjects.join("、") }}</p>
+      <p class="notice subtle">
+        以 {{ session.name }} 的账号申请，需班级管理员核对后生效。
+      </p>
+      <p v-if="error" class="field-error">{{ error }}</p>
+      <button class="button primary full" @click="applyToClass">
+        {{
+          joinInfo.alreadyApplied
+            ? "查看申请状态：等待管理员审批"
+            : "申请加入此班级"
+        }}
+      </button></template
+    >
+  </dialog>
+  <dialog ref="accountDialog" class="modal">
+    <header class="section-heading">
+      <h2>{{ session.name }} · 我的账号</h2>
+      <button
+        class="icon-button"
+        aria-label="关闭账号设置"
+        @click="accountDialog?.close()"
+      >
+        <X :size="20" />
+      </button>
+    </header>
+    <p class="muted">账号：{{ session.login }}</p>
+    <div class="account-shortcuts">
+      <button
+        v-if="session.systemAdmin"
+        class="button secondary"
+        @click="
+          page = 'system';
+          accountDialog?.close();
+        "
+      >
+        系统管理
+      </button>
+      <button
+        class="button secondary"
+        :disabled="!current"
+        @click="
+          page = 'settings';
+          accountDialog?.close();
+        "
+      >
+        班级设置</button
+      ><button
+        class="button secondary"
+        @click="
+          page = 'drafts';
+          accountDialog?.close();
+        "
+      >
+        私人草稿</button
+      ><button
+        class="button secondary"
+        :disabled="!current"
+        @click="
+          page = 'devices';
+          accountDialog?.close();
+        "
+      >
+        大屏控制
+      </button>
+    </div>
+    <article v-for="t in incomingTransfers" :key="t.id" class="record-row">
+      <p>{{ t.className }}邀请你接任所有者</p>
+      <button
+        class="button secondary"
+        @click="
+          ask(
+            '接受班级所有权',
+            `接受${t.className}后，你将成为该班唯一所有者。原所有者保留管理员身份。`,
+            async () => {
+              await acceptTransfer(t);
+            },
+          )
+        "
+      >
+        查看并接受交接
+      </button>
+    </article>
+    <form @submit.prevent="changePassword">
+      <h3>修改口令</h3>
+      <label class="field"
+        >原口令<input
+          v-model="passwordForm.oldPassword"
+          type="password"
+          required
+          autocomplete="current-password" /></label
+      ><label class="field"
+        >新口令<input
+          v-model="passwordForm.newPassword"
+          type="password"
+          required
+          minlength="10"
+          maxlength="128"
+          autocomplete="new-password"
+      /></label>
+      <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+      <button class="button primary full">修改口令并重新登录</button>
+    </form>
+    <button
+      class="text-button destructive"
+      @click="
+        accountDialog?.close();
+        logout();
+      "
+    >
+      退出登录
+    </button>
+  </dialog>
+  <dialog ref="classDialog" class="modal">
+    <form @submit.prevent="createClass">
+      <header class="section-heading">
+        <h2>创建班级</h2>
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="关闭"
+          @click="classDialog?.close()"
+        >
+          <X :size="20" />
+        </button>
+      </header>
+      <label class="field"
+        >班级名称<input
+          v-model="classForm.name"
+          maxlength="60"
+          required
+          placeholder="例如五年级二班" /></label
+      ><label class="field"
+        >学段<select v-model="classForm.stage">
+          <option>小学</option>
+          <option>初中</option>
+          <option>高中</option>
+        </select></label
+      >
+      <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+      <button class="button primary full">创建班级</button>
+    </form>
+  </dialog>
+  <dialog ref="bindDialog" class="modal">
+    <header class="section-heading">
+      <h2>绑定教室电脑</h2>
+      <button
+        class="icon-button"
+        aria-label="关闭"
+        @click="bindDialog?.close()"
+      >
+        <X :size="20" />
+      </button>
+    </header>
+    <p class="muted">请在教室客户端取得绑定码，再核对设备名称与班级。</p>
+    <label class="field"
+      >6 位绑定码<input
+        v-model="pairCode"
+        inputmode="numeric"
+        pattern="[0-9]{6}"
+        maxlength="6"
+        @input="pairName = ''"
+    /></label>
+    <p v-if="pairName" class="notice subtle">
+      设备：{{ pairName }}<br />班级：{{ current?.name }}
+    </p>
+    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+    <button
+      class="button primary full"
+      :disabled="pairCode.length !== 6"
+      @click="pairName ? bind() : inspectPair()"
+    >
+      {{ pairName ? "确认绑定此设备与班级" : "核对设备" }}
+    </button>
+  </dialog>
+  <dialog ref="confirmDialog" class="modal">
+    <h2>{{ confirmTitle }}</h2>
+    <p>{{ confirmBody }}</p>
+    <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+    <div class="modal-actions">
+      <button class="button secondary" @click="confirmDialog?.close()">
+        取消</button
+      ><button class="button primary" @click="confirmed">确认</button>
+    </div>
+  </dialog>
+  <dialog ref="detailsDialog" class="modal wide-modal">
+    <header class="section-heading">
+      <h2>{{ detailTitle }}</h2>
+      <button
+        class="icon-button"
+        aria-label="关闭"
+        @click="detailsDialog?.close()"
+      >
+        <X :size="20" />
+      </button>
+    </header>
+    <article
+      v-for="(entry, index) in details as any[]"
+      :key="index"
+      class="record-row"
+    >
+      <strong>修订 {{ entry.revision }} · {{ entry.editor }}</strong>
+      <p>{{ entry.at }}</p>
+      <p v-if="entry.reason">代改原因：{{ entry.reason }}</p>
+      <p class="record-body">{{ entry.after.body }}</p>
+    </article>
+  </dialog>
+</template>

@@ -1,0 +1,371 @@
+import base64
+import json
+import secrets
+from datetime import UTC, datetime
+from io import BytesIO
+
+import qrcode
+from fastapi import APIRouter, Depends, Header, Request, Response
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from . import schemas as S
+from .config import settings
+from .db import (
+    Audit,
+    Classroom,
+    Command,
+    Content,
+    Device,
+    Idempotency,
+    Membership,
+    Pairing,
+    User,
+    get_db,
+    now,
+    sync_epoch,
+)
+from .security import actor, device_actor, digest, fail, limit, member, secret
+
+router = APIRouter()
+GROUPS = {"sync": "sync", "pause": "pause", "resume": "pause", "set_page": "page", "auto_page": "page"}
+
+
+def device_view(d):
+    s = d.state
+    return {
+        "id": d.id,
+        "classId": d.class_id,
+        "name": d.name,
+        "bindingId": d.binding,
+        "online": not d.revoked and now() - d.last_seen <= 90,
+        "revoked": d.revoked,
+        "reported": datetime.fromtimestamp(d.last_seen, UTC).isoformat(),
+        "localPaused": s.get("localPaused", False),
+        "remotePaused": s.get("remotePaused", False),
+        "cached": s.get("cachedVersion", 0),
+        "applied": s.get("appliedVersion", 0),
+        "page": s.get("page", 1),
+        "pageCount": s.get("pageCount", 1),
+        "manualUntil": s.get("manualUntil", 0) * 1000,
+        "pageSetId": s.get("pageSetId", ""),
+        "effectiveTheme": s.get("effectiveTheme", "mica_light"),
+        "effectiveMaterial": s.get("effectiveMaterial", "solid"),
+        "materialReason": s.get("materialReason", ""),
+        "deferred": s.get("applyState") == "deferred",
+        "applyState": s.get("applyState", "waiting"),
+        "error": s.get("error", ""),
+        "revision": d.control_revision,
+        "localControlEpoch": s.get("localControlEpoch", 0),
+    }
+
+
+def command_view(c):
+    return {
+        "id": c.id,
+        "deviceId": c.device_id,
+        "action": c.action,
+        "actor": c.data.get("actorName", ""),
+        "state": c.state,
+        "time": datetime.fromtimestamp(c.issued, UTC).isoformat(),
+        "detail": c.data.get("detail", "请求已受理，等待教室端执行"),
+        "seq": c.seq,
+        "bindingId": c.binding,
+        "syncEpoch": c.epoch,
+        "expiresAt": c.expires,
+        "issuedAt": c.issued,
+        **{k: v for k, v in c.data.items() if k in ("page", "pageSetId", "localControlEpoch")},
+    }
+
+
+@router.post("/device-pairings", status_code=201)
+def pairing(body: S.PairInput, request: Request, db: Session = Depends(get_db)):
+    limit(f"pair-new:{request.client.host}", 30, 600)
+    code = f"{secrets.randbelow(1000000):06d}"
+    token = secret()
+    # 长期凭证从设备持有的配对秘密派生，数据库仅存摘要，手机永远不能读出该秘密。
+    p = Pairing(code_hash=digest(code), secret_hash=digest(token), name=body.name, expires=now() + 600)
+    db.add(p)
+    db.flush()
+    pairing_url = f"{settings.public_url}/?pair={code}"
+    image = qrcode.make(pairing_url)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return {
+        "id": p.id,
+        "code": code,
+        "secret": token,
+        "expiresAt": p.expires,
+        "pairingUrl": pairing_url,
+        "qrPngBase64": base64.b64encode(buffer.getvalue()).decode(),
+    }
+
+
+@router.post("/device-pairings/confirm")
+def pair_confirm(body: S.PairConfirm, request: Request, user: User = Depends(actor), db: Session = Depends(get_db)):
+    limit(f"pair-confirm:{user.id}", 5, 300)
+    c, _ = member(db, user, body.classId, admin=True, write=True)
+    p = db.scalar(select(Pairing).where(Pairing.code_hash == digest(body.code)).with_for_update())
+    if not p or p.consumed or p.expires <= now():
+        fail(422, "pairing_invalid", "绑定码无效、已使用或已过期，请在教室端重新生成。")
+    device = Device(class_id=c.id, name=p.name, credential_hash=p.secret_hash, epoch=sync_epoch(db), state={})
+    db.add(device)
+    db.flush()
+    p.consumed = True
+    p.device_id = device.id
+    db.add(
+        Audit(class_id=c.id, actor=user.id, action="device_bound", data={"deviceId": device.id, "name": device.name})
+    )
+    return device_view(device)
+
+
+@router.post("/device-pairings/inspect")
+def inspect_pairing(body: S.PairConfirm, user: User = Depends(actor), db: Session = Depends(get_db)):
+    member(db, user, body.classId, admin=True, write=True)
+    limit(f"pair-inspect:{user.id}", 5, 300)
+    p = db.scalar(select(Pairing).where(Pairing.code_hash == digest(body.code)))
+    if not p or p.consumed or p.expires <= now():
+        fail(422, "pairing_invalid", "绑定码无效、已使用或已过期。")
+    return {"name": p.name, "expiresAt": p.expires}
+
+
+@router.get("/device-pairings/{pair_id}")
+def pair_poll(pair_id: str, authorization: str = Header(), db: Session = Depends(get_db)):
+    from .security import bearer
+
+    p = db.get(Pairing, pair_id)
+    if not p or not secrets.compare_digest(p.secret_hash, digest(bearer(authorization))):
+        fail(404, "pairing_not_found", "配对请求不存在。")
+    if not p.consumed:
+        if p.expires <= now():
+            fail(410, "pairing_expired", "配对请求已过期。")
+        return {"state": "waiting"}
+    d = db.get(Device, p.device_id)
+    if not d or d.revoked or d.epoch != sync_epoch(db):
+        fail(401, "device_revoked", "设备授权已失效。")
+    return {"state": "bound", "deviceId": d.id, "bindingId": d.binding, "syncEpoch": d.epoch, "classId": d.class_id}
+
+
+def valid_commands(db, d):
+    commands = db.scalars(
+        select(Command)
+        .where(Command.device_id == d.id, Command.state.in_(["accepted", "deferred"]))
+        .order_by(Command.seq)
+    ).all()
+    result = []
+    for command in commands:
+        membership = db.scalar(
+            select(Membership).where(
+                Membership.class_id == d.class_id, Membership.user_id == command.actor_id, Membership.active.is_(True)
+            )
+        )
+        if command.binding != d.binding or command.epoch != d.epoch or not membership or membership.role == "teacher":
+            command.state = "rejected"
+            command.data = {**command.data, "detail": "绑定或操作权限已失效"}
+        elif command.expires <= now():
+            command.state = "expired"
+            command.data = {**command.data, "detail": "命令已过期，不会补执行"}
+        elif command.group != "sync" and command.data["localControlEpoch"] != d.state.get("localControlEpoch", 0):
+            command.state = "rejected"
+            command.data = {**command.data, "detail": "现场操作已改变，旧命令失效"}
+        else:
+            result.append(command)
+    return result
+
+
+@router.get("/device/snapshot")
+def snapshot(
+    if_none_match: str | None = Header(default=None), d: Device = Depends(device_actor), db: Session = Depends(get_db)
+):
+    c = db.get(Classroom, d.class_id)
+    commands = valid_commands(db, d)
+    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}"'
+    # 即使内容未变，只要有待确认命令也必须返回 200，不能让 304 吞掉控制。
+    if if_none_match == etag and not commands:
+        return Response(status_code=304, headers={"ETag": etag})
+    from .app import content_view
+
+    contents = db.scalars(select(Content).where(Content.class_id == c.id, Content.state == "published")).all()
+    return Response(
+        json.dumps(
+            {
+                "schema": 1,
+                "deviceId": d.id,
+                "bindingId": d.binding,
+                "syncEpoch": d.epoch,
+                "classVersion": c.version,
+                "serverTime": now(),
+                "classroom": {"id": c.id, "name": c.name, **c.data},
+                "contents": [content_view(db, item) for item in contents],
+                "commands": [command_view(cmd) for cmd in commands],
+            },
+            ensure_ascii=False,
+        ),
+        media_type="application/json",
+        headers={"ETag": etag},
+    )
+
+
+def apply_report(db, d, body: S.ReportInput):
+    c = db.get(Classroom, d.class_id)
+    if body.bindingId != d.binding or body.syncEpoch != d.epoch:
+        fail(409, "binding_changed", "回执绑定或同步世代已失效。")
+    if body.appliedVersion > body.cachedVersion or body.cachedVersion > c.version or body.page > body.pageCount:
+        fail(422, "report_invalid", "缓存版本、应用版本或页码不合法。")
+    if body.stateReportSeq <= d.report_seq:
+        return False
+    if body.cachedVersion < d.state.get("cachedVersion", 0) or body.appliedVersion < d.state.get("appliedVersion", 0):
+        fail(409, "version_rollback", "同一绑定内缓存与应用版本不能倒退。")
+    if body.applyState == "paused" and not (body.localPaused or body.remotePaused):
+        fail(422, "pause_report_invalid", "暂停回执必须说明暂停来源。")
+    if body.localControlEpoch < d.state.get("localControlEpoch", 0):
+        fail(409, "local_epoch_stale", "现场操作世代不能倒退。")
+    d.report_seq = body.stateReportSeq
+    d.state = body.model_dump(
+        exclude={"bindingId", "syncEpoch", "stateReportSeq", "commandId", "result", "startedAt", "finishedAt"}
+    )
+    return True
+
+
+@router.post("/device/heartbeat")
+@router.post("/device/ack")
+def heartbeat(body: S.ReportInput, d: Device = Depends(device_actor), db: Session = Depends(get_db)):
+    accepted = apply_report(db, d, body)
+    return {"accepted": accepted, "serverTime": now()}
+
+
+@router.get("/devices/{device_id}/control")
+def control_state(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+    d = db.get(Device, device_id)
+    if not d:
+        fail(404, "device_not_found", "设备不存在。")
+    member(db, user, d.class_id)
+    valid_commands(db, d)
+    return {
+        "device": device_view(d),
+        "commands": [
+            command_view(c)
+            for c in db.scalars(
+                select(Command).where(Command.device_id == d.id).order_by(Command.seq.desc()).limit(100)
+            )
+        ],
+    }
+
+
+@router.post("/devices/{device_id}/commands", status_code=202)
+def command(
+    device_id: str,
+    body: S.ControlInput,
+    idempotency_key: str | None = Header(default=None),
+    user: User = Depends(actor),
+    db: Session = Depends(get_db),
+):
+    from .app import idempotent
+
+    d = db.get(Device, device_id)
+    if not d:
+        fail(404, "device_not_found", "设备不存在。")
+    member(db, user, d.class_id, admin=True, write=True)
+    # 锁定后刷新，防止并发请求使用相同控制修订。
+    d = db.scalar(
+        select(Device).where(Device.id == device_id).with_for_update().execution_options(populate_existing=True)
+    )
+    key, signature, previous = idempotent(db, user, idempotency_key, f"control:{device_id}", body.model_dump())
+    if previous is not None:
+        return previous
+    if d.revoked or d.epoch != sync_epoch(db) or now() - d.last_seen > 90:
+        fail(409, "device_unreachable", "设备不可达，不能提交即时控制。")
+    if body.expectedControlRevision != d.control_revision:
+        fail(409, "control_revision_conflict", "其他操作已提交，请刷新设备状态。")
+    s = d.state
+    if body.action == "resume" and s.get("localPaused"):
+        fail(409, "local_pause", "本机暂停需现场老师恢复，手机不能解除。")
+    if GROUPS[body.action] == "page":
+        if s.get("localPaused") or s.get("remotePaused"):
+            fail(409, "device_paused", "暂停期间不能翻页。")
+        if body.pageSetId != s.get("pageSetId", "") or body.page > s.get("pageCount", 1):
+            fail(409, "page_set_changed", "页集合已改变，请刷新后重试。")
+    group = GROUPS[body.action]
+    if group != "sync":
+        for old in db.scalars(
+            select(Command).where(
+                Command.device_id == d.id, Command.group == group, Command.state.in_(["accepted", "deferred"])
+            )
+        ):
+            old.state = "superseded"
+            old.data = {**old.data, "detail": "已被同组的新操作替代"}
+    d.control_revision += 1
+    cmd = Command(
+        device_id=d.id,
+        actor_id=user.id,
+        binding=d.binding,
+        epoch=d.epoch,
+        seq=d.control_revision,
+        action=body.action,
+        group=group,
+        expires=now() + (120 if group == "pause" else 60),
+        data={
+            "page": body.page,
+            "pageSetId": body.pageSetId,
+            "localControlEpoch": s.get("localControlEpoch", 0),
+            "actorName": user.name,
+        },
+    )
+    db.add(cmd)
+    db.flush()
+    result = command_view(cmd)
+    db.add(Idempotency(key=key, request_hash=signature, result=result))
+    db.add(
+        Audit(
+            class_id=d.class_id,
+            actor=user.id,
+            action="device_command",
+            data={"commandId": cmd.id, "action": cmd.action},
+        )
+    )
+    return result
+
+
+@router.post("/device/command-acks")
+def command_ack(body: S.CommandAck, d: Device = Depends(device_actor), db: Session = Depends(get_db)):
+    cmd = db.get(Command, body.commandId)
+    if not cmd or cmd.device_id != d.id or cmd.binding != d.binding or cmd.epoch != d.epoch:
+        fail(409, "command_binding_changed", "命令已失效或属于其他绑定。")
+    if body.result == "executed" and (
+        body.startedAt is None
+        or body.startedAt < cmd.issued - 2
+        or body.startedAt >= cmd.expires
+        or body.finishedAt is None
+        or body.finishedAt < body.startedAt
+        or body.finishedAt > now() + 5
+    ):
+        fail(422, "command_time_invalid", "命令执行时间无效，不能伪报执行成功。")
+    # 终态重复回执不重复执行；迟到的真实执行结果可修正到期历史，但不回滚新状态。
+    if cmd.state in ("accepted", "deferred") or (cmd.state in ("expired", "superseded") and body.result == "executed"):
+        cmd.state = body.result
+        cmd.data = {
+            **cmd.data,
+            "startedAt": body.startedAt,
+            "finishedAt": body.finishedAt,
+            "detail": body.error
+            or {"executed": "教室端已执行", "deferred": "前台保护，等待安静应用", "rejected": "设备拒绝执行"}[
+                body.result
+            ],
+        }
+    accepted = apply_report(db, d, body)
+    return {"accepted": accepted, "state": cmd.state}
+
+
+@router.post("/devices/{device_id}/revoke")
+def revoke(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+    d = db.get(Device, device_id)
+    if not d:
+        fail(404, "device_not_found", "设备不存在。")
+    c, _ = member(db, user, d.class_id, admin=True, write=True)
+    d.revoked = True
+    for cmd in db.scalars(
+        select(Command).where(Command.device_id == d.id, Command.state.in_(["accepted", "deferred"]))
+    ):
+        cmd.state = "rejected"
+    db.add(Audit(class_id=c.id, actor=user.id, action="device_revoked", data={"deviceId": d.id}))
+    return {"ok": True, "message": "旧设备恢复联网后停止使用；离线缓存无法立即远程清除。"}

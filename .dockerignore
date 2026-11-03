@@ -1,0 +1,17 @@
+**/.env
+**/.env.*
+deploy/.migration.env
+!.env.example
+!deploy/.env.example
+.git
+.venv
+.tools
+.qa
+data
+dist
+desktop
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+*.docx
