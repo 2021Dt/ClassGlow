@@ -1,0 +1,8 @@
+# 已有 Nginx 的服务器只向回环地址发布网页端口，TLS 继续由宿主机处理。
+# !override 要求 Docker Compose 2.24.4 或更新版本。
+services:
+  web:
+    ports: !override ["127.0.0.1:18080:80"]
+    environment:
+      SITE_ADDRESS: ":80"
+      TRUSTED_PROXY_CIDRS: private_ranges

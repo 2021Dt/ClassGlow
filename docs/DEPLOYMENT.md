@@ -48,6 +48,35 @@ sudo classglow backup
 
 ## 1. 准备服务器
 
+### 已有 Nginx 的共享服务器
+
+Docker 仅在服务器运行，开发电脑无需启动 Docker。现有 Nginx 占用 80/443 时，使用：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/install.sh -o classglow-install.sh
+sudo bash classglow-install.sh --existing-nginx
+```
+
+此入口复用已安装的 Docker、Compose（≥ 2.24.4）、Git、Nginx 与已注册账户的 Certbot，不安装或升级系统包，不重启 Docker。只增加 `teacher.dgplus.vip` 站点；同名非本项目配置存在时会停止，须先人工核对。域名仍须指向本机，HTTP 的 ACME 验证路径须可从公网访问。
+
+`deploy/.env` 中设置 `KANBAN_GATEWAY=nginx` 后，运维命令自动叠加 `compose.nginx.yaml`：网页只发布 `127.0.0.1:18080`，API 不发布主机端口，Caddy 在容器内处理网页和 `/api/` 转发，宿主机 Nginx 负责 HTTPS。Nginx 覆盖客户端自带的转发头；Caddy 仅在此模式信任内网代理。证书续期沿用宿主机 Certbot 定时器。
+
+Docker Hub 无法访问时，可在 `deploy/.env` 设置 `PYTHON_IMAGE`、`NODE_IMAGE`、`CADDY_IMAGE` 为示例文件中的 Amazon ECR 地址。这些是 [Docker 官方公开镜像](https://gallery.ecr.aws/docker/library/python)，仅影响本项目构建，不修改 Docker 全局镜像源或代理。
+
+本模式新增的服务器内容如下；其他站点与 Docker 项目保持原配置：
+
+| 位置 | 用途 |
+| --- | --- |
+| `/opt/classglow` | Git 源码、本项目配置与部署状态 |
+| `/opt/classglow/.deploy/downloads` | 可选 Windows 客户端下载文件 |
+| `/etc/nginx/sites-available/teacher.dgplus.vip`、`sites-enabled/teacher.dgplus.vip` | 指向本项目 Nginx 配置的链接 |
+| `/etc/letsencrypt/live/teacher.dgplus.vip` | Certbot 管理的域名证书，相关续期记录也由 Certbot 管理 |
+| `/usr/local/bin/classglow` | 运维命令入口 |
+| `/etc/systemd/system/classglow-update.{service,timer}` | 开启自动更新后创建的定时任务 |
+| `classroom-board_*` Docker 卷与网络 | 项目持久数据与隔离网络 |
+
+所有日常操作仍使用 `sudo classglow update/status/logs/backup/setup-key/auto-on/auto-off`（每次填写一个子命令）。需要直接运行 Compose 时须同时加 `-f compose.production.yaml -f compose.nginx.yaml`，否则会使用独立服务器的 80/443 端口配置。
+
 以下命令在服务器的项目根目录执行。服务器需要 Docker Engine 和 Docker Compose 插件，安装方式见 [Docker 官方安装文档](https://docs.docker.com/engine/install/)。小规模试点可先按 2 核、2GB 内存准备；这是起步配置，尚未进行容量压测。
 
 准备域名，例如 `teacher.dgplus.vip`，将 A 记录指向服务器公网 IP；若设置 AAAA，IPv6 也须能到达服务器。开放 TCP 80、443，SSH 按运维需要配置。不需要开放 5173 或 8000。Caddy 在域名解析正确且端口可达时申请并续期 HTTPS 证书，依据 [Caddy 自动 HTTPS 文档](https://caddyserver.com/docs/automatic-https)。

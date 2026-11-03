@@ -4,12 +4,15 @@ x-api: &api
   build:
     context: .
     dockerfile: deploy/Dockerfile.api
+    args:
+      PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
   environment:
     KANBAN_ENVIRONMENT: production
     KANBAN_DATABASE_URL: ${KANBAN_DATABASE_URL:-sqlite:////app/data/kanban.db}
     KANBAN_ALLOW_SQLITE_PRODUCTION: ${KANBAN_ALLOW_SQLITE_PRODUCTION:-true}
     KANBAN_PUBLIC_URL: https://${KANBAN_DOMAIN:?请先在 deploy/.env 中设置域名}
     KANBAN_ALLOWED_ORIGINS: '["https://${KANBAN_DOMAIN}"]'
+    KANBAN_CLIENT_DOWNLOAD_URL: ${KANBAN_CLIENT_DOWNLOAD_URL:-}
   volumes: ["app_data:/app/data"]
   networks: [backend]
   security_opt: ["no-new-privileges:true"]
@@ -40,6 +43,9 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.web
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:24-alpine}
+        CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.11.7-alpine}
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${KANBAN_DOMAIN:?请先在 deploy/.env 中设置域名}

@@ -1,10 +1,12 @@
-FROM node:24-alpine AS build
+ARG NODE_IMAGE=node:24-alpine
+ARG CADDY_IMAGE=caddy:2.11.7-alpine
+FROM ${NODE_IMAGE} AS build
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend ./
 RUN npm run build
 
-FROM caddy:2.11.7-alpine
+FROM ${CADDY_IMAGE}
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /web/dist /srv

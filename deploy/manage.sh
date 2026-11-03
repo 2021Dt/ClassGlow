@@ -4,7 +4,11 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-dc() { docker compose --env-file deploy/.env -f compose.production.yaml "$@"; }
+dc() {
+  local files=(-f compose.production.yaml)
+  if grep -qx 'KANBAN_GATEWAY=nginx' deploy/.env; then files+=(-f compose.nginx.yaml); fi
+  docker compose --env-file deploy/.env "${files[@]}" "$@"
+}
 log() { printf '\n[ClassGlow] %s\n' "$*"; }
 
 update() {
@@ -77,6 +81,11 @@ deploy_current() {
   # 迁移已同步完成；分别等待 API 健康和网页启动，避免重复运行 migrate 容器。
   dc up -d --no-deps --wait --wait-timeout 120 api
   dc up -d --no-deps --wait --wait-timeout 120 web
+  if grep -qx 'KANBAN_GATEWAY=nginx' deploy/.env; then
+    phase='接入已有 Nginx 与 HTTPS'
+    log "$phase"
+    bash deploy/nginx.sh
+  fi
   phase='HTTPS 与接口检查'
   log "$phase"
   # 直接连接本机网关并核对正式域名证书；证书签发仍要求公网 DNS 和 80/443 可达。
