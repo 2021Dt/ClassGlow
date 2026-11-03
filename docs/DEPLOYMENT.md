@@ -4,6 +4,27 @@
 
 本项目域名：`teacher.dgplus.vip`。代码仓库：[2021Dt/ClassGlow](https://github.com/2021Dt/ClassGlow)，部署分支为 `main`。以下脚本面向 Ubuntu 22.04/24.04/26.04 或 Debian 12/13、使用 systemd 的独立服务器。教师与管理员操作见 [使用说明](USAGE.md)。
 
+## 106 服务器交接记录
+
+记录日期：2026-11-03。本机已按“已有 Nginx 的共享服务器”方案部署，日常使用 `sudo classglow` 运维命令即可，不要重复执行独立服务器安装步骤。
+
+| 项目 | 已部署配置 |
+| --- | --- |
+| 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
+| 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
+| 最近应用发布记录 | `b8fd180f8a5771165c1a974e988a7873ac9dda53`；实际当前提交通过 `sudo classglow status` 查看 |
+| 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
+| 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
+| 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
+| 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
+| 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
+| HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
+| Windows 发布 | 0.2.0 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+
+本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员初始化由用户持安装密钥在网页完成。
+
+停用、日常空间清理和彻底移除的顺序见 [服务器后期清理](SERVER-CLEANUP.md)。两份文档随代码存放在服务器 `/opt/classglow/docs/`，不包含安装密钥、口令或私钥。
+
 ## 一键安装与持续更新
 
 先把域名 A 记录指向服务器公网 IP，开放 TCP 80/443，确认没有其他 Nginx、宝塔或网关占用这两个端口。服务器需要能访问 GitHub、Docker 软件源及镜像源。执行：
@@ -87,6 +108,8 @@ Docker Hub 无法访问时，可在 `deploy/.env` 设置 `PYTHON_IMAGE`、`NODE_
 
 ## 2. 手动部署（已使用一键脚本时跳过这些安装步骤）
 
+以下复制 `.env` 的操作仅用于新安装。106 服务器已经有配置，不能覆盖它。
+
 ```bash
 cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
@@ -101,13 +124,26 @@ KANBAN_DATABASE_URL=sqlite:////app/data/kanban.db
 KANBAN_ALLOW_SQLITE_PRODUCTION=true
 ```
 
-然后执行：
+手工操作统一使用下面的 Bash 函数。它和运维脚本一样读取网关模式，自动为共享服务器叠加 Nginx 配置，避免错误占用 80/443。后续第 4、5 节也使用 `dc`；重新登录终端后需重新定义：
 
 ```bash
-docker compose --env-file deploy/.env -f compose.production.yaml config --quiet
-docker compose --env-file deploy/.env -f compose.production.yaml up -d --build
-docker compose --env-file deploy/.env -f compose.production.yaml ps -a
-docker compose --env-file deploy/.env -f compose.production.yaml logs --tail=80 api web migrate
+cd /opt/classglow
+dc() {
+  local files=(-f compose.production.yaml)
+  if sudo grep -qx 'KANBAN_GATEWAY=nginx' deploy/.env; then
+    files+=(-f compose.nginx.yaml)
+  fi
+  sudo docker compose --env-file deploy/.env "${files[@]}" "$@"
+}
+```
+
+新安装继续执行：
+
+```bash
+dc config --quiet
+dc up -d --build
+dc ps -a
+dc logs --tail=80 api web migrate
 curl --fail https://teacher.dgplus.vip/api/health
 ```
 
@@ -116,16 +152,16 @@ curl --fail https://teacher.dgplus.vip/api/health
 服务启动后，读取首次安装密钥：
 
 ```bash
-docker compose --env-file deploy/.env -f compose.production.yaml exec api python -m scripts.setup_key
+dc exec api python -m scripts.setup_key
 ```
 
 打开网站的初始化向导，填写安装密钥、站点名称、管理员账号和口令。默认关闭教师自行注册，初始化完成后进入“系统管理 → 账号管理”创建教师账号，也可以在“站点设置”开放注册。初始化只允许成功一次，完成后即锁定；密钥存放在数据卷中的 `setup-key.txt`，不会通过网页或启动日志返回。
 
 本机开发用 `uv run python -m scripts.setup_key` 读取。已有旧版数据升级后同样需要首次设置系统管理员：可以新建管理账号，或填写已有账号及其原口令进行升级，历史业务数据保留。
 
-数据保存在 `classroom-board_app_data` 命名卷，证书保存在独立 Caddy 卷。应用容器以普通用户运行、根文件系统只读，只有数据卷和临时目录可写。SQLite 使用一个 API 进程，暂不横向扩容，也不将数据库文件放入 NFS/共享盘。不要运行 `docker compose down -v`，该参数会删除数据卷。
+数据保存在 `classroom-board_app_data` 命名卷。独立网关模式的证书保存在 Caddy 卷；106 的共享 Nginx 模式由宿主机 Certbot 保存证书。API 容器以普通用户运行、根文件系统只读，只有数据卷和临时目录可写。SQLite 使用一个 API 进程，暂不横向扩容，也不将数据库文件放入 NFS/共享盘。不要运行 `docker compose down -v`，该参数会删除数据卷。
 
-如果已经运行宝塔、Nginx 或其他占用 80/443 的服务，需要先安排域名与端口接入，不能直接让两套网关争用端口。本文给的是独立服务器直接部署配置。
+如果已有 Nginx，使用第 1 节的共享服务器接入步骤完成宿主机站点与证书配置。仅启动容器不会自动配置宿主机网关。宝塔等其他网关需要按其实际配置接入。
 
 ## 3. 手机与 Windows 客户端
 
@@ -146,17 +182,19 @@ docker compose --env-file deploy/.env -f compose.production.yaml exec api python
 
 ## 4. 更新、备份与恢复
 
+106 服务器日常更新使用 `sudo classglow update`，备份使用 `sudo classglow backup`。以下手工恢复或迁移前，先 `sudo classglow auto-off`，等当前部署结束，并协调其他运维人员暂停手工更新；完成核验后用 `sudo classglow auto-on` 恢复定时更新。第 2 节的 `dc` 函数必须先定义。
+
 SQLite 现在可直接在“系统管理 → 备份恢复”创建备份、下载和恢复。网页恢复要求填写当前管理员口令和“恢复备份”，先自动备份当前数据库，再通过单个事务恢复数据。恢复成功后全部会话失效，使用备份中的管理员账号重新登录，教室设备重新绑定。网页恢复仅支持当前结构版本的本机备份；外部备份导入、旧版本备份迁移和 PostgreSQL 仍使用以下运维命令。
 
 更新前先在线备份，复制到服务器外的受控备份位置。下例用固定输出名展示命令；每次换一个新名称，工具拒绝覆盖已有备份：
 
 ```bash
-docker compose --env-file deploy/.env -f compose.production.yaml exec -T api \
+dc exec -T api \
   python -m scripts.sqlite_backup backup --output data/backups/before-update-20261102.db
-mkdir -p backups
-docker compose --env-file deploy/.env -f compose.production.yaml cp \
+sudo install -d -m 0700 backups
+dc cp \
   api:/app/data/backups/before-update-20261102.db ./backups/
-chmod 600 backups/before-update-20261102.db
+sudo chmod 600 backups/before-update-20261102.db
 ```
 
 备份使用 SQLite 在线一致性 API，不能在写入过程中只复制主 `.db` 文件。备份包含业务数据和口令哈希，备份目录不可放在网站静态目录。建议每天执行并异机保留，恢复前核对备份时间。
@@ -164,24 +202,24 @@ chmod 600 backups/before-update-20261102.db
 上传更新后的代码后，停止服务再执行迁移，避免旧代码在迁移期间继续写入：
 
 ```bash
-docker compose --env-file deploy/.env -f compose.production.yaml stop web api
-docker compose --env-file deploy/.env -f compose.production.yaml build
-docker compose --env-file deploy/.env -f compose.production.yaml run --rm --no-deps migrate
+dc stop web api
+dc build
+dc run --rm --no-deps migrate
 # 上一步成功才执行下一步；失败时保留停服状态，检查日志和备份。
-docker compose --env-file deploy/.env -f compose.production.yaml up -d
+dc up -d
 curl --fail https://teacher.dgplus.vip/api/health
 ```
 
 恢复使用一个新数据库文件，不覆盖当前文件：
 
 ```bash
-docker compose --env-file deploy/.env -f compose.production.yaml stop web api
-docker compose --env-file deploy/.env -f compose.production.yaml run --rm --no-deps api \
+dc stop web api
+dc run --rm --no-deps api \
   python -m scripts.sqlite_backup restore \
   --source data/backups/before-update-20261102.db --output data/restored-20261102.db
 ```
 
-将 `deploy/.env` 的数据库地址改成 `sqlite:////app/data/restored-20261102.db`，再执行 `up -d` 并检查健康。恢复会更换同步世代，旧会话和设备失效，需要重新登录、重新绑定，正式内容仍保留。若备份只在服务器外，先用 `docker compose cp` 将它送进停止状态的 `api:/app/data/backups/` 再恢复。
+将 `deploy/.env` 的数据库地址改成 `sqlite:////app/data/restored-20261102.db`，再执行 `dc up -d` 并检查健康。恢复会更换同步世代，旧会话和设备失效，需要重新登录、重新绑定，正式内容仍保留。若备份只在服务器外，先用 `dc cp` 将它送进停止状态的 `api:/app/data/backups/` 再恢复。
 
 ## 5. 导入现有 SQLite，或迁移 PostgreSQL
 
@@ -195,7 +233,7 @@ KANBAN_MIGRATION_TARGET_URL=postgresql+psycopg://user:URL编码后的密码@数�
 
 ```bash
 chmod 600 deploy/.migration.env
-docker compose --env-file deploy/.env -f compose.production.yaml run --rm --no-deps \
+dc run --rm --no-deps \
   --env-from-file deploy/.migration.env api python -m scripts.migrate_database
 ```
 

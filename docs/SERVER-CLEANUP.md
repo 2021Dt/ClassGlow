@@ -2,9 +2,39 @@
 
 当前服务：`teacher.dgplus.vip`，项目目录 `/opt/classglow`，沿用服务器原有 Docker、Nginx 和 Certbot。本文是管理员执行清理时的操作说明；开发部署不会自动执行这些清理步骤。
 
+部署结构、备份恢复和运维命令见 [部署文档](DEPLOYMENT.md)。记录日期为 2026-11-03；执行清理前应以当前主机实际配置核对。只做空间维护时使用下一节，不必下线整个网站。
+
+## 日常空间维护
+
+先查看占用及本项目容器：
+
+```bash
+sudo du -sh /opt/classglow/.deploy/downloads /opt/classglow/backups 2>/dev/null
+sudo docker ps -a --filter label=com.docker.compose.project=classroom-board
+sudo classglow status
+```
+
+主数据库和卷内备份不包含在上述目录大小中。定义 [部署文档](DEPLOYMENT.md) 第 2 节的 `dc` 函数后，可用 `dc exec -T api du -sh /app/data` 查看；不要直接编辑 Docker 自己的数据目录。
+
+| 可增长内容 | 维护方式 |
+| --- | --- |
+| SQLite 历史备份 | 先按学校保留期限挑选、离机备份并验证，再逐个删除确定过期的文件；不要按通配符清空 `/app/data`，也不要碰正在使用的数据库、WAL 或 SHM 文件 |
+| 旧 Windows 安装包 | 核对 `/api/client/version`、`deploy/.env` 和仍在使用的下载链接，先保留当前发布包及必要回退包，再删除选定的旧文件 |
+| 容器日志 | Compose 已为本项目配置 `json-file` 轮转，每份 10 MB、保留 3 份；不手工截断 Docker 正在写入的日志 |
+| 自动更新日志 | 由宿主机 journald 管理；查看 `sudo classglow auto-status`，不为本项目清空全机 journal |
+| 旧构建镜像/缓存 | 先核对容器引用和项目归属，只处理确定不再使用的本项目独占镜像；共享服务器不使用全局 prune |
+
+目前没有按日期自动删除备份或下载包的任务。上传用的 `.deploy/incoming` 临时目录已在本次发布校验完成后移除；以后若出现中断上传的文件，先确认无传输任务再处理具体文件。
+
 ## 先停止自动更新并保留数据
 
-先运行 `sudo classglow auto-off`。它停止后续定时触发，已开始的部署仍会完成；通过 `sudo classglow auto-status` 确认没有部署正在执行，再操作容器和配置。
+先运行 `sudo classglow auto-off`。它停止后续定时触发，已开始的部署仍会完成；通过 `sudo classglow auto-status` 查看定时任务和日志，再用以下命令检查手工/自动更新共用的锁。返回非零时先等待当前部署完成，不强行终止迁移：
+
+```bash
+sudo flock -n /opt/classglow/.deploy/update.lock true
+```
+
+检查只代表检查当时没有部署持锁；整个维护窗口还需协调其他运维人员暂停手工更新。停用后不要再执行 `classglow update` 或 `auto-on`，否则会重新部署。
 
 执行 `sudo classglow backup`，记录输出的备份文件名。备份默认在应用数据卷内，因此删除数据卷前必须把选定备份复制到服务器外的受控位置，并验证可恢复。不要在聊天、公开仓库或网站目录保存数据库和 `deploy/.env`。
 
@@ -36,5 +66,11 @@ sudo docker compose --env-file deploy/.env -f compose.production.yaml -f compose
 | 下载过的旧 ZIP/安装包 | 服务器下载目录随项目归档；老师电脑上的下载文件由用户管理 |
 
 保留服务器原有 Vaultwarden、lingua-reader-api、mihomo、rustdesk 以及各自数据、网络和端口配置。保留 Docker、Nginx、Certbot 和它们原有的系统服务/定时器。Windows 客户端应在服务下线前完成在线卸载；下线后只能离线清理本机，原设备权限需在服务器销毁或重新上线后处理。
+
+## 清理完成后核对
+
+保留数据停用时，确认本项目容器已经停止，`classroom-board_app_data` 卷仍在，离机备份可读。彻底移除时，再核对本项目容器/网络、所选数据卷、站点链接、更新服务和目录是否按计划处理；另放文件或保留的归档应记录其位置。
+
+执行 `sudo nginx -t`，确认 Nginx 和其他业务仍正常运行；核对 `classglow-update.timer` 已停用。证书只通过 Certbot 管理，确认未影响其他域名的续期。不要通过删除全局 Docker、Nginx、Certbot 配置来完成本项目清理。
 
 本项目不承诺删除操作系统自身维护的审计、日志或缓存，不为“无痕”破坏系统记录。

@@ -16,6 +16,8 @@ curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/instal
 
 **已有 Nginx / Docker 的共享服务器：**使用 `sudo bash classglow-install.sh --existing-nginx`，只增加本项目的站点，网页容器监听 `127.0.0.1:18080`，沿用宿主机 Certbot。此模式要求现有 Docker Compose ≥ 2.24.4、Nginx、Certbot 及已注册的证书账户，不安装系统软件包。Docker 只需要在服务器运行，本地电脑不需要。
 
+106 服务器的当前部署记录、更新和备份恢复见 [部署文档](docs/DEPLOYMENT.md)；日常空间维护、停用及移除顺序见 [后期清理文档](docs/SERVER-CLEANUP.md)。
+
 ## 启动管理端与服务
 
 需要 Python 3.13、uv、Node.js 22.18 或更新版本。以下命令在项目根目录执行：
