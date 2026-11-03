@@ -32,6 +32,7 @@ const auditLabels: Record<string, string> = {
   invitation_revoked: "撤销邀请",
   device_bound: "绑定设备",
   device_revoked: "撤销设备",
+  device_uninstalled: "教室端卸载并撤销授权",
   device_command: "提交设备控制",
   transfer_accepted: "完成所有权交接",
   transfer_cancelled: "取消所有权交接",

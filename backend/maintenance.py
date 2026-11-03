@@ -20,7 +20,11 @@ def audit_history(class_id: str, user: User = Depends(actor), db: Session = Depe
     return [
         {
             "id": item.id,
-            "actor": db.get(User, item.actor).name if db.get(User, item.actor) else "历史成员",
+            "actor": "教室设备"
+            if item.action == "device_uninstalled"
+            else db.get(User, item.actor).name
+            if db.get(User, item.actor)
+            else "历史成员",
             "action": item.action,
             "at": item.at,
         }

@@ -207,7 +207,7 @@ docker compose --env-file deploy/.env -f compose.production.yaml run --rm --no-d
 
 2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。网页初始化尚未提交，没有预置管理员或演示数据。浏览器自动化在连接阶段超时，本次未进行线上登录后的交互复核；本地业务验证范围见 [验收记录](VERIFICATION.md)。
 
-Windows x64 测试包已提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-win-x64-25df4fd.zip)，大小 76,128,748 字节，SHA-256 为 `6b61d04cde5504af31a239d6f4386554ad23939b1c1fb2c1d10b1755e8192b3a`。它包含应用更新至 `25df4fd` 的自带运行时版本，仍为未签名测试包。
+Windows x64 0.2.0 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.2.0-win-x64-setup.exe)，大小 51,280,494 字节，SHA-256 为 `b741f02c5da47aa4d6cbce55967c793c14d19b151ff78d6d68402edce9797ec2`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
 
 | 现象 | 检查方向 |
 | --- | --- |

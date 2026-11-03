@@ -25,7 +25,7 @@ from .db import (
     now,
     sync_epoch,
 )
-from .security import actor, device_actor, digest, fail, limit, member, secret
+from .security import actor, bearer, device_actor, digest, fail, limit, member, secret
 
 router = APIRouter()
 GROUPS = {"sync": "sync", "pause": "pause", "resume": "pause", "set_page": "page", "auto_page": "page"}
@@ -369,3 +369,24 @@ def revoke(device_id: str, user: User = Depends(actor), db: Session = Depends(ge
         cmd.state = "rejected"
     db.add(Audit(class_id=c.id, actor=user.id, action="device_revoked", data={"deviceId": d.id}))
     return {"ok": True, "message": "旧设备恢复联网后停止使用；离线缓存无法立即远程清除。"}
+
+
+@router.post("/device/uninstall")
+def uninstall_device(authorization: str = Header(), db: Session = Depends(get_db)):
+    """本机卸载只撤销凭证对应的设备/配对，不接受目标设备 ID，不删除教学内容。"""
+    credential = digest(bearer(authorization))
+    d = db.scalar(select(Device).where(Device.credential_hash == credential).with_for_update())
+    p = db.scalar(select(Pairing).where(Pairing.secret_hash == credential).with_for_update())
+    if not d and not p:
+        fail(401, "device_revoked", "设备或配对授权已失效。")
+    if p:
+        p.expires = 0
+    if d and not d.revoked:
+        d.revoked = True
+        for cmd in db.scalars(
+            select(Command).where(Command.device_id == d.id, Command.state.in_(["accepted", "deferred"]))
+        ):
+            cmd.state = "rejected"
+            cmd.data = {**cmd.data, "detail": "教室端已卸载，设备授权已撤销"}
+        db.add(Audit(class_id=d.class_id, actor=d.id, action="device_uninstalled", data={"deviceId": d.id}))
+    return {"ok": True}

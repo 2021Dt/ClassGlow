@@ -8,7 +8,7 @@ namespace ClassroomBoard;
 
 public sealed class ClientState
 {
-    public string Server { get; set; } = "http://127.0.0.1:8000";
+    public string Server { get; set; } = "https://teacher.dgplus.vip/api/";
     public string Credential { get; set; } = "";
     public string PairId { get; set; } = "";
     public string PairCode { get; set; } = "";
@@ -59,8 +59,8 @@ public sealed class StateStore
     private string StatePath => Path.Combine(DirectoryPath, "state.bin");
     public StateStore(string? directory = null)
     {
-        DirectoryPath = directory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClassroomBoard");
-        Directory.CreateDirectory(DirectoryPath);
+        // 构造与读取不创建目录；首次同意之前不能留下业务文件。
+        DirectoryPath = directory ?? AppPaths.DataDirectory;
     }
     public ClientState Load()
     {
@@ -71,6 +71,7 @@ public sealed class StateStore
     }
     public void Save(ClientState state)
     {
+        Directory.CreateDirectory(DirectoryPath);
         var bytes = ProtectedData.Protect(JsonSerializer.SerializeToUtf8Bytes(state), null, DataProtectionScope.CurrentUser);
         var temp = StatePath + ".tmp";
         using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None)) { stream.Write(bytes); stream.Flush(true); }

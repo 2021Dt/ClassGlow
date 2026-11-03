@@ -68,7 +68,7 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj
 
 程序默认关闭壁纸写入，先完成配对与同步检查，再在本机启用。当前无打扰策略采用保守条件：只有前台本来就是桌面时才尝试应用；课件、视频与输入期间继续缓存并报告延后。不会主动切换桌面、激活课件、注入按键或重启 Explorer。这一策略仍须在真实教室连续运行验证。
 
-壁纸、暂停恢复和现场控制均作用于本机指定目标。原壁纸、加密凭证、缓存及命令处理结果保存在当前用户的 `%LOCALAPPDATA%/ClassroomBoard`，使用 DPAPI 加密与原子文件替换。正常退出恢复原壁纸；异常终止时旧壁纸可能保留。首次安装必须验证学校还原保护和重启后的持久化，不能假设 D 盘一定安全。
+壁纸、暂停恢复和现场控制均作用于本机指定目标。原壁纸路径、凭证、业务快照及命令结果保存在当前用户的 `%LOCALAPPDATA%/ClassroomBoard/state.bin`，使用 DPAPI 加密与原子替换；渲染后的 PNG 是明文图片。正常退出恢复本程序仍占用的壁纸，保留用户后来手动更换的壁纸；异常终止时旧壁纸可能保留。首次安装必须验证学校还原保护和重启后的持久化，不能假设 D 盘一定安全。
 
 创建可复制运行包：
 
@@ -76,9 +76,15 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj
 dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x64 --self-contained true -o dist/windows
 ```
 
-当前没有自动升级和签名发布。首次上线需由管理员人工安装，保留原数据目录。
+交付推荐使用 [Windows x64 0.2.0 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.2.0-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行先显示中文隐私说明；同意前不联网、不创建业务数据。Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
 
-本次已生成 [Windows x64 开发测试包](dist/班级看板-开发测试版-win-x64.zip)，解压后运行 `ClassroomBoard.exe`，不需要额外安装 .NET 运行时。它是免安装、未签名的测试包，使用说明随包提供。服务端仍需按上方命令启动；客户端默认不更改壁纸。
+构建安装包需要 .NET 10 SDK、Python 和 NSIS 3；脚本不会安装全局工具：
+
+```powershell
+uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
+```
+
+输出 `dist/ClassGlow-0.2.0-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
 
 ## 已实现的关键行为
 

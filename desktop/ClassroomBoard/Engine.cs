@@ -15,20 +15,29 @@ public sealed class Engine : IDisposable
     public string Status => State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => "等待返回桌面后安静应用", _ => "等待同步或启用展示" };
     private readonly StateStore store;
     private readonly Renderer renderer;
-    private readonly Wallpaper wallpaper = new();
+    private readonly IWallpaper wallpaper;
     private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(8) };
     private double nextPoll, nextHeartbeat, nextRender;
     private double nextCleanup;
     private int failures;
     private bool busy;
+    private bool stopping;
+    private int pendingRequests;
+    private readonly CancellationTokenSource shutdown = new();
     private bool changed = true;
     private bool requireFullSnapshot = true;
     private static double Utc => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
     private DateTimeOffset Clock => DateTimeOffset.UtcNow.AddSeconds(State.ClockOffset).ToOffset(TimeSpan.FromHours(8));
 
-    public Engine(StateStore stateStore) { store = stateStore; State = store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); }
+    public Engine(StateStore stateStore, ClientState? initial = null, IWallpaper? desktop = null) { store = stateStore; wallpaper = desktop ?? new Wallpaper(); State = initial ?? store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); }
     public static bool IsTimeUncertain(double current, double lastContact) => current<1577836800 || current>4102444800 || lastContact>0 && current<lastContact-120;
-    public void Save() => store.Save(State);
+    public void Save() { if (!stopping) store.Save(State); }
+    public async Task StopAsync()
+    {
+        stopping = true; shutdown.Cancel();
+        // 卸载先取消并等待在途请求，避免清理后异步续写 state.bin。
+        while (busy || pendingRequests > 0) await Task.Delay(25);
+    }
     public static Uri ValidateServer(string value)
     {
         if (!Uri.TryCreate(value.TrimEnd('/') + "/", UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") || (!uri.IsLoopback && uri.Scheme != "https") || !string.IsNullOrEmpty(uri.UserInfo) || uri.Query.Length > 0 || uri.Fragment.Length > 0)
@@ -37,12 +46,16 @@ public sealed class Engine : IDisposable
     }
     private async Task<(JsonObject? Body, string ETag)> Request(string path, string method = "GET", JsonObject? body = null, string? etag = null, bool authenticated = true)
     {
+        shutdown.Token.ThrowIfCancellationRequested();
+        pendingRequests++;
+        try {
         using var request = new HttpRequestMessage(new HttpMethod(method), new Uri(ValidateServer(State.Server), path.TrimStart('/')));
         if (authenticated && State.Credential.Length > 0) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", State.Credential);
         if (etag is not null && etag.Length > 0) request.Headers.TryAddWithoutValidation("If-None-Match", etag);
         if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
         // ResponseHeadersRead 的 HttpClient.Timeout 只覆盖响应头；正文读取必须共用截止令牌，防止慢速响应卡死轮询。
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(8));
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) throw new DeviceAuthorizationException("设备授权已失效，请重新绑定。");
         if (response.StatusCode == HttpStatusCode.NotModified) return (null, State.ETag);
@@ -51,8 +64,11 @@ public sealed class Engine : IDisposable
         await using var stream = await response.Content.ReadAsStreamAsync(deadline.Token); using var buffer = new MemoryStream();
         var chunk = new byte[16384]; int count;
         while ((count = await stream.ReadAsync(chunk.AsMemory(), deadline.Token)) > 0) { if (buffer.Length + count > 8 * 1024 * 1024) throw new InvalidDataException("响应超过允许大小。"); buffer.Write(chunk, 0, count); }
+        shutdown.Token.ThrowIfCancellationRequested();
         return (JsonNode.Parse(buffer.ToArray()) as JsonObject ?? throw new InvalidDataException("服务响应结构不合法。"), response.Headers.ETag?.ToString() ?? "");
+        } finally { pendingRequests--; }
     }
+    public async Task RevokeForUninstall() => await Request("/device/uninstall", "POST");
     public async Task Pair(string server)
     {
         ValidateServer(server);
@@ -66,7 +82,7 @@ public sealed class Engine : IDisposable
     public async Task<string> CheckVersion()
     {
         var result = (await Request("/client/version", authenticated: false)).Body!;
-        return result.Str("latestVersion") == "0.1.0" ? "当前已是 0.1.0。升级由管理员安排，不自动替换或重启程序。" : $"当前 0.1.0，可用 {result.Str("latestVersion")}。请管理员人工升级并保留本机数据目录。";
+        return result.Str("latestVersion") == AppPaths.Version ? $"当前已是 {AppPaths.Version}。升级由管理员安排，不自动替换或重启程序。" : $"当前 {AppPaths.Version}，可用 {result.Str("latestVersion")}。请管理员人工升级并保留本机数据目录。";
     }
     public void LocalPause(bool paused)
     {
@@ -78,7 +94,7 @@ public sealed class Engine : IDisposable
     }
     public async Task Tick()
     {
-        if (busy) return;
+        if (busy || stopping) return;
         busy = true;
         try {
             if (State.PendingRestore && State.EnableWallpaper && wallpaper.SafeToApply()) {
@@ -103,6 +119,7 @@ public sealed class Engine : IDisposable
                     failures++; nextPoll = Utc + Math.Min(20, 5 * Math.Pow(2, Math.Min(failures - 1, 2))); State.Error = "同步未完成，保留最近完整缓存"; Save();
                 }
             }
+            if (stopping) return;
             if (State.Snapshot is not null && (changed || Utc >= nextRender)) {
                 try { ApplyCurrent(); }
                 catch (Exception e) when (e is IOException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) {
@@ -200,8 +217,8 @@ public sealed class Engine : IDisposable
         if (!wallpaper.SafeToApply()) { State.ApplyState = "deferred"; return false; }
         if (State.LocalPaused || State.RemotePaused) { if (State.ApplyState != "paused") RestoreWallpaper(); State.ApplyState = "paused"; changed = false; Save(); return true; }
         var monitor = wallpaper.Read(State.MonitorIndex);
-        if (!State.OriginalCaptured) { State.OriginalMonitor = monitor.Id; State.OriginalWallpaper = monitor.Original; State.OriginalCaptured = true; Save(); }
-        if (State.OriginalMonitor != monitor.Id) throw new InvalidOperationException("显示器目标已变化，请先恢复旧目标，再重新选择。");
+        if (State.OriginalCaptured && State.OriginalMonitor != monitor.Id) throw new InvalidOperationException("显示器目标已变化，请先恢复旧目标，再重新选择。");
+        if (!State.OriginalCaptured || !ClientLifecycle.OwnedWallpaper(monitor.Original, store.DirectoryPath)) { State.OriginalMonitor = monitor.Id; State.OriginalWallpaper = monitor.Original; State.OriginalCaptured = true; Save(); }
         var layout = State.Snapshot!["classroom"]!["layout"]!;
         int interval = Math.Max(15, layout.Int("interval", 20));
         if(State.ManualUntil>0 && State.ManualUntil<=Clock.ToUnixTimeSeconds()) { State.ManualUntil=0; State.AutoPageStartedAt=Clock.ToUnixTimeSeconds(); }
@@ -229,7 +246,7 @@ public sealed class Engine : IDisposable
     {
         // 清理与应用分离；失败图片同样有上限，清理失败不能把已成功的画面改报为失败。
         try {
-            foreach(var file in new DirectoryInfo(store.DirectoryPath).GetFiles("board-*.png").OrderByDescending(f=>f.LastWriteTimeUtc).Skip(8)) {
+            foreach(var file in new DirectoryInfo(store.DirectoryPath).GetFiles("board-*.png*").Where(f => ClientLifecycle.OwnedRaster(f.Name)).OrderByDescending(f=>f.LastWriteTimeUtc).Skip(8)) {
                 if(string.Equals(file.FullName,State.AppliedWallpaper,StringComparison.OrdinalIgnoreCase) || string.Equals(file.FullName,State.OriginalWallpaper,StringComparison.OrdinalIgnoreCase)) continue;
                 try { file.Delete(); } catch(Exception e) when(e is IOException or UnauthorizedAccessException) { }
             }
@@ -239,7 +256,7 @@ public sealed class Engine : IDisposable
     public JsonObject Report()
     {
         State.StateReportSeq++; Save();
-        return new() { ["clientVersion"] = "0.1.0", ["bindingId"] = State.BindingId, ["syncEpoch"] = State.SyncEpoch, ["stateReportSeq"] = State.StateReportSeq,
+        return new() { ["clientVersion"] = AppPaths.Version, ["bindingId"] = State.BindingId, ["syncEpoch"] = State.SyncEpoch, ["stateReportSeq"] = State.StateReportSeq,
             ["localControlEpoch"] = State.LocalControlEpoch, ["localPaused"] = State.LocalPaused, ["remotePaused"] = State.RemotePaused,
             ["cachedVersion"] = State.CachedVersion, ["appliedVersion"] = State.AppliedVersion, ["applyState"] = State.ApplyState,
             ["pageSetId"] = State.PageSetId, ["page"] = State.Page, ["pageCount"] = State.PageCount, ["manualUntil"] = State.ManualUntil,
@@ -249,14 +266,10 @@ public sealed class Engine : IDisposable
     public void RestoreWallpaper()
     {
         if (!State.OriginalCaptured) return;
+        // 用户后来手动选择了其他壁纸时，退出/卸载不能把它覆盖成更早的记录。
+        if (!ClientLifecycle.OwnedWallpaper(wallpaper.Current(State.OriginalMonitor), store.DirectoryPath)) return;
         string original = State.OriginalWallpaper;
-        if (!File.Exists(original)) {
-            original = Path.Combine(store.DirectoryPath, "neutral.png");
-            var target = wallpaper.Read(State.MonitorIndex);
-            using var bitmap = new System.Drawing.Bitmap(target.Rect.Right - target.Rect.Left, target.Rect.Bottom - target.Rect.Top);
-            using var graphics = System.Drawing.Graphics.FromImage(bitmap); graphics.Clear(System.Drawing.Color.FromArgb(233, 238, 242));
-            bitmap.Save(original, System.Drawing.Imaging.ImageFormat.Png); State.Error = "原壁纸不存在，已使用中性背景";
-        }
+        if (!File.Exists(original) || ClientLifecycle.OwnedWallpaper(original, store.DirectoryPath)) { original = ""; State.Error = "原壁纸不存在，已恢复系统纯色背景"; }
         wallpaper.Set(State.OriginalMonitor, original);
     }
     public void Unbind()
@@ -272,5 +285,5 @@ public sealed class Engine : IDisposable
         State.Page = State.PageCount = 1; State.ManualUntil = 0; State.StateReportSeq = 0; State.LocalControlEpoch = 0;
         State.LocalPaused = State.RemotePaused = false; State.Results.Clear(); State.GroupSeq.Clear(); State.Error = restoreError.Length>0 ? restoreError : "设备未绑定，请重新取得绑定码"; Save();
     }
-    public void Dispose() => http.Dispose();
+    public void Dispose() { shutdown.Cancel(); http.Dispose(); shutdown.Dispose(); }
 }

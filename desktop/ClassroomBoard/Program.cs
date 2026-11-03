@@ -9,6 +9,7 @@ using Button = System.Windows.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
 using TextBox = System.Windows.Controls.TextBox;
 using Forms = System.Windows.Forms;
+using MessageBox = System.Windows.MessageBox;
 
 namespace ClassroomBoard;
 
@@ -17,27 +18,56 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Contains("--prepare-uninstall")) return ClientLifecycle.PrepareUninstall(args.Contains("--silent"));
+        if (args.Contains("--lifecycle-self-test")) return LifecycleChecks.Run(args);
         if (args.Contains("--render-preview")) return PreviewExport.Run(args);
         if (args.Contains("--self-test")) return SelfTest.Run(args);
         if (args.Contains("--network-self-test")) return SelfTest.Network(args).GetAwaiter().GetResult();
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
-        using var singleton = new Mutex(true, "Local\\ClassroomBoard.CurrentUser", out bool first);
+        using var singleton = new Mutex(true, AppPaths.MutexName, out bool first);
         if (!first) return 0;
         var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        try {
+            if (!PrivacyNotice.Accepted()) {
+                // 升级后首次告知留到用户手动打开；开机不弹窗，也不继续联网或展示。
+                if (args.Contains("--startup") || !PrivacyNotice.Show(requireConsent: true)) return 0;
+            }
+        } catch (Exception e) when (e is IOException or UnauthorizedAccessException) {
+            if (!args.Contains("--startup")) MessageBox.Show("无法读取或保存本机同意记录，请检查当前用户目录权限。", "班级看板");
+            return 1;
+        }
         Engine engine;
         try { engine = new Engine(new StateStore()); }
-        catch (Exception e) when (e is IOException or System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException) {
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException) {
             // 状态损坏不自动覆盖；只写诊断文件，不在上课时弹出窗口或通知。
-            QuietLog("ClassroomBoard-startup.log",e.GetType().Name); return 1;
+            AppPaths.QuietLog("startup.log",e.GetType().Name);
+            if (!args.Contains("--startup")) MessageBox.Show("本机状态无法读取。可从 Windows“已安装的应用”卸载并清理，或先由管理员备份检查。", "班级看板");
+            return 1;
         }
         using var tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "班级看板", Visible = true };
         app.DispatcherUnhandledException += (_, e) => {
             // 运行异常只留在托盘状态，不让默认异常对话框打断课件；不记录正文或凭证。
             engine.State.Error="本机运行异常，请在托盘检查状态";
-            QuietLog("ClassroomBoard-runtime.log",e.Exception.GetType().Name);
+            AppPaths.QuietLog("runtime.log",e.Exception.GetType().Name);
             e.Handled=true;
         };
         var menu = new Forms.ContextMenuStrip();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        bool exiting = false;
+        async void Quit(bool forUninstall)
+        {
+            if (exiting) return;
+            exiting = true; timer.Stop();
+            await engine.StopAsync();
+            // 卸载助手在进程退出后恢复壁纸，随后才删除数据；普通退出在这里恢复。
+            if (!forUninstall) {
+                try { engine.RestoreWallpaper(); }
+                catch (Exception e) when (e is IOException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException) { AppPaths.QuietLog("runtime.log", e.GetType().Name); }
+            }
+            tray.Visible = false; app.Shutdown();
+        }
+        using var stopRequest = new EventWaitHandle(false, EventResetMode.AutoReset, AppPaths.StopEventName);
+        var stopListener = ThreadPool.RegisterWaitForSingleObject(stopRequest, (_, _) => app.Dispatcher.BeginInvoke(() => Quit(true)), null, Timeout.Infinite, false);
         Window? statusWindow = null;
         void ShowStatus()
         {
@@ -49,13 +79,10 @@ public static class Program
         menu.Items.Add("本机暂停展示", null, (_, _) => engine.LocalPause(true));
         menu.Items.Add("本机恢复展示", null, (_, _) => engine.LocalPause(false));
         menu.Items.Add("减少材质效果", null, (_, _) => { engine.State.ReduceEffects = !engine.State.ReduceEffects; engine.Save(); engine.RequestSync(); });
-        menu.Items.Add("退出并恢复原壁纸", null, (_, _) => {
-            try { if (engine.State.EnableWallpaper) engine.RestoreWallpaper(); }
-            catch (Exception e) when (e is IOException or System.Runtime.InteropServices.COMException) { engine.State.Error = "退出时未能恢复原壁纸，请在系统设置中恢复"; engine.Save(); }
-            tray.Visible = false; app.Shutdown();
-        });
+        menu.Items.Add("隐私与本机数据", null, (_, _) => PrivacyNotice.Show(requireConsent: false));
+        menu.Items.Add("卸载班级看板…", null, (_, _) => ClientLifecycle.StartUninstaller());
+        menu.Items.Add("退出并恢复原壁纸", null, (_, _) => Quit(false));
         tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => ShowStatus();
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += async (_, _) => {
             try { await engine.Tick(); tray.Text = ("班级看板 · " + engine.Status)[..Math.Min(60, ("班级看板 · " + engine.Status).Length)]; }
             catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException) { engine.State.Error = "本机运行异常，请在托盘状态页检查"; }
@@ -76,20 +103,16 @@ public static class Program
         // 仅首次未绑定时展示配置。已绑定的开机启动全过程保持安静。
         if (engine.State.Credential.Length == 0 && !args.Contains("--startup")) ShowStatus();
         app.Run(); timer.Stop();
+        stopListener.Unregister(null);
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= networkChanged;
         Microsoft.Win32.SystemEvents.PowerModeChanged -= powerChanged;
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= displayChanged;
         Microsoft.Win32.SystemEvents.UserPreferenceChanged -= preferenceChanged;
         engine.Dispose(); return 0;
     }
-    private static void QuietLog(string name,string exceptionType)
-    {
-        try { File.AppendAllText(Path.Combine(Path.GetTempPath(),name),$"{DateTimeOffset.Now:O} {exceptionType}\n"); }
-        catch(Exception e) when(e is IOException or UnauthorizedAccessException) { /* 日志失败也不得弹出异常窗口。 */ }
-    }
     private static Window StatusWindow(Engine engine)
     {
-        var window = new Window { Title = "班级看板 · 本机状态", Width = 520, Height = 670, ResizeMode = ResizeMode.CanMinimize, WindowStartupLocation = WindowStartupLocation.CenterScreen };
+        var window = new Window { Title = AppPaths.DisplayName + " · 本机状态", Width = 560, Height = 740, ResizeMode = ResizeMode.CanMinimize, WindowStartupLocation = WindowStartupLocation.CenterScreen };
         var panel = new StackPanel { Margin = new Thickness(28) };
         void Label(string value, double size = 14) => panel.Children.Add(new TextBlock { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 9) });
         Label("班级看板", 26); Label("远程更新不会弹窗或切换课件。实际壁纸应用采用保守策略，等待前台返回桌面。");
@@ -130,11 +153,11 @@ public static class Program
         };
         panel.Children.Add(chooseMonitor);
         var startup = new CheckBox { Content = "随当前用户登录启动", Margin = new Thickness(0, 10, 0, 10) };
-        using (var registry = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) startup.IsChecked = registry?.GetValue("ClassroomBoard") is not null;
+        using (var registry = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(AppPaths.StartupKey)) startup.IsChecked = registry?.GetValue(AppPaths.ProductId) is not null;
         startup.Click += (_, _) => {
             try {
-                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-                if (startup.IsChecked == true) key.SetValue("ClassroomBoard", $"\"{Environment.ProcessPath}\" --startup"); else key.DeleteValue("ClassroomBoard", false);
+                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(AppPaths.StartupKey);
+                if (startup.IsChecked == true) key.SetValue(AppPaths.ProductId, $"\"{Environment.ProcessPath}\" --startup"); else key.DeleteValue(AppPaths.ProductId, false);
             } catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException) { output.Text = "当前学校策略不允许设置启动项，请联系电教管理员。"; startup.IsChecked = false; }
         };
         panel.Children.Add(startup);
@@ -144,6 +167,8 @@ public static class Program
         var update = new Button { Content = "检查程序版本", Padding = new Thickness(8), Margin = new Thickness(0, 10, 0, 0) };
         update.Click += async (_, _) => { try { output.Text = await engine.CheckVersion(); } catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { output.Text = "版本检查未完成，程序继续使用当前版本。"; } };
         panel.Children.Add(update);
+        var privacy = new Button { Content = "隐私说明与卸载", Padding = new Thickness(8), Margin = new Thickness(0, 12, 0, 0) };
+        privacy.Click += (_, _) => PrivacyNotice.Show(requireConsent: false); panel.Children.Add(privacy);
         Label("安装后需由学校管理员验证持久化目录、开机启动和重启恢复；不假设任何盘符不受还原保护。", 12);
         window.Content = new ScrollViewer { Content = panel }; return window;
     }
