@@ -23,9 +23,30 @@ const fontSize = computed(
   () => ({ small: 32, medium: 36, large: 40 })[props.layout.font],
 );
 const boardWidth = computed(() =>
-  props.layout.iconMargin === "none" ? 1824 : 1608,
+  props.layout.iconMargin === "none" ? 1776 : 1560,
 );
 const canvas = document.createElement("canvas").getContext("2d")!;
+const backgroundStyle = computed(() => {
+  const dark = props.layout.theme === "mica_dark",
+    opacity = (props.layout.surfaceOpacity ?? 38) / 100;
+  const tint = dark ? "38, 41, 46" : "249, 250, 252";
+  const mode = props.layout.backgroundMode ?? "mica";
+  return {
+    backgroundColor:
+      mode === "color"
+        ? props.layout.backgroundColor
+        : dark
+          ? "#25272C"
+          : "#E7E8EB",
+    backgroundImage:
+      mode === "image" && props.layout.backgroundImage
+        ? `url("${props.layout.backgroundImage}")`
+        : mode === "mica"
+          ? `linear-gradient(125deg, ${dark ? "#292C32, #202227" : "#ECEDEF, #DDE0E5"})`
+          : "none",
+    "--board-glass": `linear-gradient(135deg, rgba(${tint}, ${Math.min(0.98, opacity + 0.03)}), rgba(${tint}, ${Math.max(0.1, opacity - 0.1)}))`,
+  };
+});
 function dimensions(key: GridKey) {
   const r = props.layout.grid[key];
   return {
@@ -112,129 +133,145 @@ watch(
   >
     <div
       class="board-canvas"
-      :style="{ transform: `scale(${scale})`, '--board-font': `${fontSize}px` }"
+      :style="{
+        ...backgroundStyle,
+        transform: `scale(${scale})`,
+        '--board-font': `${fontSize}px`,
+      }"
       :class="[`margin-${layout.iconMargin}`, { reverse: layout.reverse }]"
     >
-      <header class="board-header board-surface">
-        <div>
-          <h2>{{ classroom.name }}</h2>
-          <p v-if="layout.modules.datetime">{{ dateText }}</p>
-        </div>
-        <div
-          class="board-event"
-          v-if="layout.modules.countdown && classroom.event && days >= 0"
-        >
-          <p>距离{{ classroom.event }}</p>
-          <strong>{{ days === 0 ? "就是今天" : `还有 ${days} 天` }}</strong>
-        </div>
-        <time v-if="layout.modules.datetime">{{ timeLabel(now) }}</time>
-      </header>
-      <div class="board-grid custom-grid">
-        <section
-          v-if="layout.modules.homework"
-          class="board-homework board-surface"
-          :style="slotStyle('homework')"
-        >
-          <h3>
-            今日作业
-            <span
-              >{{
-                contents.filter((c) => c.kind === "homework").length
-              }}
-              条</span
-            >
-          </h3>
-          <div
-            class="board-job"
-            v-for="item in pages.homework[activePage] ?? []"
-            :key="`${item.id}-${item.continued}`"
-          >
-            <strong
-              >{{ item.subject }}<small v-if="item.continued">续</small></strong
-            >
-            <p>
-              <template v-for="(line, index) in item.lines" :key="index"
-                >{{ line }}<br v-if="index < item.lines.length - 1"
-              /></template>
-            </p>
+      <div class="board-shell board-surface" aria-label="班级展示大卡片">
+        <header class="board-header">
+          <div>
+            <h2>{{ classroom.name }}</h2>
+            <p v-if="layout.modules.datetime">{{ dateText }}</p>
           </div>
-          <p
-            class="board-empty"
-            v-if="!contents.some((c) => c.kind === 'homework')"
-          >
-            今天还没有发布作业
-          </p>
-        </section>
-        <section
-          v-if="layout.modules.todo"
-          class="board-reminders board-surface"
-          :style="slotStyle('todo')"
-        >
-          <h3>今日提醒</h3>
-          <p
-            v-for="item in pages.todo[activePage] ?? []"
-            :key="`${item.id}-${item.continued}`"
-            class="board-todo"
-          >
-            <span>•</span
-            ><span
-              >{{ item.lines.join("\n")
-              }}{{ item.continued ? "（续）" : "" }}</span
-            >
-          </p>
-          <p
-            class="board-empty"
-            v-if="!contents.some((c) => c.kind === 'todo')"
-          >
-            暂无需要提醒的事项
-          </p>
-        </section>
-        <section
-          v-if="layout.modules.timetable"
-          class="board-timetable board-surface"
-          :style="slotStyle('timetable')"
-        >
-          <h3>
-            今日课表
-            <span v-if="classroom.nextPeriod" class="next-period">{{
-              classroom.nextPeriod
-            }}</span>
-          </h3>
           <div
-            v-if="classroom.timetable.length"
-            class="board-periods"
-            :class="{ 'many-periods': classroom.timetable.length > 6 }"
+            class="board-event"
+            v-if="layout.modules.countdown && classroom.event && days >= 0"
           >
-            <p
-              v-for="(subject, index) in classroom.timetable"
-              :key="index"
-              :class="{ 'current-course': classroom.currentPeriod === index }"
-            >
-              <span>{{ index + 1 }}</span
-              >{{ subject }}
-            </p>
+            <p>距离{{ classroom.event }}</p>
+            <strong>{{ days === 0 ? "就是今天" : `还有 ${days} 天` }}</strong>
           </div>
-          <p v-else class="board-empty">
-            {{
-              classroom.timetableState === "configured"
-                ? "今日无课程"
-                : "课表待配置"
-            }}
-          </p>
-        </section>
+          <time v-if="layout.modules.datetime">{{ timeLabel(now) }}</time>
+        </header>
+        <div class="board-grid custom-grid">
+          <section
+            v-if="layout.modules.homework"
+            class="board-homework board-surface"
+            :style="slotStyle('homework')"
+          >
+            <h3>
+              今日作业
+              <span
+                >{{
+                  contents.filter((c) => c.kind === "homework").length
+                }}
+                条</span
+              >
+            </h3>
+            <div class="board-body">
+              <div
+                class="board-job"
+                v-for="item in pages.homework[activePage] ?? []"
+                :key="`${item.id}-${item.continued}`"
+              >
+                <strong
+                  >{{ item.subject
+                  }}<small v-if="item.continued">续</small></strong
+                >
+                <p>
+                  <template v-for="(line, index) in item.lines" :key="index"
+                    >{{ line }}<br v-if="index < item.lines.length - 1"
+                  /></template>
+                </p>
+              </div>
+              <p
+                class="board-empty"
+                v-if="!contents.some((c) => c.kind === 'homework')"
+              >
+                今天还没有发布作业
+              </p>
+            </div>
+          </section>
+          <section
+            v-if="layout.modules.todo"
+            class="board-reminders board-surface"
+            :style="slotStyle('todo')"
+          >
+            <h3>今日提醒</h3>
+            <div class="board-body">
+              <p
+                v-for="item in pages.todo[activePage] ?? []"
+                :key="`${item.id}-${item.continued}`"
+                class="board-todo"
+              >
+                <span>•</span><span>{{ item.lines.join("\n") }}</span>
+              </p>
+              <p
+                class="board-empty"
+                v-if="!contents.some((c) => c.kind === 'todo')"
+              >
+                暂无需要提醒的事项
+              </p>
+            </div>
+          </section>
+          <section
+            v-if="layout.modules.timetable"
+            class="board-timetable board-surface"
+            :style="slotStyle('timetable')"
+          >
+            <h3>
+              今日课表
+              <span v-if="classroom.nextPeriod" class="next-period">{{
+                classroom.nextPeriod
+              }}</span>
+            </h3>
+            <div class="board-body">
+              <div
+                v-if="classroom.timetable.length"
+                class="board-periods"
+                :class="{
+                  'many-periods': classroom.timetable.length > 8,
+                  'long-subjects': classroom.timetable.some(
+                    (s) => s.length > 4,
+                  ),
+                }"
+              >
+                <p
+                  v-for="(subject, index) in classroom.timetable"
+                  :key="index"
+                  :class="{
+                    'current-course': classroom.currentPeriod === index,
+                  }"
+                >
+                  <span>{{ index + 1 }}</span
+                  >{{ subject }}
+                </p>
+              </div>
+              <p v-else class="board-empty">
+                {{
+                  classroom.timetableState === "configured"
+                    ? "今日无课程"
+                    : "课表待配置"
+                }}
+              </p>
+            </div>
+          </section>
+        </div>
+        <footer class="board-footer">
+          <div>
+            <p v-if="layout.modules.message && classroom.message">
+              {{ classroom.message }}
+            </p>
+            <small
+              >{{ demo ? "示例内容 · " : "" }}预览画面 {{ timeLabel(now) }} ·
+              非设备截图</small
+            >
+          </div>
+          <span>第 {{ activePage + 1 }} / {{ pages.count }} 页</span>
+        </footer>
       </div>
-      <footer class="board-footer board-surface">
-        <div>
-          <p v-if="layout.modules.message && classroom.message">
-            {{ classroom.message }}
-          </p>
-          <small
-            >{{ demo ? "示例内容 · " : "" }}预览画面 {{ timeLabel(now) }} ·
-            非设备截图</small
-          >
-        </div>
-        <span>第 {{ activePage + 1 }} / {{ pages.count }} 页</span>
-      </footer>
     </div>
   </div>
 </template>

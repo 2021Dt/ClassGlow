@@ -84,7 +84,7 @@ dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x6
 - 账号登录、可撤销会话、多班与学科权限、邀请申请审批、成员权限维护、所有权转移、归档与恢复接口。
 - 私人云草稿、停顿保存、本机未同步副本、最终输入保存、草稿与正式记录修订校验、多班原子发布与幂等结果查询。
 - 作业、提醒、完成与恢复、撤回、代改原因与修改历史；时间使用北京时间解释，存储带时区时间。
-- 双主题、纯色与柔和模式、字号、图标留白、六类模块显隐、12 列网格拖动、预设尺寸、布局冲突与越界校验、预览与明确发布；页头和更新栏固定。
+- 浅灰 / 深灰云母、通透与纯色材质、上传背景图片或选择底色、卡片不透明度、字号与图标留白。Windows 采用一张大卡片容纳展示区，作业 / 提醒 / 课表支持拖动、右下角拉伸、显隐、精确尺寸、三种布局预设和左右镜像；标题与底部更新栏固定。布局和背景通过正式快照一起同步。
 - 可视化周课表、作息、只读查询、未来生效调整与旧区间保留、指定日期停课或逐节改课、寄语、倒计时、高优先级提醒上限。
 - 短期绑定码与二维码、只读设备凭证、正式快照、条件拉取、缓存与应用版本、控制修订、命令分组、过期与回执；未知结果保留原请求标识，可查询或幂等重试。
 - C# 托盘、DPAPI 状态、原子缓存、按时间过滤、文字分页、主题与材质回退、保守应用、现场暂停优先、壁纸恢复。
@@ -104,6 +104,14 @@ C# 安全排版自检只生成文件，不更换壁纸：
 ```powershell
 dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj -- --self-test --output .qa/desktop
 ```
+
+查看真实 Windows 材质与可编辑布局：先启动前端开发服务，再打开 `/preview.html`。它使用独立示例数据，不需要初始化生产账号。生成 Windows 固定样例：
+
+```powershell
+dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj -- --render-preview --snapshot frontend/dev/board-snapshot.json --output frontend/public/review
+```
+
+“Windows 实际渲染”展示导出的固定样例；取消勾选可上传图片、调整布局并查看 Web 实时预览。此命令只输出图片，不设置当前电脑壁纸。预览入口只在开发服务中使用。
 
 在独立测试环境完成初始化并开放注册、启动后端及编译客户端后，可以运行 `uv run python scripts/client_integration.py`。该脚本使用临时测试账号和明确标记的测试班级，启动真实 C# 客户端验证绑定、快照缓存、同步回执与暂停延后，强制关闭壁纸写入。结果保存在 `.qa`；不要把该结果当作真实桌面应用验收。
 

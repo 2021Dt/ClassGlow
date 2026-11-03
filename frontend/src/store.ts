@@ -1,4 +1,4 @@
-import { reactive, toRaw } from "vue";
+import { reactive } from "vue";
 import { emptyModel, type Model } from "./domain";
 
 // 正式内容以服务端为准，不能把上一账号的浏览器缓存当作新账号数据。
@@ -8,5 +8,6 @@ export function replaceModel(value: Model) {
   Object.assign(model, value);
 }
 export function clone<T>(value: T): T {
-  return structuredClone(toRaw(value));
+  // 业务状态与接口共用 JSON 结构；局部编辑可能混入嵌套响应式对象，统一序列化后再复制。
+  return JSON.parse(JSON.stringify(value));
 }

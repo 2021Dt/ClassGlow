@@ -15,7 +15,8 @@
 	# Windows 客户端服务地址也应填写 https://域名/api/，统一从此处进入。
 	handle_path /api/* {
 		request_body {
-			max_size 128KB
+			# 布局包含压缩背景；应用层对其他接口仍限制为 128 KiB。
+			max_size 640KB
 		}
 		reverse_proxy {$API_UPSTREAM:api:8000}
 	}

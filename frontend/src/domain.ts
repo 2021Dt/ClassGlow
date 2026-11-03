@@ -13,6 +13,10 @@ export type Theme = "mica_light" | "mica_dark";
 export interface Layout {
   theme: Theme;
   material: "subtle" | "solid";
+  backgroundMode?: "mica" | "color" | "image";
+  backgroundColor?: string;
+  backgroundImage?: string;
+  surfaceOpacity?: number;
   font: "small" | "medium" | "large";
   iconMargin: "left" | "right" | "none";
   interval: 15 | 20 | 30;
@@ -192,6 +196,10 @@ export function defaultLayout(): Layout {
   return {
     theme: "mica_light",
     material: "subtle",
+    backgroundMode: "mica",
+    backgroundColor: "#E7E8EB",
+    backgroundImage: "",
+    surfaceOpacity: 38,
     font: "medium",
     iconMargin: "left",
     interval: 20,
@@ -294,6 +302,8 @@ export function canPublish(c: Classroom, subject: string): boolean {
 }
 
 export function layoutIssue(layout: Layout): string {
+  if (layout.backgroundMode === "image" && !layout.backgroundImage)
+    return "请先上传背景图片。";
   const keys: GridKey[] = ["homework", "todo", "timetable"];
   if (!layout?.grid || !layout.modules) return "布局结构不完整。";
   if (

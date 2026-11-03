@@ -1,6 +1,11 @@
 from starlette.responses import JSONResponse
 
 
+def body_limit(path: str, method: str) -> int:
+    # 仅布局发布允许携带压缩背景；其他业务接口仍保持 128 KiB。
+    return 640 * 1024 if method == "PUT" and path.startswith("/classes/") and path.endswith("/layout") else 131072
+
+
 class BodyLimitMiddleware:
     """在读取请求流时限制总字节数，不能只信任可省略或伪造的 Content-Length。"""
 
@@ -16,7 +21,7 @@ class BodyLimitMiddleware:
             if message["type"] == "http.disconnect":
                 return
             body.extend(message.get("body", b""))
-            if len(body) > self.maximum:
+            if len(body) > max(self.maximum, body_limit(scope["path"], scope["method"])):
                 return await JSONResponse(
                     {"detail": {"code": "body_too_large", "message": "请求内容超过允许大小。"}}, 413
                 )(scope, receive, send)

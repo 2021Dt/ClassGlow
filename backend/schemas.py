@@ -1,7 +1,11 @@
+import base64
+import binascii
 from datetime import UTC, datetime
+from io import BytesIO
 from itertools import combinations, pairwise
 from typing import Literal
 
+from PIL import Image
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
 
@@ -97,6 +101,10 @@ def grid_default():
 class LayoutInput(Input):
     theme: Literal["mica_light", "mica_dark"] = "mica_light"
     material: Literal["subtle", "solid"] = "subtle"
+    backgroundMode: Literal["mica", "color", "image"] = "mica"
+    backgroundColor: str = Field(default="#E7E8EB", pattern=r"^#[0-9a-fA-F]{6}$")
+    backgroundImage: str = Field(default="", max_length=524311)
+    surfaceOpacity: int = Field(default=38, ge=20, le=95)
     font: Literal["small", "medium", "large"] = "medium"
     iconMargin: Literal["left", "right", "none"] = "left"
     interval: Literal[15, 20, 30] = 20
@@ -106,6 +114,24 @@ class LayoutInput(Input):
     )
     reverse: bool = False
     revision: int = Field(ge=1)
+
+    @field_validator("backgroundImage")
+    @classmethod
+    def raster_background(cls, value):
+        if not value:
+            return value
+        prefix = "data:image/jpeg;base64,"
+        if not value.startswith(prefix):
+            raise ValueError("背景须为上传后生成的 JPEG 图片")
+        try:
+            raw = base64.b64decode(value[len(prefix) :], validate=True)
+            with Image.open(BytesIO(raw)) as image:
+                if image.format != "JPEG" or image.width > 1920 or image.height > 1080:
+                    raise ValueError("背景图片不能超过 1920×1080")
+                image.load()
+        except (binascii.Error, OSError) as exc:
+            raise ValueError("背景图片无法读取，请重新上传") from exc
+        return value
 
     @field_validator("modules")
     @classmethod
@@ -117,6 +143,8 @@ class LayoutInput(Input):
 
     @model_validator(mode="after")
     def valid_grid(self):
+        if self.backgroundMode == "image" and not self.backgroundImage:
+            raise ValueError("请先上传背景图片")
         if set(self.grid) != {"homework", "todo", "timetable"}:
             raise ValueError("必须提交完整网格配置")
         rects = [(key, GridRect.model_validate(value)) for key, value in self.grid.items() if self.modules[key]]

@@ -122,51 +122,63 @@ const mayEdit = (c: Content) =>
     <p v-if="!items.length" class="empty-state">
       {{ loading ? "正在读取正式记录…" : "没有符合条件的正式记录。" }}
     </p>
-    <article v-for="c in items" :key="c.id" class="record-row">
-      <div class="record-top">
-        <span class="subject-tag">{{ c.subject }}</span
-        ><span v-if="c.priority" class="badge amber-badge">高优先级</span
-        ><span class="badge neutral">{{ statusLabel(c, now) }}</span
-        ><span class="record-meta"
-          >{{ c.author }} · {{ timeLabel(c.created, true) }} · 修订
-          {{ c.revision }}</span
-        >
-      </div>
-      <p class="record-body">{{ c.body }}</p>
-      <p class="record-meta">
-        展示 {{ timeLabel(c.from, true) }} 至 {{ timeLabel(c.until, true)
-        }}<span v-if="c.due">
-          · {{ c.kind === "homework" ? "提交截止" : "活动时间" }}
-          {{ timeLabel(c.due, true) }}</span
-        ><span v-if="c.reason"> · 管理员代改：{{ c.reason }}</span>
-      </p>
-      <div class="record-actions">
-        <button class="text-button" @click="emit('history', c)">修改历史</button
-        ><button
-          class="text-button"
-          :disabled="c.state === 'published' ? !mayEdit(c) : !writable"
-          @click="emit('edit', c)"
-        >
-          {{ c.state === "published" ? "编辑" : "复制为新内容" }}</button
-        ><button
-          v-if="c.kind === 'todo' && c.state !== 'withdrawn'"
-          class="text-button"
-          :disabled="!mayEdit(c)"
-          @click="
-            emit('action', c, c.state === 'completed' ? 'restore' : 'complete')
-          "
-        >
-          {{ c.state === "completed" ? "恢复未完成" : "标记完成" }}</button
-        ><button
-          v-if="c.state === 'published'"
-          class="text-button destructive"
-          :disabled="!mayEdit(c)"
-          @click="emit('action', c, 'withdraw')"
-        >
-          撤回
-        </button>
-      </div>
-    </article>
+    <div
+      class="bounded-record-list"
+      role="region"
+      aria-label="正式内容列表，可滚动查看"
+      tabindex="0"
+    >
+      <article v-for="c in items" :key="c.id" class="record-row">
+        <div class="record-top">
+          <span class="subject-tag">{{ c.subject }}</span
+          ><span v-if="c.priority" class="badge amber-badge">高优先级</span
+          ><span class="badge neutral">{{ statusLabel(c, now) }}</span
+          ><span class="record-meta"
+            >{{ c.author }} · {{ timeLabel(c.created, true) }} · 修订
+            {{ c.revision }}</span
+          >
+        </div>
+        <p class="record-body">{{ c.body }}</p>
+        <p class="record-meta">
+          展示 {{ timeLabel(c.from, true) }} 至 {{ timeLabel(c.until, true)
+          }}<span v-if="c.due">
+            · {{ c.kind === "homework" ? "提交截止" : "活动时间" }}
+            {{ timeLabel(c.due, true) }}</span
+          ><span v-if="c.reason"> · 管理员代改：{{ c.reason }}</span>
+        </p>
+        <div class="record-actions">
+          <button class="text-button" @click="emit('history', c)">
+            修改历史</button
+          ><button
+            class="text-button"
+            :disabled="c.state === 'published' ? !mayEdit(c) : !writable"
+            @click="emit('edit', c)"
+          >
+            {{ c.state === "published" ? "编辑" : "复制为新内容" }}</button
+          ><button
+            v-if="c.kind === 'todo' && c.state !== 'withdrawn'"
+            class="text-button"
+            :disabled="!mayEdit(c)"
+            @click="
+              emit(
+                'action',
+                c,
+                c.state === 'completed' ? 'restore' : 'complete',
+              )
+            "
+          >
+            {{ c.state === "completed" ? "恢复未完成" : "标记完成" }}</button
+          ><button
+            v-if="c.state === 'published'"
+            class="text-button destructive"
+            :disabled="!mayEdit(c)"
+            @click="emit('action', c, 'withdraw')"
+          >
+            撤回
+          </button>
+        </div>
+      </article>
+    </div>
     <div class="records-pagination">
       <button
         class="button secondary"

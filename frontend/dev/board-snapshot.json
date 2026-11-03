@@ -1,0 +1,28 @@
+{
+  "previewClock": "2026-11-03T10:20:00+08:00",
+  "classVersion": 1,
+  "classroom": {
+    "id": "design-preview", "name": "七年级（3）班", "role": "owner", "stage": "初中", "version": 1,
+    "subjects": ["语文", "数学", "英语"],
+    "message": "把每一次认真，写进今天的进步里。",
+    "event": "校园运动会", "eventDate": "2026-11-13",
+    "layout": {
+      "theme": "mica_light", "material": "subtle", "font": "medium", "iconMargin": "left", "interval": 20,
+      "modules": {"datetime":true,"homework":true,"todo":true,"timetable":true,"countdown":true,"message":true},
+      "reverse": false, "revision": 1,
+      "grid": {"homework":{"x":0,"y":0,"w":7,"h":12},"todo":{"x":7,"y":0,"w":5,"h":5},"timetable":{"x":7,"y":5,"w":5,"h":7}}
+    },
+    "timetable": ["语文", "数学", "英语", "体育", "历史", "班会"], "currentPeriod": 2, "timetableState": "configured",
+    "templates": [{"effectiveFrom":"2026-11-01","effectiveUntil":"2026-12-31","weekdays":{"2":[
+      {"start":"08:00","end":"08:40","subject":"语文"},{"start":"08:50","end":"09:30","subject":"数学"},
+      {"start":"10:00","end":"10:40","subject":"英语"},{"start":"10:50","end":"11:30","subject":"体育"},
+      {"start":"14:00","end":"14:40","subject":"历史"},{"start":"14:50","end":"15:30","subject":"班会"}
+    ]}}], "overrides": {}
+  },
+  "contents": [
+    {"id":"sample-chinese","revision":1,"kind":"homework","subject":"语文","body":"朗读《春》，圈画你最喜欢的句子。\n完成课后练习第一、二题。","state":"published","from":"2026-11-03T00:00:00+08:00","until":"2026-11-04T08:00:00+08:00","author":"示例老师"},
+    {"id":"sample-math","revision":1,"kind":"homework","subject":"数学","body":"练习册第 24 页，第 1—6 题。\n整理一道错题，写清解题思路。","state":"published","from":"2026-11-03T00:00:00+08:00","until":"2026-11-04T08:00:00+08:00","author":"示例老师"},
+    {"id":"sample-english","revision":1,"kind":"homework","subject":"英语","body":"跟读 Unit 3 对话，预习新单词。","state":"published","from":"2026-11-03T00:00:00+08:00","until":"2026-11-04T08:00:00+08:00","author":"示例老师"},
+    {"id":"sample-reminder","revision":1,"kind":"todo","subject":"公共提醒","body":"明天穿运动服，带好水杯。","state":"published","from":"2026-11-03T00:00:00+08:00","until":"2026-11-04T18:00:00+08:00","author":"示例老师"}
+  ]
+}

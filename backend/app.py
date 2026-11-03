@@ -36,7 +36,7 @@ from .db import (
     sync_epoch,
     uid,
 )
-from .middleware import BodyLimitMiddleware
+from .middleware import BodyLimitMiddleware, body_limit
 from .security import actor, bearer, digest, fail, limit, member, passwords, secret
 from .system_service import ensure_setup_key, system_config
 
@@ -103,7 +103,7 @@ async def request_context(request: Request, call_next):
         length = int(request.headers.get("content-length", "0"))
     except ValueError:
         return JSONResponse({"message": "请求长度无效"}, 400)
-    if length > 131072:
+    if length > body_limit(request.url.path, request.method):
         return JSONResponse({"message": "请求过大"}, 413)
     response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id
@@ -558,7 +558,19 @@ def layout(class_id: str, body: S.LayoutInput, user: User = Depends(actor), db: 
     before = c.data["layout"]
     c.data = {**c.data, "layout": value}
     c.version += 1
-    audit(db, c, user, "layout_published", {"revision": value["revision"], "before": before, "after": value})
+
+    def audit_layout(item):
+        # 审计记录图片指纹，避免每次调整字号都重复保存整张背景。
+        picture = item.get("backgroundImage", "")
+        return {**item, "backgroundImage": hashlib.sha256(picture.encode()).hexdigest() if picture else ""}
+
+    audit(
+        db,
+        c,
+        user,
+        "layout_published",
+        {"revision": value["revision"], "before": audit_layout(before), "after": audit_layout(value)},
+    )
     return value
 
 

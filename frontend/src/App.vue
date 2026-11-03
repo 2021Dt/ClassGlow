@@ -26,6 +26,7 @@ import {
   RotateCcw,
 } from "@lucide/vue";
 import BoardPreview from "./components/BoardPreview.vue";
+import BackgroundControls from "./components/BackgroundControls.vue";
 import EditorSheet from "./components/EditorSheet.vue";
 import LayoutEditor from "./components/LayoutEditor.vue";
 import SettingsPage from "./components/SettingsPage.vue";
@@ -584,7 +585,7 @@ onUnmounted(() => {
           <div><strong>今日提醒</strong><i></i><i></i></div>
         </div>
       </div>
-      <small>云母浅灰与云母墨绿 · 以课堂可读性为先</small>
+      <small>云母浅灰与云母深灰 · 以课堂可读性为先</small>
     </div>
     <main class="auth-card">
       <p class="eyebrow">教师管理端</p>
@@ -913,45 +914,52 @@ onUnmounted(() => {
                       发布第一条作业<ArrowRight :size="15" />
                     </button>
                   </div>
-                  <article
-                    v-for="c in dated.filter((c) => c.kind === 'homework')"
-                    :key="c.id"
-                    class="homework-row"
+                  <div
+                    class="bounded-content-list"
+                    role="region"
+                    aria-label="今日作业列表，可滚动查看"
+                    tabindex="0"
                   >
-                    <div
-                      class="subject-icon"
-                      :class="{
-                        blue: c.subject === '数学',
-                        gold: c.subject === '英语',
-                      }"
+                    <article
+                      v-for="c in dated.filter((c) => c.kind === 'homework')"
+                      :key="c.id"
+                      class="homework-row"
                     >
-                      {{ c.subject.slice(0, 1) }}
-                    </div>
-                    <div class="homework-body">
-                      <div class="row-heading">
-                        <h3>{{ c.subject }}</h3>
-                        <span class="record-meta"
-                          >{{ c.author }} · {{ timeLabel(c.created) }}</span
-                        >
+                      <div
+                        class="subject-icon"
+                        :class="{
+                          blue: c.subject === '数学',
+                          gold: c.subject === '英语',
+                        }"
+                      >
+                        {{ c.subject.slice(0, 1) }}
                       </div>
-                      <p>{{ c.body }}</p>
-                      <div class="row-footer">
-                        <span
-                          >{{ statusLabel(c, now) }} · 展示至
-                          {{ timeLabel(c.until, true) }}</span
-                        ><button
-                          class="text-button"
-                          :disabled="
-                            current.archived ||
-                            (!admin && c.authorId !== session.userId)
-                          "
-                          @click="edit('homework', undefined, c)"
-                        >
-                          编辑<ArrowUpRight :size="13" />
-                        </button>
+                      <div class="homework-body">
+                        <div class="row-heading">
+                          <h3>{{ c.subject }}</h3>
+                          <span class="record-meta"
+                            >{{ c.author }} · {{ timeLabel(c.created) }}</span
+                          >
+                        </div>
+                        <p>{{ c.body }}</p>
+                        <div class="row-footer">
+                          <span
+                            >{{ statusLabel(c, now) }} · 展示至
+                            {{ timeLabel(c.until, true) }}</span
+                          ><button
+                            class="text-button"
+                            :disabled="
+                              current.archived ||
+                              (!admin && c.authorId !== session.userId)
+                            "
+                            @click="edit('homework', undefined, c)"
+                          >
+                            编辑<ArrowUpRight :size="13" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </article>
+                    </article>
+                  </div>
                 </section>
                 <section class="panel reminders-panel">
                   <div class="section-heading">
@@ -974,32 +982,39 @@ onUnmounted(() => {
                   >
                     暂无提醒。重要事项发布后会出现在这里。
                   </p>
-                  <article
-                    v-for="c in dated.filter((c) => c.kind === 'todo')"
-                    :key="c.id"
-                    class="todo-row"
+                  <div
+                    class="bounded-content-list reminder-list"
+                    role="region"
+                    aria-label="班级提醒列表，可滚动查看"
+                    tabindex="0"
                   >
-                    <button
-                      class="todo-check"
-                      aria-label="标记提醒完成"
-                      :disabled="
-                        current.archived ||
-                        (!admin && c.authorId !== session.userId)
-                      "
-                      @click="changeContent(c, 'complete')"
+                    <article
+                      v-for="c in dated.filter((c) => c.kind === 'todo')"
+                      :key="c.id"
+                      class="todo-row"
                     >
-                      <Check :size="14" />
-                    </button>
-                    <div>
-                      <p>{{ c.body }}</p>
-                      <small>{{ c.subject }} · {{ c.author }}</small>
-                    </div>
-                    <span
-                      v-if="c.due && new Date(c.due).getTime() < now"
-                      class="badge amber-badge"
-                      >已逾期</span
-                    >
-                  </article>
+                      <button
+                        class="todo-check"
+                        aria-label="标记提醒完成"
+                        :disabled="
+                          current.archived ||
+                          (!admin && c.authorId !== session.userId)
+                        "
+                        @click="changeContent(c, 'complete')"
+                      >
+                        <Check :size="14" />
+                      </button>
+                      <div>
+                        <p>{{ c.body }}</p>
+                        <small>{{ c.subject }} · {{ c.author }}</small>
+                      </div>
+                      <span
+                        v-if="c.due && new Date(c.due).getTime() < now"
+                        class="badge amber-badge"
+                        >已逾期</span
+                      >
+                    </article>
+                  </div>
                 </section>
               </div>
               <div class="overview-side">
@@ -1020,7 +1035,7 @@ onUnmounted(() => {
                       >{{
                         current.layout.theme === "mica_light"
                           ? "云母浅灰"
-                          : "云母墨绿"
+                          : "云母深灰"
                       }}
                       ·
                       {{
@@ -1196,7 +1211,7 @@ onUnmounted(() => {
                       @click="layoutDraft.theme = 'mica_dark'"
                     >
                       <span class="theme-swatch dark-swatch"></span
-                      >云母墨绿<Check
+                      >云母深灰<Check
                         v-if="layoutDraft.theme === 'mica_dark'"
                         :size="15"
                       />
@@ -1204,10 +1219,13 @@ onUnmounted(() => {
                   </div>
                   <label class="field"
                     >材质效果<select v-model="layoutDraft.material">
-                      <option value="subtle">柔和</option>
+                      <option value="subtle">云母通透</option>
                       <option value="solid">纯色</option>
                     </select></label
-                  ><label class="field"
+                  ><BackgroundControls
+                    v-model="layoutDraft"
+                    :disabled="!admin"
+                  /><label class="field"
                     >正文字号<select v-model="layoutDraft.font">
                       <option value="small">小 · 32 像素</option>
                       <option value="medium">中 · 36 像素</option>
@@ -1243,7 +1261,7 @@ onUnmounted(() => {
                         type="checkbox"
                         v-model="layoutDraft.modules[key]" /></label
                     ><label
-                      ><span>作业与右侧模块互换</span
+                      ><span>左右镜像布局</span
                       ><input type="checkbox" v-model="layoutDraft.reverse"
                     /></label>
                   </div>
