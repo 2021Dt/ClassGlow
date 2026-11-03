@@ -24,7 +24,6 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         InitializeComponent();
         BrandImage.Source = HomeBrandImage.Source = AppWindow.BrandIcon();
         ServerInput.Text = engine.State.Server;
-        VersionLabel.Text = $"ClassGlow {AppPaths.Version}" + (preview ? "  ·  外观预览，不联网、不修改系统" : "  ·  当前用户客户端");
         ShowPage(setup ? Bound ? "display" : "connect" : "home");
         timer.Tick += (_, _) => RefreshState();
         Loaded += (_, _) => { RefreshState(); timer.Start(); };
@@ -40,12 +39,8 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         WizardActions.Visibility = target == "home" ? Visibility.Collapsed : Visibility.Visible;
         StepLabel.Text = target == "home" ? "CLASSGLOW · 教室电脑"
             : setup ? target == "connect" ? "02 / 03　连接班级" : "03 / 03　展示方式" : "本机设置";
+        StepLabel.Visibility = setup ? Visibility.Visible : Visibility.Collapsed;
         PageTitle.Text = target switch { "connect" => "连接这间教室", "display" => "展示设置", _ => "班级已连接" };
-        PageHint.Text = target switch {
-            "connect" => "用教师工作台完成一次绑定，之后自动同步。",
-            "display" => "选择展示屏幕和启动方式。",
-            _ => "关闭这个窗口后，客户端会继续在托盘运行。"
-        };
         BackButton.Content = setup ? target == "display" ? "上一步" : "稍后绑定" : "返回状态";
         NextButton.Content = target == "display" ? setup ? "完成设置" : "保存设置" : setup ? "下一步：展示方式" : "返回状态";
         if (target == "display" && (!setup || !preferencesLoaded)) { LoadPreferences(); preferencesLoaded = true; }
@@ -74,7 +69,7 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
     private bool PreviewOnly()
     {
         if (!preview) return false;
-        Tell("这是外观预览，操作不会联网、写入启动项或更换壁纸。"); return true;
+        Tell("预览模式"); return true;
     }
 
     private void RefreshState()
@@ -84,15 +79,14 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         string classroom = state.Snapshot?["classroom"]?["name"]?.GetValue<string>() ?? "已绑定班级";
         PairButton.Visibility = Bound ? Visibility.Collapsed : Visibility.Visible;
         PairButton.IsEnabled = !pairing; ServerInput.IsEnabled = !Bound && !pairing;
-        CodeLabel.Text = Bound ? "已连接班级" : hasCode ? "一次性绑定码" : "准备好这间教室";
+        CodeLabel.Text = Bound ? "已连接班级" : "一次性绑定码";
+        CodeLabel.Visibility = Bound || hasCode ? Visibility.Visible : Visibility.Collapsed;
         PairCode.Text = Bound ? classroom : state.PairCode;
         PairCode.FontSize = hasCode ? 34 : 22;
         PairCode.Visibility = Bound || hasCode ? Visibility.Visible : Visibility.Collapsed;
-        PairHint.Text = Bound ? "绑定成功，可以继续下一步。" : hasCode ? "10 分钟内有效 · 手机扫码后确认班级" : "无需在教室电脑输入教师密码";
+        PairHint.Visibility = hasCode ? Visibility.Visible : Visibility.Collapsed;
         PairButton.Content = pairing ? "正在生成…" : hasCode ? "重新生成绑定码" : "生成绑定码";
-        ConnectionStatus.Text = Bound ? "老师在工作台发布后，这台电脑会自动接收。"
-            : hasCode ? "等待老师确认绑定；完成后，“下一步”会自动亮起。"
-            : "手机或电脑打开教师工作台，在“大屏控制”中绑定设备。";
+        ConnectionStatus.Visibility = Bound ? Visibility.Collapsed : Visibility.Visible;
         if (hasCode && state.PairQr.Length > 0 && displayedQr != state.PairQr) {
             using var stream = new MemoryStream(Convert.FromBase64String(state.PairQr));
             var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad;
@@ -103,10 +97,9 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         NextButton.IsEnabled = !pairing && (page == "display" || Bound || preview || !setup);
         BackButton.IsEnabled = !pairing;
         ClassName.Text = Bound ? classroom : "还没有连接班级";
-        StatusText.Text = Bound ? engine.Status : hasCode ? "等待老师确认绑定" : "绑定后即可接收班级内容";
-        StatusDetail.Text = !state.EnableWallpaper ? "桌面展示已关闭，可以在“展示设置”中开启。"
-            : state.LocalPaused ? "本机已暂停，需在这台电脑恢复。" : "已启用桌面展示，上课时不会打断课件。";
-        TechnicalStatus.Text = $"已接收 v{state.CachedVersion} / 已展示 v{state.AppliedVersion}\n内容第 {state.Page} / {state.PageCount} 页\n{state.MaterialReason}";
+        StatusText.Text = Bound ? (state.Error.Length > 0 || state.EnableWallpaper ? engine.Status : "桌面展示已关闭")
+            : hasCode ? "等待确认绑定" : "未绑定";
+        TechnicalStatus.Text = $"ClassGlow {AppPaths.Version}\n已接收 v{state.CachedVersion} / 已展示 v{state.AppliedVersion}\n内容第 {state.Page} / {state.PageCount} 页\n{state.MaterialReason}";
         HomePrimary.Content = Bound ? "立即同步" : "继续绑定班级";
         PauseButton.Visibility = Bound ? Visibility.Visible : Visibility.Collapsed;
         PauseButton.Content = state.LocalPaused ? "恢复本机展示" : "暂停这台电脑";
@@ -116,8 +109,8 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
     private async void Pair_Click(object sender, RoutedEventArgs e)
     {
         if (PreviewOnly()) return;
-        pairing = true; RefreshState();
-        try { await engine.Pair(ServerInput.Text); Tell("手机扫码，或在教师工作台“大屏控制”输入绑定码，选择对应班级。"); }
+        pairing = true; FeedbackBox.Visibility = Visibility.Collapsed; RefreshState();
+        try { await engine.Pair(ServerInput.Text); }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidOperationException or IOException or DeviceAuthorizationException) { Tell("绑定未完成：" + error.Message); }
         finally { pairing = false; RefreshState(); }
     }
@@ -127,7 +120,7 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
     private void Next_Click(object sender, RoutedEventArgs e)
     {
         if (page == "connect") { ShowPage(setup ? "display" : "home"); return; }
-        if (preview) { setup = false; ShowPage("home"); Tell("引导预览已完成，没有保存设置或修改系统。"); return; }
+        if (preview) { setup = false; ShowPage("home"); return; }
         if (!SavePreferences(out string message)) return;
         setup = false; ShowPage("home"); Tell(message);
     }
@@ -139,7 +132,7 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
 
     private bool SavePreferences(out string message)
     {
-        message = "设置已保存。可以关闭窗口，客户端会继续在托盘运行。";
+        message = "已保存";
         bool enabled = WallpaperEnabled.IsChecked == true;
         if (enabled && MonitorChoice.SelectedItem is not MonitorOption) { Tell("请选择一块可用的显示器，再完成设置。"); return false; }
         var state = engine.State;
@@ -181,7 +174,7 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
     {
         if (!Bound) { setup = true; preferencesLoaded = false; ShowPage("connect"); return; }
         if (PreviewOnly()) return;
-        engine.RequestSync(); Tell("已请求同步，运行状态会自动更新。");
+        engine.RequestSync(); Tell("已请求同步");
     }
     private void Settings_Click(object sender, RoutedEventArgs e) { setup = false; ShowPage("display"); }
     private void Binding_Click(object sender, RoutedEventArgs e) { setup = !Bound; ShowPage("connect"); }

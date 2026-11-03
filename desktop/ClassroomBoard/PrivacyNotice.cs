@@ -53,16 +53,14 @@ public static class PrivacyNotice
 
     public static AppWindow Create(bool requireConsent, bool preview = false)
     {
-        var window = new AppWindow(requireConsent ? "欢迎使用" : "隐私与本机数据");
+        var window = new AppWindow((requireConsent ? "欢迎使用" : "隐私与本机数据") + (preview ? " · 外观预览" : ""));
         var root = new DockPanel { Margin = new Thickness(32, 8, 32, 22), MaxWidth = 680 };
         var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 22) };
         var step = AppWindow.Hint(requireConsent ? "01 / 03　隐私说明" : "CLASSGLOW · 教室电脑");
         step.HorizontalAlignment = HorizontalAlignment.Center; step.SetResourceReference(TextBlock.ForegroundProperty, "GlowAccent");
         heading.Children.Add(step);
-        heading.Children.Add(new TextBlock { Text = requireConsent ? "欢迎来到班级看板" : "隐私与本机数据", FontSize = 28,
+        heading.Children.Add(new TextBlock { Text = "隐私与本机数据", FontSize = 28,
             FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 14, 0, 8) });
-        var hint = AppWindow.Hint("开始之前，先了解它会做什么。");
-        hint.TextAlignment = TextAlignment.Center; heading.Children.Add(hint);
         DockPanel.SetDock(heading, Dock.Top); root.Children.Add(heading);
         var footer = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
@@ -89,18 +87,15 @@ public static class PrivacyNotice
             reject.Click += (_, _) => window.Close(); buttons.Children.Add(reject);
         }
         footer.Children.Add(buttons);
-        var version = AppWindow.Hint($"ClassGlow {AppPaths.Version}" + (preview ? "  ·  外观预览，不保存同意记录" : "  ·  当前用户客户端"));
-        version.HorizontalAlignment = HorizontalAlignment.Center; version.Margin = new Thickness(0, 20, 0, 0);
-        footer.Children.Add(version);
 
         var content = new StackPanel { MaxWidth = 520 };
         if (requireConsent) {
             var summary = new StackPanel();
             summary.Children.Add(new System.Windows.Controls.Image { Source = AppWindow.BrandIcon(), Width = 58, Height = 58, Margin = new Thickness(0, 0, 0, 18) });
             foreach (var (title, detail) in new[] {
-                ("只连接你的班级", "同意并绑定后，接收教学内容，发送设备名称和同步状态；没有广告与第三方统计。"),
-                ("本机变更由你选择", "壁纸展示和自动启动默认关闭。不读取个人文档，不截图，不访问摄像头或麦克风。"),
-                ("随时退出，也能完整卸载", "退出恢复原壁纸。卸载清理本程序的文件、凭证、缓存和启动项，保留你另放的文件。")
+                ("联网信息", "同意并绑定后，接收教学内容，发送设备名称和同步状态；没有广告与第三方统计。"),
+                ("本机权限", "壁纸展示和自动启动默认关闭。不读取个人文档，不截图，不访问摄像头或麦克风。"),
+                ("卸载清理", "退出恢复原壁纸。卸载清理本程序的文件、凭证、缓存和启动项，保留你另放的文件。")
             }) {
                 summary.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 5) });
                 var detailText = AppWindow.Hint(detail); detailText.Margin = new Thickness(0, 0, 0, 12); summary.Children.Add(detailText);

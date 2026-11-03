@@ -1,4 +1,4 @@
-ClassGlow 班级看板 0.4.1 · 安装前说明
+ClassGlow 班级看板 0.4.2 · 安装前说明
 
 本程序仅安装到当前 Windows 用户：
   程序：%LOCALAPPDATA%\Programs\ClassGlow
