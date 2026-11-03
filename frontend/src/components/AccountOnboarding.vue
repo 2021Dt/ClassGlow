@@ -1,9 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { api } from "../api";
-import { timeLabel } from "../domain";
 const emit = defineEmits<{ changed: [] }>();
-const form = reactive({ login: "", name: "", identity: "teacher", expiry: "" });
+function generatePassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  return Array.from(
+    crypto.getRandomValues(new Uint8Array(12)),
+    (n) => alphabet[n % alphabet.length],
+  ).join("");
+}
+const form = reactive({
+  login: "",
+  name: "",
+  password: generatePassword(),
+  identity: "teacher",
+  expiry: "",
+});
 const classes = ref<any[]>([]),
   selected = reactive<Record<string, string[]>>({});
 const selectedNames = reactive<Record<string, string>>({});
@@ -43,9 +55,10 @@ async function create() {
   error.value = "";
   copied.value = false;
   try {
-    result.value = await api("/system/account-invitations", "POST", {
+    const account = await api("/system/accounts", "POST", {
       login: form.login,
       name: form.name,
+      password: form.password,
       identity: form.identity,
       expiresAt: form.expiry
         ? new Date(`${form.expiry}T23:59:59+08:00`).getTime() / 1000
@@ -55,6 +68,8 @@ async function create() {
         subjects,
       })),
     });
+    result.value = { ...account, password: form.password };
+    form.password = "";
     emit("changed");
   } catch (e) {
     error.value = (e as Error).message;
@@ -65,46 +80,43 @@ async function create() {
 async function copy() {
   try {
     await navigator.clipboard.writeText(
-      `账号：${result.value.login}\n激活码：${result.value.activationCode}\n请打开 ${location.origin} 选择“首次激活”，设置自己的密码。`,
+      `登录地址：${location.origin}\n账号：${result.value.login}\n初始密码：${result.value.password}\n打开网页直接登录即可。`,
     );
     copied.value = true;
   } catch {
-    error.value = "浏览器未允许复制，请手动选中账号和激活码复制。";
+    error.value = "浏览器未允许复制，请手动选中账号和密码复制。";
   }
 }
 function again() {
   result.value = null;
   form.login = form.name = "";
+  form.password = generatePassword();
   for (const k of Object.keys(selected)) delete selected[k];
 }
 </script>
 <template>
   <section class="panel onboarding-form">
     <template v-if="result"
-      ><span class="badge neutral">账号已创建 · 等待本人激活</span>
-      <h2>{{ result.name }}的激活信息</h2>
-      <p>请将以下信息交给这位老师，密码由老师首次激活时自行设置。</p>
+      ><span class="badge neutral">账号已创建 · 可以直接登录</span>
+      <h2>{{ result.name }}的登录信息</h2>
+      <p>
+        请把账号和初始密码交给本人。老师打开网页即可登录，不需要注册或激活账号。
+      </p>
       <div class="issued-code">
         <span>账号</span><strong>{{ result.login }}</strong
-        ><span>一次性激活码</span><code>{{ result.activationCode }}</code
-        ><small
-          >请在
-          {{
-            timeLabel(result.expiresAt * 1000, true)
-          }}
-          前激活。离开此页后不再显示原码，可从账号列表重发。</small
-        >
+        ><span>初始密码</span><code>{{ result.password }}</code>
+        <small>离开此页后不再显示初始密码。如忘记，可在账号管理中重置。</small>
       </div>
       <div class="record-actions">
         <button class="button primary" @click="copy">
-          {{ copied ? "已复制" : "复制账号与激活码" }}</button
-        ><button class="button secondary" @click="again">继续开通账号</button>
+          {{ copied ? "已复制" : "复制登录信息" }}</button
+        ><button class="button secondary" @click="again">继续创建账号</button>
       </div></template
     >
     <template v-else
-      ><h2>为老师开通账号</h2>
+      ><h2>为老师创建账号</h2>
       <p class="muted">
-        先安排身份和任教范围，再把一次性激活码交给本人。无需替老师设置密码。
+        设置账号、初始密码和任教范围，老师登录后就能开始使用。
       </p>
       <form @submit.prevent="create">
         <fieldset :disabled="busy">
@@ -125,6 +137,21 @@ function again() {
                 placeholder="字母、数字或邮箱"
             /></label>
           </div>
+          <label class="field"
+            >初始密码<input
+              v-model="form.password"
+              required
+              minlength="10"
+              maxlength="128"
+              autocomplete="new-password"
+          /></label>
+          <button
+            type="button"
+            class="text-button"
+            @click="form.password = generatePassword()"
+          >
+            重新生成密码
+          </button>
           <label class="field"
             >账号身份<select v-model="form.identity">
               <option value="teacher">普通老师 · 维护任教学科</option>
@@ -201,7 +228,7 @@ function again() {
             系统管理员可管理全部账号、班级、许可和数据，请仅分配给可信任的学校负责人。
           </p>
           <button class="button primary" :disabled="busy">
-            {{ busy ? "正在创建…" : "创建账号并生成激活码" }}
+            {{ busy ? "正在创建…" : "创建账号" }}
           </button>
         </fieldset>
       </form>

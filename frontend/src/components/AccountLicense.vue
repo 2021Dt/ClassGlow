@@ -31,7 +31,7 @@ async function redeem() {
       await api("/account/license/redeem", "POST", { code: code.value }),
     );
     code.value = "";
-    notice.value = "高级许可已生效，你的身份和班级权限保持不变。";
+    notice.value = "高级功能已开通，可以开始使用了。";
     emit("changed");
   } catch (e) {
     error.value = (e as Error).message;
@@ -45,8 +45,8 @@ async function redeem() {
     <header class="page-heading">
       <div>
         <p class="eyebrow">{{ session.name }} · 我的账号</p>
-        <h1>账号与高级许可</h1>
-        <p class="muted">基础功能免费使用，高级许可由学校管理员提供。</p>
+        <h1>我的账号</h1>
+        <p class="muted">查看账号信息，或开通需要的高级功能。</p>
       </div>
     </header>
     <div class="license-summary">
@@ -58,9 +58,7 @@ async function redeem() {
             ? timeLabel(session.expiresAt * 1000, true)
             : "长期有效"
         }}</strong>
-        <p class="muted">
-          账号到期后暂停登录和发布。需要续期时联系系统管理员，原有数据会保留。
-        </p>
+        <p class="muted">如需延长账号使用时间，请联系管理员。</p>
       </article>
       <article class="panel">
         <KeyRound :size="22" />
@@ -69,29 +67,25 @@ async function redeem() {
           session.systemAdmin
             ? "系统管理员权限"
             : session.premiumUntil
-              ? `许可截至 ${timeLabel(session.premiumUntil * 1000, true)}`
+              ? `有效期至 ${timeLabel(session.premiumUntil * 1000, true)}`
               : "基础功能永久免费"
         }}</strong>
-        <p class="muted">
-          高级许可到期后仍可使用基础功能，不删除作业、课表或定制方案。
-        </p>
+        <p class="muted">到期后仍可免费使用基础功能，已有内容会保留。</p>
       </article>
     </div>
     <section v-if="!session.systemAdmin" class="panel license-redeem">
-      <h2>输入高级许可码</h2>
-      <p class="muted">
-        请向系统管理员领取绑定本账号的许可码。续期从现有许可到期日继续计算；已到期则从现在开始。
-      </p>
+      <h2>开通高级功能</h2>
+      <p class="muted">需要高级功能时，请向管理员领取激活码。</p>
       <form @submit.prevent="redeem">
         <label class="field"
-          >许可码<input
+          >激活码<input
             v-model.trim="code"
             required
             maxlength="40"
             autocomplete="off"
-            placeholder="管理员提供的高级许可码" /></label
+            placeholder="输入管理员给你的激活码" /></label
         ><button class="button primary" :disabled="busy">
-          {{ busy ? "正在开通…" : "开通 / 续期高级功能" }}
+          {{ busy ? "正在开通…" : "确认开通" }}
         </button>
       </form>
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
@@ -105,13 +99,10 @@ async function redeem() {
           <p>作业、提醒、课表、默认看板、设备绑定和自动同步。</p>
         </div>
         <div>
-          <h3>高级功能 · 许可期内</h3>
+          <h3>高级功能</h3>
           <p>自定义背景与卡片布局、多班批量发布、远程大屏控制。</p>
         </div>
       </div>
-      <p class="muted small">
-        许可只开放高级功能，不提升身份。班级管理仍需班主任权限，系统管理和签发许可仅限系统管理员。班级自定义展示使用最后发布该布局的账号许可，到期后恢复默认看板。
-      </p>
     </section>
   </section>
 </template>

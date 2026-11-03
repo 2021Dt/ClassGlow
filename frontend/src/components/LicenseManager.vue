@@ -82,7 +82,7 @@ async function endLicense() {
 async function copy() {
   try {
     await navigator.clipboard.writeText(
-      `账号：${issued.value.login}\n高级许可码：${issued.value.code}\n许可时长：${issued.value.days} 天\n登录后进入“账号与许可”兑换。`,
+      `账号：${issued.value.login}\n高级功能激活码：${issued.value.code}\n有效时长：${issued.value.days} 天\n登录后打开“我的账号”，在“开通高级功能”中填写激活码。`,
     );
     notice.value = "已复制，可交给该账号使用者。";
   } catch {

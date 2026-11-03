@@ -1,4 +1,4 @@
-"""管理员预设账号权限，老师只用账号、密码和一次性激活码完成首次使用。"""
+"""管理员创建账号、设置密码及任教范围；教师直接登录。保留旧激活接口兼容已发出的码。"""
 
 import secrets
 from typing import Literal
@@ -33,6 +33,10 @@ class Activate(S.Credentials):
     activationCode: str = Field(min_length=12, max_length=40)
 
 
+class ManagedAccount(OpenAccount):
+    password: str = Field(min_length=10, max_length=128)
+
+
 def issue_code(db, target):
     # 明文仅在生成时返回；重发立即作废旧码，恢复数据库后旧码随同步世代失效。
     db.execute(update(AccountActivation).where(AccountActivation.user_id == target.id).values(revoked=True))
@@ -47,8 +51,7 @@ def issue_code(db, target):
     }
 
 
-@router.post("/system/account-invitations", status_code=201)
-def open_account(body: OpenAccount, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def create_user(body: OpenAccount, db: Session, password: str | None = None):
     if body.expiresAt and body.expiresAt <= now():
         fail(422, "expiry_invalid", "账号有效期请选择未来日期，或选择长期有效。")
     if not body.name.strip():
@@ -70,8 +73,8 @@ def open_account(body: OpenAccount, user: User = Depends(system_admin), db: Sess
     target = User(
         login=body.login.casefold(),
         name=body.name.strip(),
-        password=passwords.hash(secret()),
-        activated=False,
+        password=passwords.hash(password if password is not None else secret()),
+        activated=password is not None,
         system_admin=body.identity == "system_admin",
         can_create_classes=body.identity != "teacher",
         expires_at=body.expiresAt,
@@ -87,6 +90,20 @@ def open_account(body: OpenAccount, user: User = Depends(system_admin), db: Sess
                 subjects=list(dict.fromkeys(grant.subjects)) if body.identity == "teacher" else c.data["subjects"],
             )
         )
+    return target
+
+
+@router.post("/system/accounts", status_code=201)
+def create_account(body: ManagedAccount, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+    target = create_user(body, db, body.password)
+    # 初始密码只保存摘要，不写入审计。教师拿到账密即可登录，无额外激活步骤。
+    log_system(db, user.login, "account_created", target.login, {"identity": body.identity})
+    return {"id": target.id, "login": target.login, "name": target.name}
+
+
+@router.post("/system/account-invitations", status_code=201)
+def open_account(body: OpenAccount, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+    target = create_user(body, db)
     result = issue_code(db, target)
     log_system(
         db,

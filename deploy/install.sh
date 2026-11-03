@@ -20,12 +20,12 @@ main() {
   esac
   if [[ "$gateway" == --existing-nginx ]]; then
     # 共享服务器复用现成环境，不安装软件包，也不重启已有 Docker 服务。
-    for tool in docker nginx certbot curl git flock; do command -v "$tool" >/dev/null; done
+    for tool in docker nginx certbot curl git flock python3; do command -v "$tool" >/dev/null; done
     docker compose version >/dev/null
     systemctl is-active --quiet nginx
   else
     apt-get update
-    apt-get install -y ca-certificates curl git util-linux
+    apt-get install -y ca-certificates curl git util-linux python3
     if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
       install -m 0755 -d /etc/apt/keyrings
       curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
@@ -66,9 +66,9 @@ exec bash /opt/classglow/deploy/manage.sh "$@"
 EOF
   chmod 0755 /usr/local/bin/classglow
   classglow update
-  echo '读取安装密钥：sudo classglow setup-key（请勿粘贴到公开日志）'
-  echo '首次安装完成。打开 https://teacher.dgplus.vip 设置管理员。'
-  echo '启用持续自动更新：sudo classglow auto-on；手动更新：sudo classglow update'
+  echo '安装完成。运行 sudo classglow 打开服务器管理菜单。'
+  echo '首次使用选择“初始化管理员”，然后在网站使用账密登录。教师页面没有注册或安装入口。'
+  echo '更新、备份、数据库迁移、管理员密码和卸载均在服务器菜单中管理。'
 }
 
 main "$@"

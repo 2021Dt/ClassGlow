@@ -1,12 +1,11 @@
 """首次安装与全站管理接口。系统管理员不直接读取教师私人草稿。"""
 
-import secrets
 import shutil
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
 from pydantic import Field
 from sqlalchemy import create_engine, delete, func, or_, select, text, update
@@ -34,22 +33,16 @@ from .db import (
 )
 from .devices import device_view
 from .entitlements import profile
-from .security import fail, limit, passwords, system_admin
-from .system_service import log_system, setup_key_file, system_config
+from .security import fail, passwords, system_admin
+from .system_service import log_system, system_config
 
 router = APIRouter()
 started_at = time.monotonic()
 
 
-class SetupInput(S.Credentials):
-    setupKey: str
-    siteName: str = Field(min_length=1, max_length=80)
-    registrationOpen: bool = False
-
-
 class SettingsInput(S.Input):
     siteName: str = Field(min_length=1, max_length=80)
-    registrationOpen: bool
+    registrationOpen: bool = False  # 兼容旧客户端字段；新账号统一由管理员创建。
 
 
 class UserInput(S.Credentials):
@@ -89,34 +82,8 @@ def setup_status(db: Session = Depends(get_db)):
     return {
         "initialized": config.initialized,
         "siteName": config.site_name,
-        "registrationOpen": config.initialized and config.registration_open,
+        "registrationOpen": False,
     }
-
-
-@router.post("/setup/initialize")
-def initialize(body: SetupInput, request: Request, db: Session = Depends(get_db)):
-    limit(f"setup:{request.client.host}", 10, 300)
-    config = system_config(db, lock=True)
-    if config.initialized:
-        fail(409, "already_initialized", "系统已初始化，安装入口已锁定。")
-    key = setup_key_file().read_text(encoding="utf-8").strip()
-    if not secrets.compare_digest(key.encode(), body.setupKey.strip().encode()):
-        fail(403, "setup_key_invalid", "管理员激活码不正确，请联系部署人员核对。")
-    user = db.scalar(select(User).where(User.login == body.login.casefold()))
-    if user:
-        if not passwords.verify(body.password, user.password):
-            fail(409, "existing_account", "该账号已存在，请填写原口令以将它设为系统管理员。")
-    else:
-        user = User(login=body.login.casefold(), name=body.name.strip(), password=passwords.hash(body.password))
-        db.add(user)
-    user.system_admin, user.active, user.activated = True, True, True
-    config.initialized, config.initialized_at = True, now()
-    config.site_name, config.registration_open = body.siteName.strip(), body.registrationOpen
-    log_system(db, user.login, "system_initialized", config.site_name)
-    db.flush()
-    from .app import session_result
-
-    return session_result(db, user)
 
 
 @router.get("/system/overview")
@@ -128,7 +95,7 @@ def overview(user: User = Depends(system_admin), db: Session = Depends(get_db)):
     disk = shutil.disk_usage(settings.storage_dir)
     return {
         "siteName": config.site_name,
-        "registrationOpen": config.registration_open,
+        "registrationOpen": False,
         "publicUrl": settings.public_url,
         "database": database.get_backend_name(),
         "databaseBytes": data_file.stat().st_size if data_file and data_file.exists() else None,
@@ -149,8 +116,8 @@ def overview(user: User = Depends(system_admin), db: Session = Depends(get_db)):
 @router.put("/system/settings")
 def save_settings(body: SettingsInput, user: User = Depends(system_admin), db: Session = Depends(get_db)):
     config = system_config(db, lock=True)
-    config.site_name, config.registration_open = body.siteName.strip(), body.registrationOpen
-    log_system(db, user.login, "system_settings_changed", config.site_name, {"registrationOpen": body.registrationOpen})
+    config.site_name, config.registration_open = body.siteName.strip(), False
+    log_system(db, user.login, "system_settings_changed", config.site_name)
     return {"ok": True}
 
 
@@ -220,6 +187,8 @@ def reset_password(
     if not target:
         fail(404, "user_missing", "账号不存在。")
     target.password = passwords.hash(body.password)
+    # 旧版待激活账号也可由管理员直接设置登录密码，不让老师再处理激活步骤。
+    target.activated = True
     db.execute(delete(Token).where(Token.user_id == target.id))
     log_system(db, user.login, "password_reset", target.login)
     return {"ok": True}

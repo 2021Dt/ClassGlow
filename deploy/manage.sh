@@ -5,9 +5,10 @@ set -Eeuo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 dc() {
-  local files=(-f compose.production.yaml)
-  if grep -qx 'KANBAN_GATEWAY=nginx' deploy/.env; then files+=(-f compose.nginx.yaml); fi
-  docker compose --env-file deploy/.env "${files[@]}" "$@"
+  local env_file="${CLASSGLOW_ENV:-deploy/.env}" files=(-f compose.production.yaml)
+  if grep -qx 'KANBAN_GATEWAY=nginx' "$env_file"; then files+=(-f compose.nginx.yaml); fi
+  if grep -qx 'KANBAN_DATABASE=postgres' "$env_file"; then files+=(-f compose.postgres.yaml); fi
+  docker compose --env-file "$env_file" "${files[@]}" "$@"
 }
 log() { printf '\n[ClassGlow] %s\n' "$*"; }
 
@@ -19,6 +20,10 @@ update() {
   if ! flock -n 9; then
     log '已有部署正在运行，本次跳过。'
     return
+  fi
+  if [[ -f .deploy/database-migration.env ]]; then
+    echo '有未收尾的数据库迁移，请先运行 classglow migrate-db 继续。' >&2
+    return 1
   fi
   if [[ "$mode" == --auto && -f .deploy/failed ]]; then
     log '上次部署失败，自动更新已暂停；修复后执行 classglow update。'
@@ -71,8 +76,9 @@ deploy_current() {
   dc build --pull api web
   phase='停服并备份数据库'
   log "$phase"
+  if postgres_enabled; then dc up -d --wait --wait-timeout 180 db; fi
   dc stop web api
-  dc run --rm --no-deps api python -m scripts.deploy_backup
+  server_backup offline
   phase='数据库迁移'
   log "$phase"
   dc run --rm --no-deps migrate
@@ -139,21 +145,29 @@ EOF
 }
 
 main() {
-  if [[ "${1:-help}" == help || "${1:-}" == --help ]]; then
-    echo '用法：classglow {update|status|logs|setup-key|backup|auto-on|auto-off|auto-status}'
+  if [[ "${1:-}" == help || "${1:-}" == --help ]]; then
+    echo 'sudo classglow：交互菜单'
+    echo '命令：menu | status | update | logs | admin-init | admin-reset | backup | backup-list | migrate-db | uninstall | auto-on | auto-off | auto-status'
     return
   fi
   if (( EUID != 0 )); then
     echo '请使用 sudo classglow 执行运维操作。' >&2
     exit 1
   fi
-  case "${1:-}" in
+  case "${1:-menu}" in
+    menu) console_menu ;;
     update) update "${2:-manual}" ;;
     _deploy) deploy_current "$2" ;;
-    status) dc ps -a; if [[ -f .deploy/deployed-commit ]]; then cat .deploy/deployed-commit; fi ;;
+    status) server_status ;;
     logs) dc logs --tail=100 api web ;;
-    setup-key) dc exec -T api python -m scripts.setup_key ;;
-    backup) dc exec -T api python -m scripts.deploy_backup ;;
+    admin-init) dc exec api python -m scripts.admin_account init ;;
+    admin-reset) dc exec api python -m scripts.admin_account reset ;;
+    setup-key) echo '管理员初始化已移到服务器菜单，请运行 sudo classglow admin-init。' ;;
+    backup) server_backup ;;
+    backup-list)
+      if postgres_enabled; then ls -lh .deploy/backups/; else dc exec -T api ls -lh /app/data/backups/; fi ;;
+    migrate-db) migrate_database ;;
+    uninstall) uninstall_service ;;
     auto-on) auto_on ;;
     auto-off) systemctl disable --now classglow-update.timer; log '已停止后续定时检查；已开始的部署会完成。' ;;
     auto-status) systemctl list-timers classglow-update.timer; journalctl -u classglow-update.service -n 40 --no-pager ;;
@@ -161,4 +175,5 @@ main() {
   esac
 }
 
+source "$ROOT/deploy/console.sh"
 main "$@"

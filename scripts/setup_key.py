@@ -1,19 +1,9 @@
-"""在服务器终端读取首次安装密钥；初始化完成后不再提供入口。"""
-
-from sqlalchemy.orm import Session
-
-from backend.db import engine
-from backend.system_service import ensure_setup_key, setup_key_file, system_config
+"""旧命令兼容提示；不再生成或输出已经停用的网页安装密钥。"""
 
 
 def main():
-    with Session(engine) as db:
-        if system_config(db).initialized:
-            print("系统已初始化，安装入口已锁定。请使用系统管理员账号登录。")
-            return
-    ensure_setup_key()
-    print("首次安装密钥（只在初始化页面输入，不要发送给其他人）：")
-    print(setup_key_file().read_text(encoding="utf-8"))
+    print("管理员初始化已移到服务器菜单：sudo classglow admin-init。")
+    print("本机开发使用：uv run python -m scripts.admin_account init。")
 
 
 if __name__ == "__main__":

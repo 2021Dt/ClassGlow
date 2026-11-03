@@ -25,7 +25,7 @@ const emit = defineEmits<{
 const tabs = [
   { id: "overview", name: "运行概况", icon: Monitor },
   { id: "users", name: "账号管理", icon: Users },
-  { id: "onboarding", name: "开通账号", icon: Plus },
+  { id: "onboarding", name: "创建账号", icon: Plus },
   { id: "licenses", name: "高级许可", icon: ScrollText },
   { id: "classes", name: "全部班级", icon: School },
   { id: "devices", name: "全部设备", icon: Monitor },
@@ -56,26 +56,7 @@ const userForm = reactive({
   canCreateClasses: false,
   expiry: "",
 });
-const licenseUserId = ref(""),
-  activationResult = ref<any>(null);
-async function reissueActivation(item: any) {
-  await run(async () => {
-    activationResult.value = await api(
-      `/system/users/${item.id}/activation`,
-      "POST",
-    );
-  });
-}
-async function copyActivation() {
-  try {
-    await navigator.clipboard.writeText(
-      `账号：${activationResult.value.login}\n激活码：${activationResult.value.activationCode}`,
-    );
-    notice.value = "已复制激活信息。";
-  } catch {
-    error.value = "浏览器未允许复制，请手动选中复制。";
-  }
-}
+const licenseUserId = ref("");
 const classForm = reactive({ name: "", ownerId: "", archived: false }),
   ownerSearch = ref(""),
   ownerOptions = ref<any[]>([]);
@@ -87,7 +68,8 @@ const auditNames: Record<string, string> = {
   system_initialized: "初始化系统",
   system_settings_changed: "修改站点设置",
   user_created: "创建账号",
-  account_invited: "开通账号",
+  account_created: "创建账号",
+  account_invited: "旧版账号邀请",
   account_activated: "账号完成激活",
   activation_reissued: "重发激活码",
   license_issued: "签发高级许可",
@@ -95,7 +77,7 @@ const auditNames: Record<string, string> = {
   license_revoked: "作废许可码",
   license_ended: "终止高级许可",
   user_updated: "修改账号",
-  password_reset: "重置口令",
+  password_reset: "重置密码",
   class_updated: "修改班级",
   device_revoked: "撤销设备",
   backup_created: "创建备份",
@@ -104,7 +86,7 @@ const auditNames: Record<string, string> = {
 const modalNames: Record<string, string> = {
   create: "创建账号",
   edit: "编辑账号",
-  password: "重置口令",
+  password: "重置密码",
   class: "管理班级",
   revoke: "撤销设备",
   restore: "恢复数据库备份",
@@ -144,7 +126,6 @@ async function load() {
   }
 }
 async function switchTab(id: string) {
-  activationResult.value = null;
   tab.value = id;
   search.value = "";
   offset.value = 0;
@@ -214,7 +195,7 @@ async function save() {
       });
       if (target.value.id === session.userId) {
         modal.value?.close();
-        emit("restored", "口令已重置，请重新登录。");
+        emit("restored", "密码已重置，请重新登录。");
         return;
       }
     } else if (mode.value === "class") {
@@ -334,7 +315,7 @@ async function download(name: string) {
         <section class="panel admin-start">
           <h2>开通老师的工作台</h2>
           <p class="muted">
-            分配身份与班级，生成激活码交给本人；需要高级功能时，再签发许可码。
+            设置账号、密码和任教班级，老师可以直接登录。高级功能的许可码在这里单独管理。
           </p>
           <div class="record-actions">
             <button class="button primary" @click="switchTab('onboarding')">
@@ -376,12 +357,12 @@ async function download(name: string) {
               <dd>{{ timeLabel(overview.serverTime * 1000, true) }}</dd>
             </div>
             <div>
-              <dt>公开注册</dt>
-              <dd>{{ overview.registrationOpen ? "已开放" : "已关闭" }}</dd>
+              <dt>账号获取</dt>
+              <dd>由管理员创建</dd>
             </div>
             <div>
-              <dt>安装入口</dt>
-              <dd>已锁定</dd>
+              <dt>服务器管理</dt>
+              <dd>通过服务器菜单管理</dd>
             </div>
           </dl>
         </section>
@@ -397,7 +378,7 @@ async function download(name: string) {
                 maxlength="80"
             /></label>
             <p class="muted">
-              老师使用管理员分配的账号和激活码。身份、账号期限和高级许可均由系统管理员管理。
+              老师使用管理员分配的账号和密码登录。身份、账号期限和高级许可均由系统管理员管理。
             </p>
             <label class="field"
               >公开访问地址<input :value="overview.publicUrl" readonly
@@ -482,20 +463,7 @@ async function download(name: string) {
             :disabled="busy"
             @click="switchTab('onboarding')"
           >
-            <Plus :size="16" />开通账号
-          </button>
-        </div>
-        <div v-if="activationResult" class="issued-code">
-          <strong>{{ activationResult.login }} 的新激活码</strong
-          ><code>{{ activationResult.activationCode }}</code
-          ><small
-            >旧码已作废，新码在
-            {{
-              timeLabel(activationResult.expiresAt * 1000, true)
-            }}
-            前有效。</small
-          ><button class="button secondary" @click="copyActivation">
-            复制激活信息
+            <Plus :size="16" />创建账号
           </button>
         </div>
         <p v-if="!rows.length" class="inline-empty">
@@ -515,7 +483,7 @@ async function download(name: string) {
                 }}</span
                 ><span v-if="!item.active" class="badge">已停用</span
                 ><span v-else-if="!item.activated" class="badge amber-badge"
-                  >待激活</span
+                  >请设置密码</span
                 >
               </h3>
               <p class="muted">{{ item.login }}</p>
@@ -543,13 +511,6 @@ async function download(name: string) {
               >
                 编辑账号</button
               ><button
-                v-if="!item.activated && item.active"
-                class="text-button"
-                :disabled="busy"
-                @click="reissueActivation(item)"
-              >
-                重发激活码</button
-              ><button
                 v-if="!item.systemAdmin"
                 class="text-button"
                 @click="
@@ -559,12 +520,11 @@ async function download(name: string) {
               >
                 管理许可</button
               ><button
-                v-if="item.activated"
                 class="text-button"
                 :disabled="busy"
                 @click="open('password', item)"
               >
-                重置口令
+                重置密码
               </button>
             </div></template
           >
@@ -681,7 +641,7 @@ async function download(name: string) {
               required
               maxlength="40" /></label
           ><label v-if="mode === 'create'" class="field"
-            >初始口令<input
+            >初始密码<input
               type="password"
               v-model="userForm.password"
               required
@@ -719,10 +679,10 @@ async function download(name: string) {
           ><p class="muted">
             为 {{ target?.name }}（{{
               target?.login
-            }}）设置新口令，原登录会话将失效。
+            }}）设置新密码，原登录会话将失效。
           </p>
           <label class="field"
-            >新口令<input
+            >新密码<input
               type="password"
               v-model="userForm.password"
               required
@@ -774,10 +734,10 @@ async function download(name: string) {
           ><p class="notice warning">
             用
             {{ target?.name }}
-            替换全站数据。恢复后使用备份中的账号和口令重新登录，所有教室设备需重新绑定。
+            替换全站数据。恢复后使用备份中的账号和密码重新登录，所有教室设备需重新绑定。
           </p>
           <label class="field"
-            >当前管理员口令<input
+            >当前管理员密码<input
               type="password"
               v-model="restoreForm.password"
               required

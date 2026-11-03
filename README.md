@@ -12,7 +12,7 @@ Ubuntu / Debian 独立服务器，域名已解析且 80/443 可用时，一条�
 curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/install.sh -o classglow-install.sh && sudo bash classglow-install.sh
 ```
 
-之后运行 `sudo classglow update` 更新；运行 `sudo classglow auto-on` 开启每 5 分钟检查新提交并自动部署。详细要求、运维命令和恢复方式见 [服务器部署与手机使用](docs/DEPLOYMENT.md)。Windows 客户端服务地址填写 `https://teacher.dgplus.vip/api/`。
+安装后运行 `sudo classglow` 打开交互菜单：状态、更新、管理员初始化/重置、备份、SQLite → PostgreSQL 迁移、自动更新和卸载。仍可用 `sudo classglow update` 直接更新；`sudo classglow auto-on` 开启每 5 分钟自动检查新提交。详细要求、运维命令和恢复方式见 [服务器部署与手机使用](docs/DEPLOYMENT.md)。Windows 客户端服务地址填写 `https://teacher.dgplus.vip/api/`。
 
 **已有 Nginx / Docker 的共享服务器：**使用 `sudo bash classglow-install.sh --existing-nginx`，只增加本项目的站点，网页容器监听 `127.0.0.1:18080`，沿用宿主机 Certbot。此模式要求现有 Docker Compose ≥ 2.24.4、Nginx、Certbot 及已注册的证书账户，不安装系统软件包。Docker 只需要在服务器运行，本地电脑不需要。
 
@@ -36,15 +36,17 @@ npm ci
 npm run dev
 ```
 
-打开 [教师管理端](http://127.0.0.1:5173/)；API 文档位于 [本地接口文档](http://127.0.0.1:8000/docs)。首页为账号登录 / 首次激活。部署人员执行 `uv run python -m scripts.setup_key` 读取管理员激活码，在 `/setup` 输入管理员账号、密码、激活码完成首次开通。没有预置管理员或默认口令。
+打开 [教师管理端](http://127.0.0.1:5173/)；API 文档位于 [本地接口文档](http://127.0.0.1:8000/docs)。教师首页只有账号、密码和登录按钮，没有注册、激活账号或服务器设置入口。本地开发首次管理员由 `uv run python -m scripts.admin_account init` 在终端创建，密码隐藏输入；生产服务器使用 `sudo classglow` 菜单中的“初始化管理员”。
 
-首次开通后入口锁定。管理员登录进入系统工作台，从“开通账号”分配班主任 / 普通老师身份、班级和学科，生成一次性激活码；老师首次设置密码后，日常只需账密登录。管理员可管理账号有效期、签发高级许可、维护全部班级和设备、查看审计和备份恢复。身份和许可期限彼此独立，详见 [账号与许可说明](docs/ACCOUNT-LICENSES.md)。旧账号升级后保留登录和原有建班权限，账号默认长期有效；普通旧账号的高级功能需领取许可，已保存数据保留。
+管理员登录后在“系统管理 → 创建账号”设置老师初始密码、身份、账号有效期、班级和学科。老师拿到账密直接登录；高级功能的激活码在登录后的“我的账号”填写。详情见 [账号与许可说明](docs/ACCOUNT-LICENSES.md)。旧账号升级后保留原登录、建班权限和数据；普通旧账号的高级功能需领取许可。
 
 当前默认使用 `data/kanban.db`，开发启动时自动运行 Alembic 迁移；SQLAlchemy 数据层、事务规则和迁移脚本均保留数据库切换能力。SQLite 写请求使用事务锁，并显式启用外键检查。`.env`、数据库、浏览器测试截图和本机工具目录均已忽略，不提交凭证。
 
 本地若需要自动重载，使用 `uv run uvicorn backend.app:app --reload --reload-dir backend --no-access-log`。原始访问日志默认关闭，避免短期邀请秘密出现在请求路径日志中；操作审计保存在数据库，错误使用请求编号定位。
 
 ## 后续迁移 PostgreSQL
+
+已部署的服务器使用 `sudo classglow` 菜单选择“迁移 SQLite → PostgreSQL”，脚本负责备份、停写、空库迁移与切换配置，保留原 SQLite；详情见部署文档。以下步骤仅用于本地开发或手工接入外部数据库：
 
 1. 在 `.env` 中将 `POSTGRES_PASSWORD` 换成长随机口令，执行 `docker compose up -d db`。
 2. 新建空库时，将 `KANBAN_DATABASE_URL` 配置为 `postgresql+psycopg://kanban:经过URL编码的口令@127.0.0.1:55432/kanban`；同时配置公开 HTTPS 地址和准确来源，再将 `KANBAN_ENVIRONMENT` 改为 `production`。
@@ -55,7 +57,7 @@ npm run dev
 
 已有 SQLite 数据时，不要先在目标库建表。先停服并备份，通过环境变量设置 `KANBAN_MIGRATION_TARGET_URL` 为一个空 PostgreSQL 库，执行 `uv run python -m scripts.migrate_database`。
 
-工具会在目标库运行迁移，按外键顺序分批搬迁业务数据并逐表核对条数，随后更换同步世代并撤销旧会话、设备、配对和待执行命令。目标非空时立即拒绝，来源不会被修改。最后切换连接配置、重新登录并绑定设备。已通过 SQLite 到隔离 SQLite 的迁移演练；真正切换 PostgreSQL 前仍需在目标环境再演练一次。
+工具会在目标库运行迁移，按外键顺序分批搬迁业务数据并逐表核对条数，随后更换同步世代并撤销旧会话、设备、配对和待执行命令。目标非空时立即拒绝，来源不会被修改。最后切换连接配置、重新登录并绑定设备。已完成 SQLite 到隔离 SQLite 与 PostgreSQL 17 的迁移演练，生产仍使用 SQLite；业务并发和教室现场验收另行安排。
 
 ## 编译与运行 Windows 客户端
 
@@ -90,7 +92,7 @@ uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
 
 ## 已实现的关键行为
 
-- 首次安装向导与一次性初始化、系统管理员后台、全局账号管理、班级所有者调整、全局设备撤销、账号激活与高级许可、运行概况、系统审计，以及 SQLite 网页备份恢复。
+- 服务器菜单与一次性管理员初始化、系统管理员后台、统一账号创建与高级许可、全局账号管理、班级所有者调整、全局设备撤销、运行概况、系统审计，以及 SQLite 网页备份恢复。
 - 账号登录、可撤销会话、多班与学科权限、邀请申请审批、成员权限维护、所有权转移、归档与恢复接口。
 - 私人云草稿、停顿保存、本机未同步副本、最终输入保存、草稿与正式记录修订校验、多班原子发布与幂等结果查询。
 - 作业、提醒、完成与恢复、撤回、代改原因与修改历史；时间使用北京时间解释，存储带时区时间。
@@ -123,7 +125,7 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj -- --render-pr
 
 “Windows 实际渲染”展示导出的固定样例；取消勾选可上传图片、调整布局并查看 Web 实时预览。此命令只输出图片，不设置当前电脑壁纸。预览入口只在开发服务中使用。
 
-在独立测试环境完成初始化并开放注册、启动后端及编译客户端后，可以运行 `uv run python scripts/client_integration.py`。该脚本使用临时测试账号和明确标记的测试班级，启动真实 C# 客户端验证绑定、快照缓存、同步回执与暂停延后，强制关闭壁纸写入。结果保存在 `.qa`；不要把该结果当作真实桌面应用验收。
+历史联调脚本依赖旧注册入口，新版管理员开户流程请使用隔离账号验收。旧版参考命令为 `uv run python scripts/client_integration.py`。该脚本使用临时测试账号和明确标记的测试班级，启动真实 C# 客户端验证绑定、快照缓存、同步回执与暂停延后，强制关闭壁纸写入。结果保存在 `.qa`；不要把该结果当作真实桌面应用验收。
 
 ## 备份与恢复
 

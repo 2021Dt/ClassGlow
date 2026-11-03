@@ -4,18 +4,24 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from backend.db import Device, Membership, User, now
+from backend.security import passwords
 
 
 def user(c, name="teacher"):
-    r = c.post("/auth/register", json={"login": name, "name": name, "password": "CorrectPass!123"})
-    assert r.status_code == 201, r.text
-    data = r.json()
-    # 旧业务用例的测试账号显式具有建班与高级许可；免费版边界由专门流程验证。
+    # 业务用例直接建立隔离测试账号，真实教师账号只能通过管理员后台创建。
     with Session(c.test_engine) as db:
-        target = db.get(User, data["user"]["id"])
-        target.can_create_classes = True
-        target.premium_until = now() + 86400
+        target = User(
+            login=name,
+            name=name,
+            password=passwords.hash("CorrectPass!123"),
+            can_create_classes=True,
+            premium_until=now() + 86400,
+        )
+        db.add(target)
         db.commit()
+    r = c.post("/auth/login", json={"login": name, "password": "CorrectPass!123"})
+    assert r.status_code == 200, r.text
+    data = r.json()
     return {"Authorization": f"Bearer {data['token']}"}, data["user"]["id"]
 
 

@@ -1,0 +1,32 @@
+# 由服务器菜单选择迁移后启用；数据库仅在项目内网可达，不发布宿主机端口。
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kanban
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请通过 classglow migrate-db 创建数据库配置}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban -d kanban"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  migrate-sqlite:
+    extends:
+      file: compose.production.yaml
+      service: api
+    profiles: [database-migration]
+    restart: "no"
+    environment:
+      KANBAN_DATABASE_URL: ${KANBAN_SQLITE_SOURCE_URL:-sqlite:////app/data/kanban.db}
+      KANBAN_ALLOW_SQLITE_PRODUCTION: "true"
+      KANBAN_MIGRATION_TARGET_URL: ${KANBAN_DATABASE_URL}
+    command: ["python", "-m", "scripts.migrate_database"]
+volumes:
+  postgres_data:

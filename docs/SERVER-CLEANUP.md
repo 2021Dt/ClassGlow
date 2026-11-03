@@ -4,7 +4,13 @@
 
 部署结构、备份恢复和运维命令见 [部署文档](DEPLOYMENT.md)。记录日期为 2026-11-03；执行清理前应以当前主机实际配置核对。只做空间维护时使用下一节，不必下线整个网站。
 
-0.3.0 的账号激活、期限和许可记录均在原 SQLite 数据卷中，没有额外许可服务或清理定时器。终止许可不等于删除账号或教学数据；后台可撤销许可，最终删除业务数据仍按本文的数据卷与备份范围处理。
+0.3.0 的账号、期限和许可记录均在业务数据库中，没有额外许可服务或清理定时器。终止许可不等于删除账号或教学数据；后台可撤销许可，最终删除业务数据仍按本文的数据卷与备份范围处理。
+
+## 菜单卸载
+
+优先使用 `sudo classglow` 的“卸载本项目”，或直接 `sudo classglow uninstall`。默认选项会撤下本项目服务、自动更新、命令入口和 Nginx 链接，保留项目目录和数据；恢复时重新运行安装命令即可。彻底删除选项会删除 `/opt/classglow`（包括其中另放的文件）与项目数据卷，必须先离机备份并输入指定确认文字。脚本先核对固定目录、站点链接、命令入口和服务归属，遇到不一致会停止。
+
+迁移到 PostgreSQL 后，还包括 `classroom-board_postgres_data` 卷、`.deploy/backups/*.dump` 和保留的 SQLite 配置。脚本不运行全局 Docker prune，不移除共享基础镜像。宿主机 TLS 证书与 Certbot 保留；确认域名完全弃用后按下文通过 Certbot 删除指定证书。
 
 ## 日常空间维护
 
@@ -30,7 +36,7 @@ sudo classglow status
 
 ## 先停止自动更新并保留数据
 
-先运行 `sudo classglow auto-off`。它停止后续定时触发，已开始的部署仍会完成；通过 `sudo classglow auto-status` 查看定时任务和日志，再用以下命令检查手工/自动更新共用的锁。返回非零时先等待当前部署完成，不强行终止迁移：
+以下是需要人工停用时的步骤，使用菜单卸载时由脚本执行。先运行 `sudo classglow auto-off`。它停止后续定时触发，已开始的部署仍会完成；通过 `sudo classglow auto-status` 查看定时任务和日志，再用以下命令检查手工/自动更新共用的锁。返回非零时先等待当前部署完成，不强行终止迁移：
 
 ```bash
 sudo flock -n /opt/classglow/.deploy/update.lock true
@@ -44,7 +50,8 @@ sudo flock -n /opt/classglow/.deploy/update.lock true
 
 ```bash
 cd /opt/classglow
-sudo docker compose --env-file deploy/.env -f compose.production.yaml -f compose.nginx.yaml down
+# 先按部署文档定义 dc，自动选择 Nginx 和当前数据库配置。
+dc down
 ```
 
 不加 `-v`；命名卷 `classroom-board_app_data` 和其中的 SQLite、备份均保留。不要停止整个 Docker 服务，也不要运行全局 `docker system prune`、`docker volume prune`。
@@ -62,6 +69,7 @@ sudo docker compose --env-file deploy/.env -f compose.production.yaml -f compose
 | 内容 | 处理边界 |
 | --- | --- |
 | 数据卷 `classroom-board_app_data` | 含业务数据库、初始化密钥和备份；离机备份确认后，明确决定不保留数据时，才删除这个精确名称的卷 |
+| 数据卷 `classroom-board_postgres_data` | 迁移后使用的 PostgreSQL 数据；必须先离机保存并验证对应 dump，不能当作缓存删除 |
 | `/opt/classglow` | 源码、服务器配置、部署状态、ACME 验证目录及 Windows 下载包；核对真实路径、挂载点和另放文件后再决定归档或删除 |
 | 项目 API/Web 镜像 | 先核对镜像 ID、容器引用和标签，只处理本项目独占的构建镜像；共享基础镜像保留 |
 | Certbot `teacher.dgplus.vip` 证书 | 先撤下所有引用它的站点，确认域名不再使用后，通过 `sudo certbot delete --cert-name teacher.dgplus.vip` 管理；不要手工删整个 letsencrypt 目录 |

@@ -12,7 +12,7 @@
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | `b8fd180f8a5771165c1a974e988a7873ac9dda53`；实际当前提交通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.3.0，账号与许可 / 服务器菜单版；准确提交通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
@@ -21,7 +21,7 @@
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
 | Windows 发布 | 0.3.0 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
 
-本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员初始化由用户持安装密钥在网页完成。
+本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
 
 停用、日常空间清理和彻底移除的顺序见 [服务器后期清理](SERVER-CLEANUP.md)。两份文档随代码存放在服务器 `/opt/classglow/docs/`，不包含安装密钥、口令或私钥。
 
@@ -37,7 +37,9 @@ curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/instal
 
 目前仓库公开，服务器默认通过 HTTPS 只读拉取，不需要 GitHub 私钥。如果以后将仓库设为私有，先为服务器配置只读 Deploy Key，再将 `/opt/classglow` 的 `origin` 改为 `git@github.com:2021Dt/ClassGlow.git`；首次 SSH 连接需在终端核对 GitHub 主机指纹。无需向服务器复制开发者私钥。
 
-安装成功后，通过 `sudo classglow setup-key` 单独读取一次性安装密钥，再打开 `https://teacher.dgplus.vip/setup` 完成首次管理员开通。密钥不会写入安装与自动更新日志。管理员账号和口令在网页上自行设置，没有默认口令。安装命令可再次运行，已有配置和数据卷保留。
+安装成功后运行 `sudo classglow` 打开交互菜单，选择“初始化管理员”，输入账号和两次密码（隐藏输入）。之后到网站正常登录。密码不会写入命令行参数、环境变量或日志，没有默认密码。管理员已初始化时可通过“重置管理员密码”恢复访问。重复运行安装不会覆盖配置或数据。
+
+菜单提供状态、更新、管理员初始化/重置、数据库备份与位置、SQLite → PostgreSQL 迁移、自动更新、日志和卸载。常用无交互命令保留如下；不要让教师执行这些操作。
 
 ```bash
 # 手工一键更新：拉取 main、构建、备份、迁移、部署
@@ -54,9 +56,15 @@ sudo classglow logs
 # 停止后续自动更新；已经开始的一次更新会完成
 sudo classglow auto-off
 
-# 重新读取安装密钥，或手工在线备份
-sudo classglow setup-key
+# 创建首个管理员、重置已有管理员密码；均在终端隐藏输入
+sudo classglow admin-init
+sudo classglow admin-reset
+
+# 备份、迁移向导和卸载向导
 sudo classglow backup
+sudo classglow backup-list
+sudo classglow migrate-db
+sudo classglow uninstall
 ```
 
 “自动整合”是对 `origin/main` 进行快进更新，再一起构建前后端。服务器代码存在未提交修改、本地额外提交或分支分歧时停止，不自动猜测冲突解决方案；服务器配置放入忽略的 `deploy/.env`，业务数据库保存在 Docker 卷。自动更新只在提交改变时部署，手工 `update` 则会重建，也用于配置修改或失败后的重试。脚本拉取后执行新提交中的部署逻辑。
@@ -65,9 +73,23 @@ sudo classglow backup
 
 备份位于数据卷 `/app/data/backups/backup-before-deploy-*.db`，也可在“系统管理 → 备份恢复”下载。不会自动删除历史备份，需定期下载到服务器外并按学校保留策略清理。部署成功提交号保存在 `/opt/classglow/.deploy/deployed-commit`。失败时保留 `/opt/classglow/.deploy/failed` 和日志，后续定时部署暂停；排查后运行 `sudo classglow update` 重试。构建失败时旧服务保留；迁移阶段失败时保持停服。脚本不自动降级数据库或删除数据卷。
 
-一键脚本当前针对 SQLite。将来切换 PostgreSQL 时按第 5 节的备份、迁移流程操作，再调整部署脚本的数据库备份步骤。若服务器已有统一网关，使用下面的 Compose 配置作为基础接入现有网关，不能直接运行占用 80/443 的独立安装方案。
+菜单支持从 SQLite 迁移到本项目私有网络内的 PostgreSQL 17，迁移成功后更新和备份命令自动切换数据库类型。外部 PostgreSQL 或跨服务器迁移仍按第 5 节人工核对配置。若服务器已有统一网关，使用下面的 Compose 配置作为基础接入现有网关，不能直接运行占用 80/443 的独立安装方案。
 
 ## 1. 准备服务器
+
+### 服务器菜单与数据库迁移
+
+日常运维只需 `sudo classglow`。菜单显示域名、运行状态、数据库类型、已部署提交和自动更新状态。管理员初始化/重置密码均使用隐藏输入；只处理已有系统管理员的密码，不在日志或命令参数中存储密码。
+
+选择“迁移 SQLite → PostgreSQL”后，输入 `MIGRATE` 才开始。脚本在项目内网启动 PostgreSQL 17，不发布 5432 端口；先备份并停写，再向空库迁移、逐表核对、切换配置并等待 API 健康。原 SQLite、备份和 `.deploy/sqlite-before-postgres.env` 保留。数据库密码由程序随机生成，仅保存于 0600 配置文件。
+
+迁移中的配置在 `.deploy/database-migration.env`，复制完成状态在 `.deploy/database-migration.state`。这些文件存在时自动更新暂停；再次选择迁移会使用同一目标继续，不重新生成数据库密码。复制失败会恢复原 SQLite 服务；复制完成后若新服务启动失败，则保留目标和状态，修复后重试，不盲目切回旧数据。成功后需要重新登录和绑定教室设备。
+
+迁移后更新流程会先备份 PostgreSQL，再执行 Alembic。PostgreSQL 备份为 `.deploy/backups/*.dump`（0600），数据卷为 `classroom-board_postgres_data`；SQLite 备份仍在原数据卷 `/app/data/backups/`。`sudo classglow backup-list` 显示当前数据库的备份。两种备份均需另行复制到服务器外保存。
+
+菜单目前只提供 SQLite → 本项目 PostgreSQL 的迁移。外部数据库、反向迁移和已有 PostgreSQL 库合并不自动执行。已经切换并产生新数据后，不能直接恢复旧 SQLite，否则会丢失切换后的更改。PostgreSQL 恢复应先停止自动更新、停写并备份当前库，使用 `pg_restore --single-transaction --clean --if-exists` 恢复指定备份，再运行 `scripts.rotate_epoch` 并启动服务；不要在运行中的库上直接恢复。
+
+选择“卸载本项目”进入二级菜单，默认卸载服务并保留 `/opt/classglow`、数据卷、备份和下载包。彻底删除需要输入 `DELETE CLASSGLOW DATA`，将同时删除项目目录和项目数据卷；其他服务、Docker、Nginx、Certbot、宿主机 TLS 证书及共享构建缓存保留。详细范围和证书后续处理见 [清理文档](SERVER-CLEANUP.md)。
 
 ### 已有 Nginx 的共享服务器
 
@@ -78,7 +100,7 @@ curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/instal
 sudo bash classglow-install.sh --existing-nginx
 ```
 
-此入口复用已安装的 Docker、Compose（≥ 2.24.4）、Git、Nginx 与已注册账户的 Certbot，不安装或升级系统包，不重启 Docker。只增加 `teacher.dgplus.vip` 站点；同名非本项目配置存在时会停止，须先人工核对。域名仍须指向本机，HTTP 的 ACME 验证路径须可从公网访问。
+此入口复用已安装的 Docker、Compose（≥ 2.24.4）、Git、Python 3、Nginx 与已注册账户的 Certbot，不安装或升级系统包，不重启 Docker。Python 3 仅使用标准库处理迁移配置。只增加 `teacher.dgplus.vip` 站点；同名非本项目配置存在时会停止，须先人工核对。域名仍须指向本机，HTTP 的 ACME 验证路径须可从公网访问。
 
 `deploy/.env` 中设置 `KANBAN_GATEWAY=nginx` 后，运维命令自动叠加 `compose.nginx.yaml`：网页只发布 `127.0.0.1:18080`，API 不发布主机端口，Caddy 在容器内处理网页和 `/api/` 转发，宿主机 Nginx 负责 HTTPS。Nginx 覆盖客户端自带的转发头；Caddy 仅在此模式信任内网代理。证书续期沿用宿主机 Certbot 定时器。
 
@@ -98,7 +120,7 @@ Docker Hub 无法访问时，可在 `deploy/.env` 设置 `PYTHON_IMAGE`、`NODE_
 | `/etc/systemd/system/classglow-update.{service,timer}` | 开启自动更新后创建的定时任务 |
 | `classroom-board_*` Docker 卷与网络 | 项目持久数据与隔离网络 |
 
-所有日常操作仍使用 `sudo classglow update/status/logs/backup/setup-key/auto-on/auto-off`（每次填写一个子命令）。需要直接运行 Compose 时须同时加 `-f compose.production.yaml -f compose.nginx.yaml`，否则会使用独立服务器的 80/443 端口配置。
+所有日常操作使用 `sudo classglow` 菜单。需要直接运行 Compose 时，共享服务器须叠加 `compose.nginx.yaml`，迁移至本项目 PostgreSQL 后还须叠加 `compose.postgres.yaml`。建议使用下方的 `dc` 函数，避免遗漏配置。
 
 以下命令在服务器的项目根目录执行。服务器需要 Docker Engine 和 Docker Compose 插件，安装方式见 [Docker 官方安装文档](https://docs.docker.com/engine/install/)。小规模试点可先按 2 核、2GB 内存准备；这是起步配置，尚未进行容量压测。
 
@@ -133,6 +155,9 @@ dc() {
   if sudo grep -qx 'KANBAN_GATEWAY=nginx' deploy/.env; then
     files+=(-f compose.nginx.yaml)
   fi
+  if sudo grep -qx 'KANBAN_DATABASE=postgres' deploy/.env; then
+    files+=(-f compose.postgres.yaml)
+  fi
   sudo docker compose --env-file deploy/.env "${files[@]}" "$@"
 }
 ```
@@ -149,15 +174,9 @@ curl --fail https://teacher.dgplus.vip/api/health
 
 `migrate` 一次性退出且状态为 0 是正常现象；它完成 Alembic 迁移后，`api` 健康检查通过，才启动 `web`。此顺序使用 [Compose 的完成与健康条件](https://docs.docker.com/compose/how-tos/startup-order/)。网页、接口和 TLS 使用同一域名；API 只在内部网络开放。应用与 Caddy 都没有启用记录完整请求路径的访问日志，以免邀请秘密进入日志。
 
-服务启动后，读取首次安装密钥：
+服务启动后，运行 `sudo classglow`，选择“初始化管理员”。也可直接运行 `sudo classglow admin-init`。管理员密码隐藏输入，不通过网页或聊天传递。之后管理员正常登录网站，在“系统管理 → 创建账号”为老师设置账密、身份、班级和学科；教师无需注册。`/setup/initialize` 公网接口已移除。
 
-```bash
-dc exec api python -m scripts.setup_key
-```
-
-打开 `/setup`，填写管理员账号、密码和管理员激活码（即上面读取的安装密钥）。首页不显示服务器命令。开通后进入“系统管理 → 开通账号”，分配老师身份、账号期限、班级和学科，再发放账号激活码；高级许可由管理员另行签发，详见 [账号与许可](ACCOUNT-LICENSES.md)。初始化只允许成功一次，完成后即锁定；密钥存放在数据卷中的 `setup-key.txt`，不会通过网页或启动日志返回。
-
-本机开发用 `uv run python -m scripts.setup_key` 读取。已有旧版数据升级后同样需要首次设置系统管理员：可以新建管理账号，或填写已有账号及其原口令进行升级，历史业务数据保留。
+本机开发使用 `uv run python -m scripts.admin_account init`。升级已有数据库时保留全部业务数据；尚未初始化的站点可在终端创建独立管理账号，已有管理员忘记密码则使用 `admin-reset`。
 
 数据保存在 `classroom-board_app_data` 命名卷。独立网关模式的证书保存在 Caddy 卷；106 的共享 Nginx 模式由宿主机 Certbot 保存证书。API 容器以普通用户运行、根文件系统只读，只有数据卷和临时目录可写。SQLite 使用一个 API 进程，暂不横向扩容，也不将数据库文件放入 NFS/共享盘。不要运行 `docker compose down -v`，该参数会删除数据卷。
 
@@ -167,7 +186,7 @@ dc exec api python -m scripts.setup_key
 
 | 使用位置 | 地址或操作 |
 | --- | --- |
-| 教师电脑、Android Chrome、iPhone Safari | 打开 `https://teacher.dgplus.vip/` 登录；首次使用选择“首次激活”，账号和激活码由系统管理员发放 |
+| 教师电脑、Android Chrome、iPhone Safari | 打开 `https://teacher.dgplus.vip/` 登录；账号和初始密码由管理员发放，老师直接登录 |
 | 手机常用入口 | 底部“班级”“记录”“我的”；“我的”提供私人草稿、班级设置、大屏控制 |
 | 系统管理员入口 | 电脑左侧“系统管理”；手机“我的 → 系统管理” |
 | 手机展示布局 | 班级概览的展示预览入口；布局与主题须明确发布 |
@@ -243,7 +262,7 @@ dc run --rm --no-deps \
 
 ## 6. 检查与故障定位
 
-2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。网页初始化尚未提交，没有预置管理员或演示数据。浏览器自动化在连接阶段超时，本次未进行线上登录后的交互复核；本地业务验证范围见 [验收记录](VERIFICATION.md)。
+2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。生产管理员由使用者在服务器菜单自行创建，没有预置管理员或演示数据。公网登录后的真实学校业务仍待开户后验收；本地隔离验证范围见 [验收记录](VERIFICATION.md)。
 
 Windows x64 0.3.0 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.3.0-win-x64-setup.exe)，大小 51,268,799 字节，SHA-256 为 `47a67c46e3bae55eff3bf2cf0a232a1b335bbae705c06a239edd82a6e1363a3e`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
 
@@ -256,4 +275,4 @@ Windows x64 0.3.0 当前用户安装包提供[公网下载](https://teacher.dgpl
 | 保存冲突 | 保留本机输入，在页面比较最新版本；不要清浏览器存储来解决冲突 |
 | 客户端已缓存但未应用 | 本机是否启用展示、是否暂停、是否仍有课件处于前台 |
 
-`frontend/e2e/mobile.pw.ts` 是旧版公开注册流程的历史用例，不适用于当前激活入口。本次使用隔离账号验收新的身份导航和 390px 页面；后端关键权限与期限检查见 `backend/tests/test_access_licenses.py`，不要对生产账号运行测试。
+`frontend/e2e/mobile.pw.ts` 是旧版公开注册流程的历史用例，不适用于当前管理员开户、老师直接登录的入口。本次使用隔离账号验收新的身份导航和 390px 页面；后端关键权限与期限检查见 `backend/tests/test_access_licenses.py`，不要对生产账号运行测试。

@@ -392,7 +392,7 @@ async function changePassword() {
     sessionStorage.removeItem("kanban-session");
     replaceModel(emptyModel());
     accountDialog.value?.close();
-    flash("口令已修改，原会话已撤销，请重新登录。");
+    flash("密码已修改，原会话已撤销，请重新登录。");
   });
 }
 async function acceptTransfer(t: any) {
@@ -644,7 +644,7 @@ onUnmounted(() => {
         @click="page = 'license'"
       >
         <ShieldCheck :size="18" /><span
-          >账号与许可<small>{{
+          >我的账号<small>{{
             premium ? "高级功能可用" : "基础版 · 免费使用"
           }}</small></span
         >
@@ -1400,7 +1400,7 @@ onUnmounted(() => {
         accountDialog?.close();
       "
     >
-      账号期限与高级许可
+      账号与高级功能
     </button>
     <div class="account-shortcuts">
       <button
@@ -1459,15 +1459,15 @@ onUnmounted(() => {
       </button>
     </article>
     <form @submit.prevent="changePassword">
-      <h3>修改口令</h3>
+      <h3>修改密码</h3>
       <label class="field"
-        >原口令<input
+        >原密码<input
           v-model="passwordForm.oldPassword"
           type="password"
           required
           autocomplete="current-password" /></label
       ><label class="field"
-        >新口令<input
+        >新密码<input
           v-model="passwordForm.newPassword"
           type="password"
           required
@@ -1476,7 +1476,7 @@ onUnmounted(() => {
           autocomplete="new-password"
       /></label>
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-      <button class="button primary full">修改口令并重新登录</button>
+      <button class="button primary full">修改密码并重新登录</button>
     </form>
     <button
       class="text-button destructive"

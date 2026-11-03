@@ -39,7 +39,7 @@ from .db import (
 from .entitlements import class_entitlement, profile, require_premium
 from .middleware import BodyLimitMiddleware, body_limit
 from .security import actor, bearer, digest, fail, limit, member, passwords, secret
-from .system_service import ensure_setup_key, system_config
+from .system_service import system_config
 
 
 def iso(value: float) -> str:
@@ -80,9 +80,6 @@ async def lifespan(_):
             if not db.get(Meta, "sync_epoch"):
                 db.add(Meta(key="sync_epoch", value=uid()))
                 db.commit()
-    with Session(engine) as db:
-        if not system_config(db).initialized:
-            ensure_setup_key()
     yield
 
 
@@ -203,23 +200,7 @@ def client_version():
 
 @app.post("/auth/register", status_code=201)
 def register(body: S.Credentials, request: Request, db: Session = Depends(get_db)):
-    limit(f"register:{request.client.host}", 10, 3600)
-    config = system_config(db)
-    if not config.initialized:
-        fail(409, "setup_required", "学校尚未开通，请联系管理员。")
-    if not config.registration_open:
-        fail(403, "registration_closed", "系统已关闭公开注册，请联系管理员创建账号。")
-    if not body.name.strip():
-        fail(422, "name_required", "请填写显示名称。")
-    user = User(
-        login=body.login.casefold(),
-        name=body.name.strip(),
-        password=passwords.hash(body.password),
-        can_create_classes=False,
-    )
-    db.add(user)
-    db.flush()
-    return session_result(db, user)
+    fail(403, "registration_closed", "账号由管理员统一创建，请联系管理员领取账号和密码。")
 
 
 @app.post("/auth/login")

@@ -2,10 +2,51 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from backend.db import AccountActivation, FeatureLicense, User, now
+from backend.db import AccountActivation, FeatureLicense, SystemConfig, User, now
+from backend.schemas import Credentials
 from backend.tests.test_workflows import classroom, draft, paired, publish, user
+from scripts.admin_account import initialize
 
 PASSWORD = "For-QA-only!2026"
+
+
+def test_console_admin_and_direct_teacher_login(client):
+    c, engine = client
+    with Session(engine) as db:
+        db.get(SystemConfig, 1).initialized = False
+        initialize(db, Credentials(login="console_admin", password=PASSWORD, name="验收管理员"))
+        db.commit()
+    assert c.post("/setup/initialize", json={}).status_code == 404
+    assert c.post("/auth/register", json={"login": "public_signup", "password": PASSWORD}).status_code == 403
+    signed = c.post("/auth/login", json={"login": "console_admin", "password": PASSWORD})
+    root = {"Authorization": f"Bearer {signed.json()['token']}"}
+    head = c.post(
+        "/system/accounts",
+        headers=root,
+        json={
+            "login": "direct_head",
+            "name": "班主任",
+            "password": PASSWORD,
+            "identity": "headteacher",
+        },
+    )
+    assert head.status_code == 201 and "activationCode" not in head.json()
+    signed = c.post("/auth/login", json={"login": "direct_head", "password": PASSWORD})
+    assert signed.status_code == 200 and signed.json()["user"]["canCreateClasses"]
+    head_headers = {"Authorization": f"Bearer {signed.json()['token']}"}
+    cid = classroom(c, head_headers)
+    teacher = {
+        "login": "direct_teacher",
+        "name": "科任老师",
+        "password": PASSWORD,
+        "identity": "teacher",
+        "classes": [{"classId": cid, "subjects": ["数学"]}],
+    }
+    assert c.post("/system/accounts", headers=head_headers, json=teacher).status_code == 403
+    assert c.post("/system/accounts", headers=root, json=teacher).status_code == 201
+    signed = c.post("/auth/login", json={"login": "direct_teacher", "password": PASSWORD})
+    assert signed.status_code == 200
+    assert signed.json()["user"]["activated"] and not signed.json()["user"]["canCreateClasses"]
 
 
 def root_account(c, engine):

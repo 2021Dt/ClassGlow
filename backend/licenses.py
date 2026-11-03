@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from . import schemas as S
 from .db import FeatureLicense, User, get_db, now, sync_epoch
-from .entitlements import account_available, profile
+from .entitlements import profile
 from .security import actor, digest, fail, limit, system_admin
 from .system_service import log_system
 
@@ -104,10 +104,6 @@ def license_status(user: User = Depends(actor)):
 @router.post("/account/license/redeem")
 def redeem(body: Redeem, request: Request, user: User = Depends(actor), db: Session = Depends(get_db)):
     limit(f"license:{user.id}", 10, 300)
-    # 同一账号的不同许可码串行续期，迁移 PostgreSQL 后也不会丢失续期天数。
-    user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
-    if not account_available(user):
-        fail(401, "account_unavailable", "账号已停用或到期，请联系管理员。")
     raw = body.code.replace("-", "").replace(" ", "").upper()
     entry = db.scalar(select(FeatureLicense).where(FeatureLicense.code_hash == digest(raw)).with_for_update())
     if (
