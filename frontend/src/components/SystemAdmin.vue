@@ -23,7 +23,6 @@ import {
   SlidersHorizontal,
   Inbox,
   Check,
-  CircleHelp,
 } from "@lucide/vue";
 import { api, session } from "../api";
 import { adminDate, auditNames, fileSize } from "../admin";
@@ -44,56 +43,48 @@ const sections = [
   {
     id: "overview",
     name: "管理概览",
-    description: "学校的人员、教室和许可，一目了然。",
     icon: LayoutDashboard,
     group: "工作台",
   },
   {
     id: "users",
     name: "账号管理",
-    description: "统一管理教师身份、任教范围与账号期限。",
     icon: Users,
     group: "学校管理",
   },
   {
     id: "classes",
     name: "班级管理",
-    description: "查看班级、安排负责人，管理成员与教学内容。",
     icon: School,
     group: "学校管理",
   },
   {
     id: "devices",
     name: "教室设备",
-    description: "掌握教室连接情况，检查同步状态与设备绑定。",
     icon: Monitor,
     group: "学校管理",
   },
   {
     id: "licenses",
     name: "高级许可",
-    description: "为老师发放专属许可码，跟踪兑换与续期。",
     icon: KeyRound,
     group: "授权与数据",
   },
   {
     id: "backups",
     name: "数据备份",
-    description: "保存全站数据副本，重要操作前先做好备份。",
     icon: Database,
     group: "授权与数据",
   },
   {
     id: "audit",
     name: "操作记录",
-    description: "追溯账号、许可和数据的关键管理操作。",
     icon: ScrollText,
     group: "授权与数据",
   },
   {
     id: "settings",
     name: "站点设置",
-    description: "设置学校看板名称，查看服务信息。",
     icon: Settings,
     group: "系统",
   },
@@ -288,7 +279,7 @@ async function backup() {
   await run(async () => {
     await api("/system/backups", "POST");
     await load();
-    notice.value = "备份已完成，建议下载到服务器外保存。";
+    notice.value = "备份已完成";
   });
 }
 async function download(name: string) {
@@ -394,7 +385,6 @@ defineExpose({ reload: () => load(true) });
           <div>
             <span class="admin-mini-label">{{ activeSection.group }}</span>
             <h1>{{ activeSection.name }}</h1>
-            <p>{{ activeSection.description }}</p>
           </div>
           <div class="admin-heading-actions">
             <button
@@ -466,7 +456,6 @@ defineExpose({ reload: () => load(true) });
               <header class="admin-card-heading">
                 <div>
                   <h2>基本信息</h2>
-                  <p>名称会显示在老师登录页与工作台。</p>
                 </div>
                 <School :size="20" />
               </header>
@@ -491,7 +480,6 @@ defineExpose({ reload: () => load(true) });
               <header class="admin-card-heading">
                 <div>
                   <h2>服务信息</h2>
-                  <p>用于日常运行核对</p>
                 </div>
                 <ShieldCheck :size="20" />
               </header>
@@ -527,10 +515,6 @@ defineExpose({ reload: () => load(true) });
                   <dd>{{ adminDate(overview.serverTime, true) }}</dd>
                 </div>
               </dl>
-              <div class="admin-tip">
-                <CircleHelp :size="17" />
-                <p>更新、数据库迁移和服务器卸载，由服务器管理菜单负责。</p>
-              </div>
             </section>
           </div>
           <section v-else-if="tab === 'backups'" class="admin-card">
@@ -548,7 +532,6 @@ defineExpose({ reload: () => load(true) });
             <div v-if="!rows.length" class="admin-empty">
               <Database :size="30" />
               <h3>还没有备份</h3>
-              <p>首次投入使用前，建议保存一份完整备份。</p>
               <button
                 class="button secondary"
                 :disabled="busy || !backupSupported"
@@ -780,7 +763,7 @@ defineExpose({ reload: () => load(true) });
           </section>
         </template>
         <footer class="admin-footer">
-          <span>ClassGlow · 让班级管理更从容</span><span>北京时间 UTC+8</span>
+          <span>ClassGlow</span><span>北京时间 UTC+8</span>
         </footer>
       </div>
     </div>

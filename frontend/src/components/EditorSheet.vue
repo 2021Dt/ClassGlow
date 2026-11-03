@@ -8,7 +8,7 @@ import {
   ref,
   watch,
 } from "vue";
-import { X, Eye, Send, Check, CloudOff, Save, ChevronLeft } from "@lucide/vue";
+import { X, Eye, Send, Check, Save, ChevronLeft } from "@lucide/vue";
 import { model, clone, localSave } from "../store";
 import {
   canPublish,
@@ -310,11 +310,6 @@ onUnmounted(() => {
         </button>
       </header>
       <div class="sheet-body">
-        <div class="notice subtle">
-          <CloudOff :size="17" /><span
-            >草稿仅本人可见。明确发布后才更新班级正式内容。</span
-          >
-        </div>
         <fieldset class="editor-fields" :disabled="busy || !!pendingPublish">
           <template v-if="!preview">
             <fieldset class="target-field">
@@ -347,11 +342,7 @@ onUnmounted(() => {
                   />失效目标 · 取消选择后可继续</label
                 >
               </div>
-              <small>{{
-                premiumAvailable()
-                  ? "每班生成独立记录，之后逐班修改。"
-                  : "基础版每次发布到一个班级。多班批量发布需高级许可；旧草稿可取消其他班级后发布。"
-              }}</small>
+              <small v-if="!premiumAvailable()">多班发布需高级许可</small>
             </fieldset>
             <label class="field"
               >{{ form.kind === "homework" ? "科目" : "提醒范围" }}
@@ -374,16 +365,13 @@ onUnmounted(() => {
                 v-model="form.body"
                 :rows="7"
                 :placeholder="
-                  form.kind === 'homework'
-                    ? '填写学生需要看到的作业，支持换行…'
-                    : '填写要提醒全班的事项…'
+                  form.kind === 'homework' ? '填写作业内容' : '填写提醒内容'
                 "
                 autofocus
               />
             </label>
             <div class="editor-caption">
-              <span>纯文本，保留换行</span
-              ><span :class="{ 'field-error': length > max }"
+              <span :class="{ 'field-error': length > max }"
                 >{{ length }} / {{ max }} 字</span
               >
             </div>
@@ -396,7 +384,7 @@ onUnmounted(() => {
                     isAdmin(model.classes.find((c) => c.id === id)),
                   )
                 "
-              />高优先级提醒 <small>仅管理员可调整，每班最多 3 条</small></label
+              />高优先级提醒 <small>每班最多 3 条</small></label
             >
             <div class="form-divider"></div>
             <h3 class="form-subheading">展示时间</h3>
@@ -408,9 +396,7 @@ onUnmounted(() => {
             >
               周末作业，展示至下周一 08:00
             </button>
-            <p class="muted small">
-              时间均为北京时间。提交截止不会自动结束展示。
-            </p>
+            <p class="muted small">北京时间 · 展示以“结束展示”为准</p>
             <div class="form-grid">
               <label class="field"
                 >开始展示<input
@@ -447,11 +433,8 @@ onUnmounted(() => {
               ><input
                 v-model="form.reason"
                 maxlength="100"
-                placeholder="原发布者保持不变，请说明修改原因"
+                placeholder="填写修改原因"
             /></label>
-            <p v-if="length > 150" class="notice subtle">
-              内容较长，大屏可能分多页展示；发布将保留全文。
-            </p>
           </template>
           <template v-else>
             <div class="preview-target">
@@ -506,10 +489,8 @@ onUnmounted(() => {
           </button>
         </div>
         <section v-if="conflict" class="conflict-panel">
-          <h3>保留本次输入，比较后继续</h3>
-          <p class="muted small">
-            没有覆盖云端或正式版本。请先查看最新内容，再决定如何继续。
-          </p>
+          <h3>内容已更新</h3>
+          <p class="muted small">请核对最新内容后继续。</p>
           <button class="button secondary" type="button" @click="compareLatest">
             读取最新版本并比较
           </button>
@@ -594,7 +575,6 @@ onUnmounted(() => {
             }}
           </button>
         </div>
-        <small>发布成功后，设备缓存与实际应用分别反馈。</small>
       </footer>
     </form>
   </dialog>

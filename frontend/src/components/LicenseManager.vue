@@ -214,15 +214,7 @@ defineExpose({ reload });
     <section class="admin-license-intro admin-card">
       <span class="license-symbol"><KeyRound :size="25" /></span>
       <div>
-        <h2>把高级功能，交给需要的老师</h2>
-        <p>
-          许可码绑定指定账号，老师在“我的账号”中兑换。有效期从兑换当天开始计算。
-        </p>
-        <div class="license-rules">
-          <span><ShieldCheck :size="14" />一人一码</span
-          ><span><Clock3 :size="14" />30 天内兑换</span
-          ><span><Check :size="14" />续期自动累加</span>
-        </div>
+        <h2>发放许可</h2>
       </div>
       <button class="button primary" @click="openIssue">
         <Plus :size="17" />发放许可
@@ -237,7 +229,6 @@ defineExpose({ reload });
           <h2>
             {{ focusUser ? `${focusUser.name}的许可记录` : "全部许可记录" }}
           </h2>
-          <p>跟踪发放、兑换与失效状态</p>
         </div>
         <button
           class="icon-button"
@@ -284,7 +275,6 @@ defineExpose({ reload });
         <h3>
           {{ status || searchTerm ? "没有匹配的许可记录" : "还没有发放许可" }}
         </h3>
-        <p>基础功能免费可用，需要高级功能时再发放许可。</p>
         <button class="button secondary" @click="openIssue">发放许可</button>
       </div>
       <div v-else class="admin-table-wrap">
@@ -384,7 +374,7 @@ defineExpose({ reload });
       </header>
       <div v-if="issued" class="admin-drawer-body license-issued">
         <span class="admin-result-icon"><Check :size="27" /></span>
-        <h3>现在可以发给老师了</h3>
+        <h3>许可码已生成</h3>
         <p>以下许可码只显示这一次，请复制并妥善保存。</p>
         <div class="issued-code">
           <span>{{ issued.login }} · {{ issued.days }} 天高级许可</span

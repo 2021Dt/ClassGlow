@@ -77,6 +77,7 @@ public sealed class Engine : IDisposable
         State.Server = server.TrimEnd('/');
         var result = (await Request("/device-pairings", "POST", new() { ["name"] = Environment.MachineName }, authenticated: false)).Body!;
         State.PairId = result.Str("id"); State.PairCode = result.Str("code"); State.PairUrl = result.Str("pairingUrl"); State.PairQr = result.Str("qrPngBase64"); State.Credential = result.Str("secret");
+        State.SetupCompleted = false;
         State.Error = "等待手机登录、核对并确认绑定"; Save(); nextPoll = 0;
     }
     public void RequestSync() { nextPoll = 0; changed = true; requireFullSnapshot=true; }

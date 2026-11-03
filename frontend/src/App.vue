@@ -428,7 +428,7 @@ async function createClass() {
     classDialog.value?.close();
     classForm.name = "";
     await adminView.value?.reload();
-    flash("班级已创建，先发布一条内容或绑定教室设备。");
+    flash("班级已创建");
   });
 }
 function edit(kind: Kind, draft?: Draft, source?: Content) {
@@ -668,10 +668,6 @@ onUnmounted(() => {
         >
       </button>
       <div class="sidebar-bottom">
-        <div class="quiet-tip">
-          <ShieldCheck :size="20" /><strong>为课堂保留安静</strong>
-          <p>远程更新在后台接收，<br />教室老师继续使用课件。</p>
-        </div>
         <button class="user-control" @click="logout">
           <span class="avatar">{{ session.name.slice(0, 1) }}</span
           ><span>{{ session.name }}<small>退出登录</small></span
@@ -784,27 +780,17 @@ onUnmounted(() => {
         >
           <span class="large-icon"><School :size="36" /></span>
           <h1>等待分配任教班级</h1>
-          <p>
-            账号已就绪，请联系管理员为你分配班级和学科。分配完成后点击刷新即可。
-          </p>
+          <p>请联系管理员分配班级和学科。</p>
           <button class="button secondary" @click="run(refresh)">
             <RefreshCw :size="18" />刷新我的班级
           </button>
         </section>
         <section v-else-if="!current" class="first-run">
           <span class="large-icon"><School :size="36" /></span>
-          <p class="eyebrow">从一个班级开始</p>
-          <h1>给班级信息一个清楚的家</h1>
-          <p>
-            创建班级后，邀请科任老师一起维护作业，<br />再绑定教室电脑，让信息安静地出现在桌面上。
-          </p>
+          <h1>创建班级</h1>
           <button class="button primary" @click="classDialog?.showModal()">
             <Plus :size="18" />创建第一个班级
           </button>
-          <div class="onboarding-steps">
-            <span><b>01</b> 创建班级</span><span><b>02</b> 发布内容</span
-            ><span><b>03</b> 绑定电脑</span>
-          </div>
         </section>
         <template v-else>
           <div class="page-heading">
@@ -814,21 +800,6 @@ onUnmounted(() => {
                 >{{ current.name }}
               </p>
               <h1>{{ nav.find((n) => n.id === page)?.label }}</h1>
-              <p class="muted">
-                {{
-                  page === "overview"
-                    ? "安排好今天，让每条信息都清楚到达。"
-                    : page === "appearance"
-                      ? "先预览，再发布。每一次调整都由你确认。"
-                      : page === "devices"
-                        ? "关注设备的真实状态，现场操作始终优先。"
-                        : page === "drafts"
-                          ? "私人草稿仅本人可见，发布前不会出现在大屏。"
-                          : page === "settings"
-                            ? "维护班级配置、教学安排与成员权限。"
-                            : "按科目维护作业与提醒，保留每次正式修改。"
-                }}
-              </p>
             </div>
             <div
               class="heading-actions"
@@ -861,11 +832,6 @@ onUnmounted(() => {
                   ? `${devices.filter((d) => d.online).length} 台设备在线`
                   : "尚未绑定教室设备"
               }}</strong
-              ><span>{{
-                devices.length
-                  ? "缓存与画面应用分别反馈；课件可能覆盖桌面。"
-                  : "发布的内容会保留，绑定后即可同步。"
-              }}</span
               ><button class="text-button" @click="page = 'devices'">
                 {{ devices.length ? "控制大屏" : "前往绑定"
                 }}<ArrowUpRight :size="15" />
@@ -917,7 +883,6 @@ onUnmounted(() => {
                   >
                     <BookOpen :size="28" />
                     <h3>还没有作业</h3>
-                    <p>各科老师发布后，会按科目汇总在这里。</p>
                     <button
                       class="text-button"
                       :disabled="current.archived"
@@ -993,7 +958,7 @@ onUnmounted(() => {
                     v-if="!dated.some((c) => c.kind === 'todo')"
                     class="inline-empty"
                   >
-                    暂无提醒。重要事项发布后会出现在这里。
+                    暂无提醒
                   </p>
                   <div
                     class="bounded-content-list reminder-list"
@@ -1064,18 +1029,13 @@ onUnmounted(() => {
                       调整展示<ArrowUpRight :size="14" />
                     </button>
                   </div>
-                  <p class="preview-disclaimer">
-                    根据正式内容生成，非教室实时截图。
-                  </p>
                 </section>
                 <section class="panel draft-card">
                   <div class="section-heading">
                     <h2><FilePenLine :size="19" />继续草稿</h2>
                     <span class="count-pill">{{ drafts.length }}</span>
                   </div>
-                  <p v-if="!drafts.length" class="inline-empty">
-                    暂时没有未发布的草稿。
-                  </p>
+                  <p v-if="!drafts.length" class="inline-empty">暂无草稿</p>
                   <button
                     v-for="d in drafts.slice(0, 2)"
                     :key="d.id"
@@ -1094,19 +1054,11 @@ onUnmounted(() => {
                       ></span
                     ><ArrowRight :size="17" />
                   </button>
-                  <p class="quiet-caption">
-                    <ShieldCheck :size="13" />仅你可见，尚未进入正式展示
-                  </p>
                 </section>
-                <div class="daily-note">
-                  <span>给今天的一句话</span>
+                <div v-if="current.message" class="daily-note">
+                  <span>班级寄语</span>
                   <p>
-                    {{
-                      current.message ||
-                      (admin
-                        ? "在班级设置中，写下给同学们的寄语。"
-                        : "班主任还没有设置寄语。")
-                    }}
+                    {{ current.message }}
                   </p>
                   <span class="note-decoration" aria-hidden="true">✳</span>
                 </div>
@@ -1126,7 +1078,6 @@ onUnmounted(() => {
             <div v-if="!drafts.length" class="empty-state">
               <FilePenLine :size="34" />
               <h2>还没有草稿</h2>
-              <p>编辑时会自动保存，未发布的内容仅你可见。</p>
             </div>
             <article v-for="d in drafts" :key="d.id" class="record-row">
               <div class="record-top">
@@ -1196,7 +1147,7 @@ onUnmounted(() => {
           /></template>
         </template>
         <footer v-if="!adminWorkspace" class="workspace-footer">
-          <span>班级看板</span><span>安静更新 · 清楚展示</span>
+          <span>班级看板</span>
         </footer>
       </main>
     </div>

@@ -288,8 +288,8 @@ watch(
               {{ classroom.message }}
             </p>
             <small
-              >{{ demo ? "示例内容 · " : "" }}预览画面 {{ timeLabel(now) }} ·
-              非设备截图</small
+              >{{ demo ? "示例内容 · " : "" }}设计预览
+              {{ timeLabel(now) }}</small
             >
           </div>
           <span>第 {{ activePage + 1 }} / {{ pages.count }} 页</span>

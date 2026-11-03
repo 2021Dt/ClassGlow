@@ -46,7 +46,6 @@ async function redeem() {
       <div>
         <p class="eyebrow">{{ session.name }} · 我的账号</p>
         <h1>我的账号</h1>
-        <p class="muted">查看账号信息，或开通需要的高级功能。</p>
       </div>
     </header>
     <div class="license-summary">
@@ -58,7 +57,7 @@ async function redeem() {
             ? timeLabel(session.expiresAt * 1000, true)
             : "长期有效"
         }}</strong>
-        <p class="muted">如需延长账号使用时间，请联系管理员。</p>
+        <p class="muted">续期请联系管理员</p>
       </article>
       <article class="panel">
         <KeyRound :size="22" />
@@ -70,12 +69,11 @@ async function redeem() {
               ? `有效期至 ${timeLabel(session.premiumUntil * 1000, true)}`
               : "基础功能永久免费"
         }}</strong>
-        <p class="muted">到期后仍可免费使用基础功能，已有内容会保留。</p>
+        <p class="muted">许可到期后恢复基础版</p>
       </article>
     </div>
     <section v-if="!session.systemAdmin" class="panel license-redeem">
       <h2>开通高级功能</h2>
-      <p class="muted">需要高级功能时，请向管理员领取激活码。</p>
       <form @submit.prevent="redeem">
         <label class="field"
           >激活码<input

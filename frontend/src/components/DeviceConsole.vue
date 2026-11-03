@@ -229,9 +229,9 @@ const summary = computed(() => {
   const d = device.value;
   if (!d) return "";
   if (!d.online) return "设备暂时不可达";
-  if (d.localPaused) return d.deferred ? "本机暂停待安静应用" : "本机已暂停";
+  if (d.localPaused) return d.deferred ? "暂停待生效" : "本机已暂停";
   if (d.remotePaused) return "远程已暂停";
-  if (d.deferred) return "已同步，等待安静应用";
+  if (d.deferred) return "已同步，等待返回桌面";
   if (d.error) return "设备需要检查";
   if (needsCanvasUpdate.value) return "基础看板运行中，等待客户端升级";
   return d.applied ? "看板运行中" : "等待首次应用";
@@ -267,15 +267,15 @@ onUnmounted(() => clearInterval(poll));
     <div v-if="error" class="notice danger" role="alert">{{ error }}</div>
     <div v-if="notice" class="notice subtle" role="status">{{ notice }}</div>
     <div v-if="pending" class="notice warning control-pending">
-      <span>上一笔控制结果待确认，已保留原请求标识。</span
+      <span>上次操作结果待确认</span
       ><button class="text-button" :disabled="busy" @click="run(queryPending)">
         查询原请求结果</button
       ><button class="text-button" :disabled="busy" @click="run(submitPending)">
-        使用原标识安全重试
+        重试
       </button>
     </div>
     <p v-if="!premiumAvailable(now)" class="notice subtle">
-      设备绑定和自动同步免费可用。远程暂停、翻页及请求同步需要高级许可，可在“账号与许可”输入管理员提供的许可码。
+      远程控制需高级许可。
     </p>
     <div class="section-heading">
       <div class="segmented">
@@ -298,8 +298,8 @@ onUnmounted(() => clearInterval(poll));
     </div>
     <section v-if="!device" class="panel empty-state">
       <Monitor :size="36" />
-      <h2>让班级信息出现在教室桌面</h2>
-      <p>在 Windows 客户端取得 6 位绑定码，<br />核对设备与班级后完成绑定。</p>
+      <h2>尚未绑定教室电脑</h2>
+      <p>输入 Windows 客户端显示的 6 位绑定码。</p>
       <button class="button primary" :disabled="!allowed" @click="emit('bind')">
         输入绑定码
       </button>
@@ -373,9 +373,7 @@ onUnmounted(() => clearInterval(poll));
           自由画布需要 Windows 0.4.0
           或更新版本。当前设备暂用基础看板，升级后会自动取得你的设计。
         </p>
-        <p v-if="paused" class="quiet-caption">
-          暂停时保留最近的看板样式记录，不代表当前壁纸。
-        </p>
+        <p v-if="paused" class="quiet-caption">展示已暂停</p>
         <p v-if="device.materialReason" class="notice subtle">
           {{ device.materialReason }}
         </p>
@@ -431,9 +429,7 @@ onUnmounted(() => clearInterval(poll));
             恢复自动翻页
           </button>
         </div>
-        <p class="quiet-caption">
-          上报于 {{ timeLabel(device.reported) }}，不是实时截图。
-        </p>
+        <p class="quiet-caption">样式上报于 {{ timeLabel(device.reported) }}</p>
         <div class="record-actions">
           <button class="text-button" @click="emit('design')">
             预览与调整布局</button

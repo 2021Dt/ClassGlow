@@ -98,11 +98,8 @@ function again() {
 <template>
   <section class="panel onboarding-form">
     <template v-if="result"
-      ><span class="badge neutral">账号已创建 · 可以直接登录</span>
+      ><span class="badge neutral">账号已创建</span>
       <h2>{{ result.name }}的登录信息</h2>
-      <p>
-        请把账号和初始密码交给本人。老师打开网页即可登录，不需要注册或激活账号。
-      </p>
       <div class="issued-code">
         <span>账号</span><strong>{{ result.login }}</strong
         ><span>初始密码</span><code>{{ result.password }}</code>
@@ -116,9 +113,6 @@ function again() {
     >
     <template v-else
       ><h2>为老师创建账号</h2>
-      <p class="muted">
-        设置账号、初始密码和任教范围，老师登录后就能开始使用。
-      </p>
       <form @submit.prevent="create">
         <fieldset :disabled="busy">
           <div class="form-grid">
@@ -165,9 +159,7 @@ function again() {
               type="date"
               v-model="form.expiry"
           /></label>
-          <p class="muted small">
-            账号期限和高级许可期限分别管理。新账号默认使用免费基础功能，高级许可请到“高级许可”签发。
-          </p>
+          <p class="muted small">高级许可在“高级许可”页面单独发放。</p>
           <template v-if="form.identity !== 'system_admin'">
             <h3>
               {{

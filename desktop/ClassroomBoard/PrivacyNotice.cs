@@ -2,8 +2,9 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
-using Button = System.Windows.Controls.Button;
+using Button = Wpf.Ui.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
+using HorizontalAlignment = System.Windows.HorizontalAlignment;
 
 namespace ClassroomBoard;
 
@@ -46,33 +47,75 @@ public static class PrivacyNotice
 
     public static bool Show(bool requireConsent)
     {
-        bool accepted = false;
-        var window = new Window { Title = AppPaths.DisplayName + " · 隐私与本机数据", Width = 720, Height = 760, MinWidth = 520, MinHeight = 500, FontFamily = new System.Windows.Media.FontFamily("Microsoft YaHei UI"), FontSize = 14, WindowStartupLocation = WindowStartupLocation.CenterScreen };
-        var root = new DockPanel { Margin = new Thickness(24) };
-        var footer = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var window = Create(requireConsent);
+        window.ShowDialog(); return window.Tag is true;
+    }
+
+    public static AppWindow Create(bool requireConsent, bool preview = false)
+    {
+        var window = new AppWindow(requireConsent ? "欢迎使用" : "隐私与本机数据");
+        var root = new DockPanel { Margin = new Thickness(32, 8, 32, 22), MaxWidth = 680 };
+        var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 22) };
+        var step = AppWindow.Hint(requireConsent ? "01 / 03　隐私说明" : "CLASSGLOW · 教室电脑");
+        step.HorizontalAlignment = HorizontalAlignment.Center; step.SetResourceReference(TextBlock.ForegroundProperty, "GlowAccent");
+        heading.Children.Add(step);
+        heading.Children.Add(new TextBlock { Text = requireConsent ? "欢迎来到班级看板" : "隐私与本机数据", FontSize = 28,
+            FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 14, 0, 8) });
+        var hint = AppWindow.Hint("开始之前，先了解它会做什么。");
+        hint.TextAlignment = TextAlignment.Center; heading.Children.Add(hint);
+        DockPanel.SetDock(heading, Dock.Top); root.Children.Add(heading);
+        var footer = new StackPanel { Margin = new Thickness(0, 18, 0, 0) };
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
-        var consent = new CheckBox { Content = "我已阅读并同意上述本机数据与联网说明", IsChecked = false, Margin = new Thickness(0, 0, 0, 14) };
+        var consent = new CheckBox { Content = AppWindow.Hint("我已阅读并同意《隐私与本机数据说明》"), IsChecked = false,
+            Margin = new Thickness(0, 0, 0, 16) };
         if (requireConsent) footer.Children.Add(consent);
-        var buttons = new WrapPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-        var accept = new Button { Content = requireConsent ? "同意并继续" : "关闭", IsEnabled = !requireConsent, Padding = new Thickness(16, 8, 16, 8) };
+        var buttons = new Grid();
+        var accept = new Button { Content = requireConsent ? "下一步：连接班级" : "关闭", IsEnabled = !requireConsent,
+            HorizontalAlignment = HorizontalAlignment.Right, Style = (Style)System.Windows.Application.Current.FindResource("GlowPrimary") };
         consent.Checked += (_, _) => accept.IsEnabled = true;
         consent.Unchecked += (_, _) => accept.IsEnabled = false;
         accept.Click += (_, _) => {
-            if (requireConsent) {
+            // 外观预览可完整走完页面，但不能代替用户真正同意或留下业务数据。
+            if (requireConsent && !preview) {
                 Directory.CreateDirectory(AppPaths.DataDirectory);
                 File.WriteAllText(Path.Combine(AppPaths.DataDirectory, "privacy.json"), JsonSerializer.Serialize(new Consent(Revision, DateTimeOffset.UtcNow)));
             }
-            accepted = true; window.Close();
+            window.Tag = true; window.Close();
         };
         buttons.Children.Add(accept);
         if (requireConsent) {
-            var reject = new Button { Content = "不同意并退出", Padding = new Thickness(16, 8, 16, 8), Margin = new Thickness(12, 0, 0, 0) };
+            var reject = new Button { Content = "不同意并退出", Appearance = Wpf.Ui.Controls.ControlAppearance.Transparent,
+                Padding = new Thickness(16, 10, 16, 10), HorizontalAlignment = HorizontalAlignment.Left };
             reject.Click += (_, _) => window.Close(); buttons.Children.Add(reject);
         }
-        var uninstall = new Button { Content = requireConsent ? "卸载本程序" : "撤回同意并卸载", Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(12, 0, 0, 0) };
+        footer.Children.Add(buttons);
+        var version = AppWindow.Hint($"ClassGlow {AppPaths.Version}" + (preview ? "  ·  外观预览，不保存同意记录" : "  ·  当前用户客户端"));
+        version.HorizontalAlignment = HorizontalAlignment.Center; version.Margin = new Thickness(0, 20, 0, 0);
+        footer.Children.Add(version);
+
+        var content = new StackPanel { MaxWidth = 520 };
+        if (requireConsent) {
+            var summary = new StackPanel();
+            summary.Children.Add(new System.Windows.Controls.Image { Source = AppWindow.BrandIcon(), Width = 58, Height = 58, Margin = new Thickness(0, 0, 0, 18) });
+            foreach (var (title, detail) in new[] {
+                ("只连接你的班级", "同意并绑定后，接收教学内容，发送设备名称和同步状态；没有广告与第三方统计。"),
+                ("本机变更由你选择", "壁纸展示和自动启动默认关闭。不读取个人文档，不截图，不访问摄像头或麦克风。"),
+                ("随时退出，也能完整卸载", "退出恢复原壁纸。卸载清理本程序的文件、凭证、缓存和启动项，保留你另放的文件。")
+            }) {
+                summary.Children.Add(new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 5) });
+                var detailText = AppWindow.Hint(detail); detailText.Margin = new Thickness(0, 0, 0, 12); summary.Children.Add(detailText);
+            }
+            content.Children.Add(new Border { Style = (Style)System.Windows.Application.Current.FindResource("GlowCard"), Child = summary });
+        }
+        var fullText = new StackPanel { Margin = new Thickness(12, 10, 12, 8) };
+        fullText.Children.Add(new TextBlock { Text = Text, TextWrapping = TextWrapping.Wrap, FontSize = 13, LineHeight = 24 });
+        var uninstall = new Button { Content = requireConsent ? "卸载本程序" : "撤回同意并卸载", IsEnabled = !preview,
+            Padding = new Thickness(12, 8, 12, 8), Margin = new Thickness(0, 18, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
         uninstall.Click += (_, _) => { if (ClientLifecycle.StartUninstaller()) window.Close(); };
-        buttons.Children.Add(uninstall); footer.Children.Add(buttons);
-        root.Children.Add(new ScrollViewer { Content = new TextBlock { Text = Text, TextWrapping = TextWrapping.Wrap, FontSize = 14, LineHeight = 24 }, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        window.Content = root; window.ShowDialog(); return accepted;
+        fullText.Children.Add(uninstall);
+        if (requireConsent) content.Children.Add(new Expander { Header = "阅读完整隐私与本机数据说明", Content = fullText, Margin = new Thickness(0, 16, 0, 0) });
+        else content.Children.Add(fullText);
+        root.Children.Add(new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        window.SetBody(root); return window;
     }
 }

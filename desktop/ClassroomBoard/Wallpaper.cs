@@ -33,6 +33,20 @@ public sealed class Wallpaper : IWallpaper
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int length);
 
     private static IDesktopWallpaper Open() => (IDesktopWallpaper)Activator.CreateInstance(Type.GetTypeFromCLSID(ClassId, true)!)!;
+    public (int Index, int Width, int Height)[] Monitors()
+    {
+        // 使用壁纸接口本身的顺序，避免将 WinForms 的屏幕顺序误当成 COM 序号。
+        var api = Open();
+        try {
+            api.GetMonitorDevicePathCount(out uint count);
+            var result = new (int Index, int Width, int Height)[count];
+            for (uint index = 0; index < count; index++) {
+                api.GetMonitorDevicePathAt(index, out string id); api.GetMonitorRECT(id, out var rect);
+                result[index] = ((int)index, rect.Right - rect.Left, rect.Bottom - rect.Top);
+            }
+            return result;
+        } finally { Marshal.FinalReleaseComObject(api); }
+    }
     public (string Id, NativeRect Rect, string Original) Read(int index)
     {
         var api = Open();

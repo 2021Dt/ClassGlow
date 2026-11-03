@@ -9,12 +9,26 @@
 3. 老师打开网站，输入管理员给的账号和密码，直接进入自己的工作台。没有注册或首次激活步骤，忘记密码联系管理员重置。
 
 4. 班主任可创建、管理自己负责的班级，维护课表、提醒、寄语和任教学科；普通老师只维护自己被授权的学科内容。
-5. 在教室 Windows 电脑安装 [Windows 0.4.0 客户端](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.0-win-x64-setup.exe)，从开始菜单打开并阅读首次隐私说明。服务地址默认为 **`https://teacher.dgplus.vip/api/`**，生成 6 位设备绑定码。
+5. 在教室电脑安装 [Windows 0.4.1 客户端](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.1-win-x64-setup.exe)，从开始菜单打开。第一步阅读隐私说明，第二步生成 6 位绑定码。服务地址默认已填好，通常无需修改。
 6. 班主任进入“大屏控制”输入绑定码、核对教室并确认。设备绑定码只用于绑定电脑，与高级功能激活码无关。绑定和自动同步免费。
-7. 回到 Windows 客户端，核对目标屏幕，在本机启用展示；启用前不写入壁纸。老师发布的正式内容会自动同步。
+7. 绑定成功后点“下一步”，选择是否在桌面展示、展示在哪块屏幕及是否自动启动，再点“完成设置”。两项默认关闭，勾选时尚不生效。
 8. 需要高级功能时，向管理员领取绑定本人账号的许可码，在“我的账号 → 开通高级功能”填写。手机入口为“我的 → 账号与高级功能”。
 
 基础免费：作业、提醒、课表、默认看板和基础同步。高级许可：自定义背景 / 布局、多班批量发布、远程大屏控制。身份仍决定可操作的范围，普通老师兑换许可不会变成班主任。期限区别与续期规则见 [账号与许可说明](ACCOUNT-LICENSES.md)。
+
+## Windows 首次打开
+
+0.4.1 将首次配置拆成三页，服务器地址收在“其他服务器”中。新绑定尚未完成展示设置时，重开程序会继续第三步。已完成配置的用户直接看到班级与运行状态，展开“查看同步详情”才显示版本和分页信息；点“展示设置”可修改本机选项。
+
+截图来自 Windows 11 上实际运行的客户端外观预览，示例班级不连接生产服务器，也不写入壁纸或启动项。
+
+<img src="images/windows-onboarding-privacy.png" alt="第一步：隐私说明" width="480">
+
+<img src="images/windows-onboarding-connect.png" alt="第二步：连接班级" width="480">
+
+<img src="images/windows-onboarding-display.png" alt="第三步：展示设置" width="480">
+
+窗口使用 [WPF UI](https://github.com/lepoco/wpfui) 的 Fluent 标题栏与云母材质，第三方许可随安装包提供。此窗口材质与桌面看板合成壁纸是不同的显示方式。
 
 ## 老师每天怎样操作
 
@@ -63,15 +77,15 @@ Windows 0.4.0 真实程序在隔离联调窗口中显示同一设计，窗口内
 
 电脑教师端：
 
-![电脑教师端](images/teacher-desktop.png)
+![电脑教师端](images/teacher-clean-copy.png)
 
 手机教师端：
 
-<img src="images/teacher-mobile.png" alt="手机教师端" width="320">
+<img src="images/teacher-clean-copy-mobile.png" alt="手机教师端" width="320">
 
 系统管理员后台：
 
-![系统管理员后台](images/system-admin.png)
+![系统管理员后台](images/admin-clean-copy.png)
 
 ## 大屏更新与当前完成程度
 

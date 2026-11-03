@@ -30,7 +30,6 @@ import {
   ArrowDown,
   Save,
   FolderOpen,
-  Monitor,
   Maximize2,
   Minimize2,
 } from "@lucide/vue";
@@ -395,7 +394,7 @@ onUnmounted(() => {
       <div class="studio-heading">
         <span><Layers :size="18" /></span>
         <div>
-          <strong>看板设计室</strong><small>像搭积木一样，设计你的教室</small>
+          <strong>看板设计</strong>
         </div>
       </div>
       <div class="studio-history">
@@ -443,7 +442,7 @@ onUnmounted(() => {
       {{ publishNotice }}
     </p>
     <p v-if="disabled" class="notice subtle studio-notice">
-      自由设计需要有效的高级许可。基础看板仍可正常使用。
+      自由设计需开通高级许可。
     </p>
     <div v-if="feedback" class="notice subtle studio-notice" role="status">
       {{ feedback }}
@@ -456,7 +455,6 @@ onUnmounted(() => {
         <div class="studio-section-title">
           <strong>添加组件</strong><span>{{ items.length }}/24</span>
         </div>
-        <p class="studio-help">点一下添加，拖动到喜欢的位置</p>
         <div class="studio-palette">
           <button
             v-for="entry in palette"
@@ -620,21 +618,14 @@ onUnmounted(() => {
             :disabled="page >= pages"
             @click="page++"
           >
-            <ChevronRight :size="16" /></button
-          ><small>长内容自动分页，卡片大小保持不变</small>
+            <ChevronRight :size="16" />
+          </button>
         </div>
         <p class="studio-canvas-hint">
           拖动移动 · 右下角缩放 · 方向键微调 · Ctrl+D 复制 · Delete 删除
         </p>
         <div v-if="!items.length" class="studio-empty-hint">
-          <Plus :size="20" /><strong>从一张空白画布开始</strong>
-          <p>添加组件、写几句话，或者放一张图片。</p>
-        </div>
-        <div class="studio-publish-note">
-          <Monitor :size="15" /><span
-            >这是设计预览。点击发布后同步到教室，Windows 客户端需升级至
-            0.4.0。</span
-          >
+          <Plus :size="20" /><strong>从左侧添加组件</strong>
         </div>
       </div>
       <aside class="studio-inspector">
@@ -654,8 +645,7 @@ onUnmounted(() => {
         <div v-if="propertyTab === 'component'" class="studio-property-body">
           <div v-if="!current" class="studio-no-selection">
             <Layers :size="27" />
-            <h3>选中一块组件</h3>
-            <p>调整位置、字号和颜色，让每块内容都合适。</p>
+            <h3>选择组件以编辑属性</h3>
             <button
               class="text-button"
               :disabled="disabled"
@@ -668,11 +658,7 @@ onUnmounted(() => {
             ><div class="studio-selected-heading">
               <div>
                 <strong>{{ widgetLabels[current.kind] }}</strong
-                ><small>{{
-                  current.locked
-                    ? "已锁定，解锁后可拖动"
-                    : "自由排列 · 支持叠放"
-                }}</small>
+                ><small v-if="current.locked">已锁定</small>
               </div>
               <button
                 class="icon-button"
@@ -728,9 +714,7 @@ onUnmounted(() => {
                     :disabled="imageBusy"
                     @change="upload"
                 /></label>
-                <p class="studio-help">
-                  图片会压缩保存，保留原始宽高比完整显示。
-                </p></template
+                <p class="studio-help">JPG / PNG / WebP</p></template
               >
               <div class="studio-number-grid">
                 <label class="field"
@@ -962,9 +946,7 @@ onUnmounted(() => {
           >
             <FolderOpen :size="15" />读取本机设计草稿
           </button>
-          <p class="studio-help">
-            草稿只留在当前浏览器，发布后才会同步到教室。
-          </p>
+          <p class="studio-help">本机草稿 · 未发布</p>
         </div>
       </aside>
     </div>

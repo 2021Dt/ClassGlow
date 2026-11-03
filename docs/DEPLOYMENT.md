@@ -12,18 +12,18 @@
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | 0.4.0，自由画布 / 独立管理后台；准确提交通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.4.1，Windows 分步引导 / 网页文案精简；准确提交通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
 | 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.4.0 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+| Windows 发布 | 0.4.1 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
 
-0.4.0 沿用 SQLite 与迁移版本 `c091d27b681e`。自由画布存在布局 JSON 中，不需要新增数据库表。Nginx 和 Caddy 的布局请求上限统一为 2 MiB，其他接口在应用层仍限 128 KiB；升级现有 Nginx 部署时，应同步更新本项目 `.deploy/nginx.conf` 的 `client_max_body_size 2m`，先 `nginx -t` 再重载。只修改本项目站点配置。Windows 旧客户端继续展示基础看板，升级后自动取得自由画布；服务端更新不会自动替换教室电脑程序。
+0.4.1 沿用 SQLite 与迁移版本 `c091d27b681e`。自由画布存在布局 JSON 中，不需要新增数据库表。Nginx 和 Caddy 的布局请求上限统一为 2 MiB，其他接口在应用层仍限 128 KiB；升级现有 Nginx 部署时，应同步更新本项目 `.deploy/nginx.conf` 的 `client_max_body_size 2m`，先 `nginx -t` 再重载。只修改本项目站点配置。Windows 旧客户端继续展示基础看板，升级后自动取得自由画布；服务端更新不会自动替换教室电脑程序。
 
 停用、日常空间清理和彻底移除的顺序见 [服务器后期清理](SERVER-CLEANUP.md)。两份文档随代码存放在服务器 `/opt/classglow/docs/`，不包含安装密钥、口令或私钥。
 
@@ -266,7 +266,7 @@ dc run --rm --no-deps \
 
 2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。生产管理员由使用者在服务器菜单自行创建，没有预置管理员或演示数据。公网登录后的真实学校业务仍待开户后验收；本地隔离验证范围见 [验收记录](VERIFICATION.md)。
 
-Windows x64 0.4.0 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.0-win-x64-setup.exe)，大小 51,266,175 字节，SHA-256 为 `c782d4bdec0de181c6f7a3b77195291d48f503d5a96041472b440d0b1888bdc5`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
+Windows x64 0.4.1 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.1-win-x64-setup.exe)，大小 52,975,227 字节，SHA-256 为 `3f613dd7f8531d9fffb73ef754260cef3da446adb28fefd9deb67b55b919a012`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
 
 | 现象 | 检查方向 |
 | --- | --- |

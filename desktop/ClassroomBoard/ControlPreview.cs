@@ -5,7 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using Button = System.Windows.Controls.Button;
+using Button = Wpf.Ui.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
 using Image = System.Windows.Controls.Image;
 
@@ -40,12 +40,13 @@ public static class ControlPreview
         if (directory is null || server is null || !Engine.ValidateServer(server).IsLoopback) return 2;
         Directory.CreateDirectory(directory);
         var app = new System.Windows.Application();
+        AppWindow.InitializeTheme();
         var image = new Image { Stretch = Stretch.Uniform };
         var surface = new PreviewSurface(image);
         using var engine = new Engine(new StateStore(directory), desktop: surface);
         engine.State.EnableWallpaper = true;
-        var panel = new DockPanel { Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(236, 239, 237)) };
-        var toolbar = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(12) };
+        var panel = new DockPanel { Margin = new Thickness(20, 4, 20, 16) };
+        var toolbar = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 16) };
         var localPause = new Button { Content = "现场暂停", Padding = new Thickness(10, 5, 10, 5), Margin = new Thickness(0, 0, 12, 0) };
         localPause.Click += (_, _) => { engine.LocalPause(!engine.State.LocalPaused); localPause.Content = engine.State.LocalPaused ? "现场恢复" : "现场暂停"; };
         var available = new CheckBox { Content = "允许应用画面（模拟返回桌面）", IsChecked = true, VerticalAlignment = VerticalAlignment.Center };
@@ -53,8 +54,11 @@ public static class ControlPreview
         toolbar.Children.Add(localPause); toolbar.Children.Add(available);
         DockPanel.SetDock(toolbar, Dock.Top); panel.Children.Add(toolbar);
         var status = new TextBlock { Margin = new Thickness(14, 8, 14, 12), TextWrapping = TextWrapping.Wrap };
-        DockPanel.SetDock(status, Dock.Bottom); panel.Children.Add(status); panel.Children.Add(image);
-        var window = new Window { Title = "ClassGlow · Windows 联调预览（隔离）", Width = 1280, Height = 810, MinWidth = 800, MinHeight = 500, Content = panel };
+        status.SetResourceReference(TextBlock.ForegroundProperty, "GlowMuted");
+        DockPanel.SetDock(status, Dock.Bottom); panel.Children.Add(status);
+        // 画面容器不再套用系统灰框；预览和正式设置窗口共用同一套标题栏。
+        panel.Children.Add(new Border { CornerRadius = new CornerRadius(14), ClipToBounds = true, Child = image });
+        var window = new AppWindow("看板联调预览（隔离）", 1280, 860); window.SetBody(panel);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         bool ticking = false, closing = false;
         timer.Tick += async (_, _) => {

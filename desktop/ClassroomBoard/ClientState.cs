@@ -29,6 +29,8 @@ public sealed class ClientState
     public bool RemotePaused { get; set; }
     public bool ReduceEffects { get; set; }
     public bool EnableWallpaper { get; set; }
+    // null 兼容已绑定的旧版本；新配对在完成第三步前保持 false，重开可继续引导。
+    public bool? SetupCompleted { get; set; }
     public int MonitorIndex { get; set; }
     public string OriginalWallpaper { get; set; } = "";
     public string OriginalMonitor { get; set; } = "";

@@ -25,9 +25,11 @@ public static class Program
         if (args.Contains("--network-self-test")) return SelfTest.Network(args).GetAwaiter().GetResult();
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
         if (args.Contains("--control-preview")) return ControlPreview.Run(args);
+        if (args.Contains("--ui-preview")) return UiPreview.Run(args);
         using var singleton = new Mutex(true, AppPaths.MutexName, out bool first);
         if (!first) return 0;
         var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        AppWindow.InitializeTheme();
         try {
             if (!PrivacyNotice.Accepted()) {
                 // 升级后首次告知留到用户手动打开；开机不弹窗，也不继续联网或展示。
@@ -45,7 +47,8 @@ public static class Program
             if (!args.Contains("--startup")) MessageBox.Show("本机状态无法读取。可从 Windows“已安装的应用”卸载并清理，或先由管理员备份检查。", "班级看板");
             return 1;
         }
-        using var tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "班级看板", Visible = true };
+        using var trayIcon = AppWindow.TrayIcon();
+        using var tray = new Forms.NotifyIcon { Icon = trayIcon, Text = "班级看板", Visible = true };
         app.DispatcherUnhandledException += (_, e) => {
             // 运行异常只留在托盘状态，不让默认异常对话框打断课件；不记录正文或凭证。
             engine.State.Error="本机运行异常，请在托盘检查状态";
@@ -72,7 +75,10 @@ public static class Program
         Window? statusWindow = null;
         void ShowStatus()
         {
-            if (statusWindow is not null) { statusWindow.Activate(); return; }
+            if (statusWindow is not null) {
+                if (statusWindow.WindowState == WindowState.Minimized) statusWindow.WindowState = WindowState.Normal;
+                statusWindow.Activate(); return;
+            }
             statusWindow = StatusWindow(engine); statusWindow.Closed += (_, _) => statusWindow = null; statusWindow.Show();
         }
         menu.Items.Add("查看状态与绑定", null, (_, _) => ShowStatus());
@@ -101,8 +107,8 @@ public static class Program
         Microsoft.Win32.SystemEvents.PowerModeChanged += powerChanged;
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += displayChanged;
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += preferenceChanged;
-        // 仅首次未绑定时展示配置。已绑定的开机启动全过程保持安静。
-        if (engine.State.Credential.Length == 0 && !args.Contains("--startup")) ShowStatus();
+        // 手动打开可查看状态；开机启动不弹窗打断教学。
+        if (!args.Contains("--startup")) ShowStatus();
         app.Run(); timer.Stop();
         stopListener.Unregister(null);
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= networkChanged;
@@ -113,66 +119,10 @@ public static class Program
     }
     private static Window StatusWindow(Engine engine)
     {
-        var window = new Window { Title = AppPaths.DisplayName + " · 本机状态", Width = 560, Height = 740, ResizeMode = ResizeMode.CanMinimize, WindowStartupLocation = WindowStartupLocation.CenterScreen };
-        var panel = new StackPanel { Margin = new Thickness(28) };
-        void Label(string value, double size = 14) => panel.Children.Add(new TextBlock { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 9) });
-        Label("班级看板", 26); Label("远程更新不会弹窗或切换课件。实际壁纸应用采用保守策略，等待前台返回桌面。");
-        Label("服务地址（生产使用 HTTPS）"); var server = new TextBox { Text = engine.State.Server, Margin = new Thickness(0, 0, 0, 12), Padding = new Thickness(8) }; panel.Children.Add(server);
-        var output = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 16) };
-        var qr = new System.Windows.Controls.Image { Width = 180, Height = 180, Margin = new Thickness(0, 10, 0, 10) };
-        var pair = new Button { Content = "生成一次性绑定码", Padding = new Thickness(10), IsEnabled = engine.State.BindingId.Length == 0 };
-        pair.Click += async (_, _) => {
-            pair.IsEnabled = false;
-            try {
-                await engine.Pair(server.Text); output.Text = $"绑定码：{engine.State.PairCode}（10 分钟有效）\n手机入口：{engine.State.PairUrl}\n请在手机登录后核对班级与本机名称。";
-                if (engine.State.PairQr.Length > 0) {
-                    using var stream = new MemoryStream(Convert.FromBase64String(engine.State.PairQr));
-                    var image = new System.Windows.Media.Imaging.BitmapImage(); image.BeginInit(); image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad; image.StreamSource = stream; image.EndInit(); image.Freeze(); qr.Source = image;
-                }
-            }
-            catch (Exception e) when (e is HttpRequestException or TaskCanceledException or InvalidOperationException) { output.Text = "配对未完成：" + e.Message; }
-            finally { pair.IsEnabled = engine.State.BindingId.Length == 0; }
-        };
-        panel.Children.Add(pair); panel.Children.Add(output); panel.Children.Add(qr);
-        var enable = new CheckBox { Content = "在本机启用壁纸展示（实机验收前仅用于测试）", IsChecked = engine.State.EnableWallpaper, Margin = new Thickness(0, 10, 0, 8) };
-        enable.Click += (_, _) => { engine.State.EnableWallpaper = enable.IsChecked == true; engine.Save(); engine.RequestSync(); if (!engine.State.EnableWallpaper) { try { engine.RestoreWallpaper(); } catch (System.Runtime.InteropServices.COMException) { output.Text = "恢复壁纸失败，请检查系统桌面策略。"; } } };
-        panel.Children.Add(enable);
-        Label("目标显示器序号（从 0 开始，仅影响选定显示器）", 12);
-        var monitorInput = new TextBox { Text = engine.State.MonitorIndex.ToString(), Padding = new Thickness(8) }; panel.Children.Add(monitorInput);
-        var chooseMonitor = new Button { Content = "核对并选择显示器", Padding = new Thickness(8), Margin = new Thickness(0, 8, 0, 8) };
-        chooseMonitor.Click += (_, _) => {
-            try {
-                if (!int.TryParse(monitorInput.Text, out int index) || index < 0) throw new InvalidOperationException("请输入有效的显示器序号。");
-                var monitor = new Wallpaper().Read(index);
-                if (index != engine.State.MonitorIndex) {
-                    if (engine.State.EnableWallpaper) engine.RestoreWallpaper();
-                    engine.State.MonitorIndex = index; engine.State.OriginalCaptured = false; engine.State.OriginalWallpaper = engine.State.OriginalMonitor = "";
-                    engine.Save(); engine.RequestSync();
-                }
-                output.Text = $"已选择显示器 {index}，分辨率 {monitor.Rect.Right - monitor.Rect.Left} × {monitor.Rect.Bottom - monitor.Rect.Top}";
-            } catch (Exception e) when (e is InvalidOperationException or System.Runtime.InteropServices.COMException or IOException) { output.Text = e.Message; }
-        };
-        panel.Children.Add(chooseMonitor);
-        var startup = new CheckBox { Content = "随当前用户登录启动", Margin = new Thickness(0, 10, 0, 10) };
-        using (var registry = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(AppPaths.StartupKey)) startup.IsChecked = registry?.GetValue(AppPaths.ProductId) is not null;
-        startup.Click += (_, _) => {
-            try {
-                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(AppPaths.StartupKey);
-                if (startup.IsChecked == true) key.SetValue(AppPaths.ProductId, $"\"{Environment.ProcessPath}\" --startup"); else key.DeleteValue(AppPaths.ProductId, false);
-            } catch (Exception e) when (e is UnauthorizedAccessException or System.Security.SecurityException) { output.Text = "当前学校策略不允许设置启动项，请联系电教管理员。"; startup.IsChecked = false; }
-        };
-        panel.Children.Add(startup);
-        var refresh = new Button { Content = "刷新本机状态", Padding = new Thickness(10), Margin = new Thickness(0, 10, 0, 0) };
-        refresh.Click += (_, _) => output.Text = $"{engine.Status}\n缓存 v{engine.State.CachedVersion} / 应用 v{engine.State.AppliedVersion}\n第 {engine.State.Page} / {engine.State.PageCount} 页\n{(engine.State.LocalPaused ? "现场已暂停，远程不能解除" : "现场未暂停")}\n实际材质：{engine.State.EffectiveMaterial} {engine.State.MaterialReason}";
-        panel.Children.Add(refresh);
-        var update = new Button { Content = "检查程序版本", Padding = new Thickness(8), Margin = new Thickness(0, 10, 0, 0) };
-        update.Click += async (_, _) => { try { output.Text = await engine.CheckVersion(); } catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { output.Text = "版本检查未完成，程序继续使用当前版本。"; } };
-        panel.Children.Add(update);
-        var privacy = new Button { Content = "隐私说明与卸载", Padding = new Thickness(8), Margin = new Thickness(0, 12, 0, 0) };
-        privacy.Click += (_, _) => PrivacyNotice.Show(requireConsent: false); panel.Children.Add(privacy);
-        Label("安装后需由学校管理员验证持久化目录、开机启动和重启恢复；不假设任何盘符不受还原保护。", 12);
-        window.Content = new ScrollViewer { Content = panel }; return window;
+        var window = new AppWindow("教室电脑");
+        window.SetBody(new ClientPanel(engine)); return window;
     }
+
 }
 
 public static class SelfTest

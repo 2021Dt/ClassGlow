@@ -225,8 +225,7 @@ onUnmounted(() => {
         </div>
         <footer class="canvas-board-status">
           <span
-            >{{ demo ? "示例内容 · " : "" }}预览画面 {{ timeLabel(now) }} ·
-            非设备截图</span
+            >{{ demo ? "示例内容 · " : "" }}设计预览 {{ timeLabel(now) }}</span
           ><span>第 {{ pageIndex + 1 }} / {{ count }} 页</span>
         </footer>
       </div>
