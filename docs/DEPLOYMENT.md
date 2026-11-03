@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/instal
 
 目前仓库公开，服务器默认通过 HTTPS 只读拉取，不需要 GitHub 私钥。如果以后将仓库设为私有，先为服务器配置只读 Deploy Key，再将 `/opt/classglow` 的 `origin` 改为 `git@github.com:2021Dt/ClassGlow.git`；首次 SSH 连接需在终端核对 GitHub 主机指纹。无需向服务器复制开发者私钥。
 
-安装成功后，终端显示一次性安装密钥；打开 `https://teacher.dgplus.vip/` 完成初始化。密钥不会写入自动更新日志。管理员账号和口令在网页上自行设置，没有默认口令。安装命令可再次运行，已有配置和数据卷保留。
+安装成功后，通过 `sudo classglow setup-key` 单独读取一次性安装密钥，再打开 `https://teacher.dgplus.vip/` 完成初始化。密钥不会写入安装与自动更新日志。管理员账号和口令在网页上自行设置，没有默认口令。安装命令可再次运行，已有配置和数据卷保留。
 
 ```bash
 # 手工一键更新：拉取 main、构建、备份、迁移、部署
@@ -205,7 +205,9 @@ docker compose --env-file deploy/.env -f compose.production.yaml run --rm --no-d
 
 ## 6. 检查与故障定位
 
-本轮已通过生产模式 SQLite、本机 Caddy 的静态文件与 `/api/` 代理联调，以及 Compose 配置校验。本机 Docker Engine 未运行，尚未执行 Linux 镜像构建、公网证书签发或真实服务器部署，不能把配置校验等同于服务器验收。
+2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。网页初始化尚未提交，没有预置管理员或演示数据。浏览器自动化在连接阶段超时，本次未进行线上登录后的交互复核；本地业务验证范围见 [验收记录](VERIFICATION.md)。
+
+Windows x64 测试包已提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-win-x64-25df4fd.zip)，大小 76,128,748 字节，SHA-256 为 `6b61d04cde5504af31a239d6f4386554ad23939b1c1fb2c1d10b1755e8192b3a`。它包含应用更新至 `25df4fd` 的自带运行时版本，仍为未签名测试包。
 
 | 现象 | 检查方向 |
 | --- | --- |

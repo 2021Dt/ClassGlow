@@ -24,13 +24,13 @@ main() {
     docker compose version >/dev/null
     systemctl is-active --quiet nginx
   else
-  apt-get update
-  apt-get install -y ca-certificates curl git util-linux
-  if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
-    chmod 0644 /etc/apt/keyrings/docker.asc
-    cat > /etc/apt/sources.list.d/docker.sources <<EOF
+    apt-get update
+    apt-get install -y ca-certificates curl git util-linux
+    if ! command -v docker >/dev/null || ! docker compose version >/dev/null 2>&1; then
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
+      chmod 0644 /etc/apt/keyrings/docker.asc
+      cat > /etc/apt/sources.list.d/docker.sources <<EOF
 Types: deb
 URIs: https://download.docker.com/linux/$ID
 Suites: ${UBUNTU_CODENAME:-$VERSION_CODENAME}
@@ -38,14 +38,14 @@ Components: stable
 Architectures: $(dpkg --print-architecture)
 Signed-By: /etc/apt/keyrings/docker.asc
 EOF
-    apt-get update
-    if command -v docker >/dev/null; then
-      apt-get install -y docker-buildx-plugin docker-compose-plugin
-    else
-      apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      apt-get update
+      if command -v docker >/dev/null; then
+        apt-get install -y docker-buildx-plugin docker-compose-plugin
+      else
+        apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      fi
     fi
-  fi
-  systemctl enable --now docker
+    systemctl enable --now docker
   fi
   docker info >/dev/null
 

@@ -118,7 +118,8 @@ Type=oneshot
 WorkingDirectory=/opt/classglow
 ExecStart=/usr/local/bin/classglow update --auto
 TimeoutStartSec=30min
-UMask=0077
+# Git 检出的业务代码会 COPY 给容器普通用户读取；密钥配置单独设为 0600。
+UMask=0022
 EOF
   cat > /etc/systemd/system/classglow-update.timer <<'EOF'
 [Unit]
