@@ -50,6 +50,7 @@ public sealed class Engine : IDisposable
         pendingRequests++;
         try {
         using var request = new HttpRequestMessage(new HttpMethod(method), new Uri(ValidateServer(State.Server), path.TrimStart('/')));
+        request.Headers.Add("X-ClassGlow-Client-Version", AppPaths.Version);
         if (authenticated && State.Credential.Length > 0) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", State.Credential);
         if (etag is not null && etag.Length > 0) request.Headers.TryAddWithoutValidation("If-None-Match", etag);
         if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
@@ -270,7 +271,7 @@ public sealed class Engine : IDisposable
         // 用户后来手动选择了其他壁纸时，退出/卸载不能把它覆盖成更早的记录。
         if (!ClientLifecycle.OwnedWallpaper(wallpaper.Current(State.OriginalMonitor), store.DirectoryPath)) return;
         string original = State.OriginalWallpaper;
-        if (!File.Exists(original) || ClientLifecycle.OwnedWallpaper(original, store.DirectoryPath)) { original = ""; State.Error = "原壁纸不存在，已恢复系统纯色背景"; }
+        if (original.Length > 0 && (!File.Exists(original) || ClientLifecycle.OwnedWallpaper(original, store.DirectoryPath))) { original = ""; State.Error = "原壁纸不存在，已恢复系统纯色背景"; }
         wallpaper.Set(State.OriginalMonitor, original);
     }
     public void Unbind()

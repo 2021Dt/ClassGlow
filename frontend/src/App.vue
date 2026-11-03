@@ -17,18 +17,14 @@ import {
   ChevronRight,
   LogOut,
   X,
-  Send,
   Users,
   ShieldCheck,
-  Eye,
   School,
   ArrowRight,
-  RotateCcw,
 } from "@lucide/vue";
 import BoardPreview from "./components/BoardPreview.vue";
-import BackgroundControls from "./components/BackgroundControls.vue";
 import EditorSheet from "./components/EditorSheet.vue";
-import LayoutEditor from "./components/LayoutEditor.vue";
+import BoardDesigner from "./components/BoardDesigner.vue";
 import SettingsPage from "./components/SettingsPage.vue";
 import ContentRecords from "./components/ContentRecords.vue";
 import DeviceConsole from "./components/DeviceConsole.vue";
@@ -70,7 +66,6 @@ const site = reactive({
 });
 async function readSite() {
   Object.assign(site, await api("/setup/status"));
-  document.title = `${site.siteName} · 教师工作台`;
   siteReady.value = true;
 }
 async function initialized(token: string) {
@@ -99,6 +94,31 @@ const page = ref("overview"),
   error = ref(""),
   notice = ref(""),
   now = ref(Date.now());
+const adminWorkspace = computed(
+  () => page.value === "system" && session.systemAdmin,
+);
+watch(
+  [() => site.siteName, adminWorkspace],
+  () => {
+    document.title = `${site.siteName} · ${adminWorkspace.value ? "管理后台" : "教师工作台"}`;
+  },
+  { immediate: true },
+);
+const adminView = ref<InstanceType<typeof SystemAdmin>>();
+async function refreshAdminContext() {
+  // 后台弹层包含只显示一次的初始密码/许可码，刷新账号上下文不能卸载后台组件。
+  try {
+    await readSite();
+    await refresh();
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+function enterTeaching(classId?: string) {
+  if (classId) model.selected = classId;
+  page.value = classId ? "settings" : "overview";
+  history.replaceState(null, "", "/" + location.search);
+}
 const allNav = [
   { id: "overview", label: "班级概览", icon: LayoutDashboard },
   { id: "contents", label: "作业与提醒", icon: BookOpen },
@@ -189,9 +209,7 @@ const devices = computed(() =>
   model.devices.filter((d) => d.classId === model.selected),
 );
 const editor = ref<Draft | null>(null),
-  layoutDraft = ref<Layout>(defaultLayout()),
-  previewPage = ref(1),
-  pageCount = ref(1);
+  layoutDraft = ref<Layout>(defaultLayout());
 const recordsView = ref<InstanceType<typeof ContentRecords>>();
 const classDialog = ref<HTMLDialogElement>(),
   bindDialog = ref<HTMLDialogElement>(),
@@ -299,7 +317,6 @@ watch(
   () => {
     if (current.value) {
       loadLayout();
-      previewPage.value = 1;
       localStorage.setItem(`kanban-class-${session.userId}`, model.selected);
     }
   },
@@ -410,6 +427,7 @@ async function createClass() {
     model.selected = c.id;
     classDialog.value?.close();
     classForm.name = "";
+    await adminView.value?.reload();
     flash("班级已创建，先发布一条内容或绑定教室设备。");
   });
 }
@@ -603,8 +621,8 @@ onUnmounted(() => {
     :site="site"
     @authenticated="initialized"
   />
-  <div v-else class="app-shell">
-    <aside class="sidebar">
+  <div v-else class="app-shell" :class="{ 'admin-mode': adminWorkspace }">
+    <aside v-if="!adminWorkspace" class="sidebar">
       <div class="brand">
         <span class="brand-mark"><School :size="23" /></span
         ><span
@@ -662,7 +680,7 @@ onUnmounted(() => {
       </div>
     </aside>
     <div class="workspace">
-      <header class="topbar">
+      <header v-if="!adminWorkspace" class="topbar">
         <div
           v-if="page !== 'system' && model.classes.length"
           class="class-selector"
@@ -714,7 +732,7 @@ onUnmounted(() => {
             <X :size="16" />
           </button>
         </div>
-        <div v-if="current?.archived" class="notice warning">
+        <div v-if="current?.archived && !adminWorkspace" class="notice warning">
           班级已归档，历史只读。恢复后需重新绑定设备。<button
             v-if="current.role === 'owner'"
             class="text-button"
@@ -728,21 +746,20 @@ onUnmounted(() => {
             恢复班级
           </button>
         </div>
-        <div v-if="loading" class="empty-state">
+        <SystemAdmin
+          v-if="adminWorkspace"
+          ref="adminView"
+          @create-class="classDialog?.showModal()"
+          @changed="refreshAdminContext"
+          @restored="systemSignedOut"
+          @teaching="enterTeaching()"
+          @open-class="enterTeaching"
+          @logout="logout"
+        />
+        <div v-else-if="loading" class="empty-state">
           <RefreshCw :size="30" />
           <h2>正在读取班级信息</h2>
         </div>
-        <SystemAdmin
-          v-else-if="page === 'system' && session.systemAdmin"
-          @create-class="classDialog?.showModal()"
-          @changed="
-            run(async () => {
-              await readSite();
-              await refresh();
-            })
-          "
-          @restored="systemSignedOut"
-        />
         <AccountLicense
           v-else-if="page === 'license'"
           @changed="run(refresh)"
@@ -1151,157 +1168,17 @@ onUnmounted(() => {
               </div>
             </article>
           </section>
-          <template v-else-if="page === 'appearance' && admin"
-            ><div class="design-workspace">
-              <section class="panel design-preview">
-                <div class="section-heading">
-                  <h2><Eye :size="19" />布局预览</h2>
-                  <span class="badge amber-badge">未发布的预览</span>
-                </div>
-                <BoardPreview
-                  v-if="previewClass"
-                  :classroom="previewClass"
-                  :contents="active"
-                  :layout="layoutDraft"
-                  :now="now"
-                  :page="previewPage"
-                  @pages="
-                    pageCount = $event;
-                    previewPage = 1;
-                  "
-                />
-                <div class="preview-pagination">
-                  <button
-                    class="icon-button"
-                    aria-label="预览上一页"
-                    :disabled="previewPage <= 1"
-                    @click="previewPage--"
-                  >
-                    <ChevronLeft :size="18" /></button
-                  ><span>{{ previewPage }} / {{ pageCount }}</span
-                  ><button
-                    class="icon-button"
-                    aria-label="预览下一页"
-                    :disabled="previewPage >= pageCount"
-                    @click="previewPage++"
-                  >
-                    <ChevronRight :size="18" /></button
-                  ><small>1920 × 1080 · 缩放预览</small>
-                </div>
-                <p class="muted small">
-                  调整仅影响此预览。正式发布后，设备按自己的分辨率排版并静默应用。
-                </p>
-                <LayoutEditor
-                  v-model="layoutDraft"
-                  :disabled="!admin || !premium"
-                />
-              </section>
-              <section class="panel design-controls">
-                <h2>外观与布局</h2>
-                <p v-if="!premium" class="notice subtle">
-                  自定义背景和布局需要高级许可，默认看板可免费使用。<button
-                    class="text-button"
-                    @click="page = 'license'"
-                  >
-                    输入许可码
-                  </button>
-                </p>
-                <p v-if="!current.premiumActive" class="muted small">
-                  当前教室使用默认看板，已保存的定制方案仍保留。
-                </p>
-                <fieldset :disabled="!admin || !premium">
-                  <legend>主题</legend>
-                  <div class="theme-options">
-                    <button
-                      type="button"
-                      :class="{ selected: layoutDraft.theme === 'mica_light' }"
-                      @click="layoutDraft.theme = 'mica_light'"
-                    >
-                      <span class="theme-swatch light-swatch"></span
-                      >云母浅灰<Check
-                        v-if="layoutDraft.theme === 'mica_light'"
-                        :size="15"
-                      /></button
-                    ><button
-                      type="button"
-                      :class="{ selected: layoutDraft.theme === 'mica_dark' }"
-                      @click="layoutDraft.theme = 'mica_dark'"
-                    >
-                      <span class="theme-swatch dark-swatch"></span
-                      >云母深灰<Check
-                        v-if="layoutDraft.theme === 'mica_dark'"
-                        :size="15"
-                      />
-                    </button>
-                  </div>
-                  <label class="field"
-                    >材质效果<select v-model="layoutDraft.material">
-                      <option value="subtle">云母通透</option>
-                      <option value="solid">纯色</option>
-                    </select></label
-                  ><BackgroundControls
-                    v-model="layoutDraft"
-                    :disabled="!admin || !premium"
-                  /><label class="field"
-                    >正文字号<select v-model="layoutDraft.font">
-                      <option value="small">小 · 32 像素</option>
-                      <option value="medium">中 · 36 像素</option>
-                      <option value="large">大 · 40 像素</option>
-                    </select></label
-                  ><label class="field"
-                    >桌面图标留白<select v-model="layoutDraft.iconMargin">
-                      <option value="left">左侧 12%</option>
-                      <option value="right">右侧 12%</option>
-                      <option value="none">不保留</option>
-                    </select></label
-                  ><label class="field"
-                    >自动翻页间隔<select v-model.number="layoutDraft.interval">
-                      <option :value="15">15 秒</option>
-                      <option :value="20">20 秒</option>
-                      <option :value="30">30 秒</option>
-                    </select></label
-                  >
-                  <div class="module-options">
-                    <strong>展示模块</strong
-                    ><label
-                      v-for="(label, key) in {
-                        datetime: '日期与时间',
-                        homework: '今日作业',
-                        todo: '班级提醒',
-                        timetable: '今日课表',
-                        countdown: '事件倒计时',
-                        message: '班主任寄语',
-                      }"
-                      :key="key"
-                      ><span>{{ label }}</span
-                      ><input
-                        type="checkbox"
-                        v-model="layoutDraft.modules[key]" /></label
-                    ><label
-                      ><span>左右镜像布局</span
-                      ><input type="checkbox" v-model="layoutDraft.reverse"
-                    /></label>
-                  </div>
-                  <button
-                    class="text-button"
-                    @click="
-                      layoutDraft = {
-                        ...defaultLayout(),
-                        revision: current.layout.revision,
-                      }
-                    "
-                  >
-                    <RotateCcw :size="15" />恢复默认预览</button
-                  ><button class="button primary full" @click="publishLayout">
-                    <Send :size="16" />发布布局与主题
-                  </button>
-                </fieldset>
-                <p v-if="!admin" class="notice subtle">
-                  当前身份只可查看，布局发布需要管理权限。
-                </p>
-              </section>
-            </div></template
-          >
+          <BoardDesigner
+            v-else-if="page === 'appearance' && admin && previewClass"
+            v-model="layoutDraft"
+            :classroom="previewClass"
+            :contents="active"
+            :now="now"
+            :disabled="!admin || !premium"
+            :publish-error="error"
+            :publish-notice="notice"
+            @publish="publishLayout"
+          />
           <DeviceConsole
             v-else-if="page === 'devices' && admin"
             :classroom="current"
@@ -1318,12 +1195,12 @@ onUnmounted(() => {
             ><SettingsPage :classroom="current" @refresh="run(refresh)"
           /></template>
         </template>
-        <footer class="workspace-footer">
+        <footer v-if="!adminWorkspace" class="workspace-footer">
           <span>班级看板</span><span>安静更新 · 清楚展示</span>
         </footer>
       </main>
     </div>
-    <nav class="mobile-nav" aria-label="手机底部导航">
+    <nav v-if="!adminWorkspace" class="mobile-nav" aria-label="手机底部导航">
       <button
         :class="{
           active: ['overview', 'appearance', 'devices'].includes(page),

@@ -220,6 +220,11 @@ const theme = (value: string) =>
     : value === "system_high_contrast"
       ? "系统高对比"
       : "云母浅灰";
+const needsCanvasUpdate = computed(() => {
+  if (props.classroom.layout.editor !== "canvas") return false;
+  const version = device.value?.clientVersion?.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  return !version || (Number(version[1]) === 0 && Number(version[2]) < 4);
+});
 const summary = computed(() => {
   const d = device.value;
   if (!d) return "";
@@ -228,6 +233,7 @@ const summary = computed(() => {
   if (d.remotePaused) return "远程已暂停";
   if (d.deferred) return "已同步，等待安静应用";
   if (d.error) return "设备需要检查";
+  if (needsCanvasUpdate.value) return "基础看板运行中，等待客户端升级";
   return d.applied ? "看板运行中" : "等待首次应用";
 });
 let poll: ReturnType<typeof setInterval>;
@@ -326,6 +332,10 @@ onUnmounted(() => clearInterval(poll));
         </div>
         <dl class="device-facts">
           <div>
+            <dt>Windows 客户端</dt>
+            <dd>{{ device.clientVersion || "尚未上报版本" }}</dd>
+          </div>
+          <div>
             <dt>班级正式版本</dt>
             <dd>v{{ classroom.version }}</dd>
           </div>
@@ -359,6 +369,10 @@ onUnmounted(() => clearInterval(poll));
             </dd>
           </div>
         </dl>
+        <p v-if="needsCanvasUpdate" class="notice warning">
+          自由画布需要 Windows 0.4.0
+          或更新版本。当前设备暂用基础看板，升级后会自动取得你的设计。
+        </p>
         <p v-if="paused" class="quiet-caption">
           暂停时保留最近的看板样式记录，不代表当前壁纸。
         </p>

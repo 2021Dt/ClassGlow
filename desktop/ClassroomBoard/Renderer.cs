@@ -28,7 +28,7 @@ public static class JsonRead
     public static double Num(this JsonNode? node, string key, double fallback = 0) => node?[key]?.GetValue<double>() ?? fallback;
 }
 
-public sealed class Renderer(string directory)
+public sealed partial class Renderer(string directory)
 {
     private static readonly Typeface Font = new("Microsoft YaHei");
     private readonly Dictionary<string, DrawingGroup> backgrounds = new();
@@ -83,17 +83,15 @@ public sealed class Renderer(string directory)
     public Frame Render(ClientState state, DateTimeOffset clock, int width, int height, int requestedPage = 0)
     {
         var snapshot = state.Snapshot ?? throw new InvalidDataException("没有可用快照。");
-        var classroom = snapshot["classroom"]!; var layout = EffectiveLayout(state, clock); var modules = layout["modules"]!;
+        var classroom = snapshot["classroom"]!; var layout = EffectiveLayout(state, clock);
+        if (layout.Str("editor") == "canvas") return RenderCanvas(state, clock, width, height, requestedPage);
+        var modules = layout["modules"]!;
         bool highContrast = SystemParameters.HighContrast;
         string theme = highContrast ? "system_high_contrast" : layout.Str("theme", "mica_light");
         bool dark = theme == "mica_dark";
         bool reduced = highContrast || state.ReduceEffects || !SystemParameters.ClientAreaAnimation || !TransparencyEnabled();
         string material = reduced ? "solid" : layout.Str("material", "solid");
         string reason = highContrast ? "系统高对比" : state.ReduceEffects ? "本机减少效果" : reduced ? "系统减少效果或关闭透明" : material == "solid" ? "班级配置" : "";
-        string backgroundMode = layout.Str("backgroundMode", "mica");
-        double opacity = layout.Int("surfaceOpacity", 38) / 100d;
-        Brush background = highContrast ? SystemColors.WindowBrush : BrushOf(backgroundMode == "color" ? layout.Str("backgroundColor", "#E7E8EB") : dark ? "#25272C" : "#E7E8EB");
-        Brush surface = highContrast ? SystemColors.WindowBrush : BrushOf(dark ? "#2D3036" : "#F6F7F9");
         Brush text = highContrast ? SystemColors.WindowTextBrush : BrushOf(dark ? "#F1F3F7" : "#252A32");
         Brush muted = highContrast ? text : BrushOf(dark ? "#C4CBD5" : "#565F6D");
         Brush accent = highContrast ? text : BrushOf(dark ? "#A6D9BE" : "#316B59");
@@ -124,74 +122,11 @@ public sealed class Renderer(string directory)
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen()) {
             dc.PushTransform(new ScaleTransform(width / 1920d, height / 1080d));
-            string cacheKey = $"{theme}:{material}:{left}:{right}:{layout.ToJsonString()}";
-            if (!backgrounds.TryGetValue(cacheKey, out var layer)) {
-                layer = new DrawingGroup(); using (var bg = layer.Open()) {
-                    bg.DrawRectangle(background, null, new Rect(0, 0, 1920, 1080));
-                    BitmapSource? blurred = null;
-                    if (!highContrast && backgroundMode == "mica") {
-                        var mica = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(dark ? "#292C32" : "#ECEDEF"), (Color)ColorConverter.ConvertFromString(dark ? "#202227" : "#DDE0E5"), 35);
-                        bg.DrawRectangle(mica, null, new Rect(0, 0, 1920, 1080));
-                    }
-                    if (!highContrast && backgroundMode == "image" && layout.Str("backgroundImage").Length > 0) {
-                        // 背景包含在快照内，断网时仍可还原；只在背景层变化时解码和模糊。
-                        using var stream = new MemoryStream(Convert.FromBase64String(layout.Str("backgroundImage").Split(',', 2)[1]));
-                        var picture = new BitmapImage(); picture.BeginInit(); picture.CacheOption = BitmapCacheOption.OnLoad;
-                        picture.StreamSource = stream; picture.DecodePixelWidth = 1920; picture.EndInit(); picture.Freeze();
-                        var imageBrush = new ImageBrush(picture) { Stretch = Stretch.UniformToFill };
-                        bg.DrawRectangle(imageBrush, null, new Rect(0, 0, 1920, 1080));
-                        if (material == "subtle") {
-                            var backdrop = new DrawingVisual { Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 32 } };
-                            using (var context = backdrop.RenderOpen()) context.DrawRectangle(imageBrush, null, new Rect(0, 0, 1920, 1080));
-                            var bitmapBackground = new RenderTargetBitmap(1920, 1080, 96, 96, PixelFormats.Pbgra32);
-                            bitmapBackground.Render(backdrop); bitmapBackground.Freeze(); blurred = bitmapBackground;
-                        }
-                    }
-                    void Panel(double x, double y, double w, double h, bool inner = false) {
-                        var bounds = new Rect(x, y, w, h);
-                        double radius = inner ? 32 : 40;
-                        if (material != "subtle" || highContrast) {
-                            bg.DrawRoundedRectangle(surface, new Pen(accent, .5), bounds, radius, radius);
-                            return;
-                        }
-                        // 子卡片共享大容器的背景模糊，仅绘制薄底与亮边，防止玻璃越叠越白。
-                        if (inner) {
-                            var fill = new LinearGradientBrush(Color.FromArgb((byte)(dark ? 13 : 38), 255, 255, 255), Color.FromArgb(10, (byte)(dark ? 0 : 255), (byte)(dark ? 0 : 255), (byte)(dark ? 0 : 255)), 45);
-                            var rim = new LinearGradientBrush(Color.FromArgb(132, 255, 255, 255), Color.FromArgb(24, 255, 255, 255), 45);
-                            bg.DrawRoundedRectangle(fill, new Pen(rim, 1), bounds, radius, radius);
-                            return;
-                        }
-                        // 多层低透明阴影只缓存一次；亮边与渐变表面分层绘制，不降低文字透明度。
-                        // 阴影仅落在卡片外侧，透明表面下不能再叠一整块暗色底。
-                        bg.PushClip(new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(new Rect(x - 28, y - 28, w + 56, h + 64)), new RectangleGeometry(bounds, radius, radius)));
-                        for (int step = 12; step >= 1; step--) {
-                            var shadow = new SolidColorBrush(Color.FromArgb((byte)(dark ? 3 : 1), 25, 28, 32));
-                            bg.DrawRoundedRectangle(shadow, null, new Rect(x - step * 2, y + 8 - step * 2, w + step * 4, h + step * 4), radius + step * 2, radius + step * 2);
-                        }
-                        bg.Pop();
-                        if (blurred is not null) {
-                            bg.PushClip(new RectangleGeometry(bounds, radius, radius));
-                            bg.DrawImage(blurred, new Rect(0, 0, 1920, 1080)); bg.Pop();
-                        }
-                        Color Tint(double alpha) => dark ? Color.FromArgb((byte)(alpha * 255), 38, 41, 46) : Color.FromArgb((byte)(alpha * 255), 249, 250, 252);
-                        var glass = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
-                        glass.GradientStops.Add(new(Tint(Math.Min(.98, opacity + .03)), 0));
-                        glass.GradientStops.Add(new(Tint(Math.Max(.10, opacity - .10)), 1));
-                        var edge = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
-                        edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString(dark ? "#90FFFFFF" : "#F0FFFFFF"), 0));
-                        edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#10FFFFFF"), .48));
-                        edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString(dark ? "#38FFFFFF" : "#A0FFFFFF"), 1));
-                        bg.DrawRoundedRectangle(glass, new Pen(edge, 1.2), bounds, radius, radius);
-                        bg.DrawRoundedRectangle(null, new Pen(BrushOf(dark ? "#30000000" : "#12000000"), .7), new Rect(x + 1.5, y + 1.5, w - 3, h - 3), radius - 1.5, radius - 1.5);
-                    }
-                    Panel(left, 48, total, 984);
-                    if (modules.Flag("homework")) Panel(jobRect.X, jobRect.Y, jobRect.Width, jobRect.Height, true);
-                    if (modules.Flag("todo")) Panel(todoRect.X, todoRect.Y, todoRect.Width, todoRect.Height, true);
-                    if (modules.Flag("timetable")) Panel(tableRect.X, tableRect.Y, tableRect.Width, tableRect.Height, true);
-                }
-                layer.Freeze(); if (backgrounds.Count >= 2) backgrounds.Clear(); backgrounds[cacheKey] = layer;
-            }
-            dc.DrawDrawing(layer);
+            var panels = new List<Rect>();
+            if (modules.Flag("homework")) panels.Add(jobRect);
+            if (modules.Flag("todo")) panels.Add(todoRect);
+            if (modules.Flag("timetable")) panels.Add(tableRect);
+            dc.DrawDrawing(Background(layout, theme, material, left, right, highContrast, panels));
             DrawText(dc, classroom.Str("name"), left + 59, 66, 48, text, total - 698);
             if (modules.Flag("datetime", true) && !state.ClockUncertain) {
                 DrawText(dc, clock.ToString("yyyy年M月d日 dddd", CultureInfo.GetCultureInfo("zh-CN")), left + 59, 130, 28, muted);
@@ -264,6 +199,82 @@ public sealed class Renderer(string directory)
         using (var stream = File.Create(temp)) encoder.Save(stream);
         File.Move(temp, output, true);
         return new(output, pageSet, page, count, theme, material, reason);
+    }
+    private DrawingGroup Background(JsonNode layout, string theme, string material, double left, double right, bool highContrast, IEnumerable<Rect> panels)
+    {
+        bool dark = theme == "mica_dark";
+        double total = 1920 - left - right;
+        string backgroundMode = layout.Str("backgroundMode", "mica");
+        double opacity = layout.Int("surfaceOpacity", 38) / 100d;
+        Brush background = highContrast ? SystemColors.WindowBrush : BrushOf(backgroundMode == "color" ? layout.Str("backgroundColor", "#E7E8EB") : dark ? "#25272C" : "#E7E8EB");
+        Brush surface = highContrast ? SystemColors.WindowBrush : BrushOf(dark ? "#2D3036" : "#F6F7F9");
+        Brush accent = highContrast ? SystemColors.WindowTextBrush : BrushOf(dark ? "#A6D9BE" : "#316B59");
+        string cacheKey = $"{theme}:{material}:{left}:{right}:{layout.ToJsonString()}";
+        if (!backgrounds.TryGetValue(cacheKey, out var layer)) {
+            layer = new DrawingGroup(); using (var bg = layer.Open()) {
+                bg.DrawRectangle(background, null, new Rect(0, 0, 1920, 1080));
+                BitmapSource? blurred = null;
+                if (!highContrast && backgroundMode == "mica") {
+                    var mica = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(dark ? "#292C32" : "#ECEDEF"), (Color)ColorConverter.ConvertFromString(dark ? "#202227" : "#DDE0E5"), 35);
+                    bg.DrawRectangle(mica, null, new Rect(0, 0, 1920, 1080));
+                }
+                if (!highContrast && backgroundMode == "image" && layout.Str("backgroundImage").Length > 0) {
+                    // 背景包含在快照内，断网时仍可还原；只在背景层变化时解码和模糊。
+                    using var stream = new MemoryStream(Convert.FromBase64String(layout.Str("backgroundImage").Split(',', 2)[1]));
+                    var picture = new BitmapImage(); picture.BeginInit(); picture.CacheOption = BitmapCacheOption.OnLoad;
+                    picture.StreamSource = stream; picture.DecodePixelWidth = 1920; picture.EndInit(); picture.Freeze();
+                    var imageBrush = new ImageBrush(picture) { Stretch = Stretch.UniformToFill };
+                    bg.DrawRectangle(imageBrush, null, new Rect(0, 0, 1920, 1080));
+                    if (material == "subtle") {
+                        var backdrop = new DrawingVisual { Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 32 } };
+                        using (var context = backdrop.RenderOpen()) context.DrawRectangle(imageBrush, null, new Rect(0, 0, 1920, 1080));
+                        var bitmapBackground = new RenderTargetBitmap(1920, 1080, 96, 96, PixelFormats.Pbgra32);
+                        bitmapBackground.Render(backdrop); bitmapBackground.Freeze(); blurred = bitmapBackground;
+                    }
+                }
+                void Panel(double x, double y, double w, double h, bool inner = false) {
+                    var bounds = new Rect(x, y, w, h);
+                    double radius = inner ? 32 : 40;
+                    if (material != "subtle" || highContrast) {
+                        bg.DrawRoundedRectangle(surface, new Pen(accent, .5), bounds, radius, radius);
+                        return;
+                    }
+                    // 子卡片共享大容器的背景模糊，仅绘制薄底与亮边，防止玻璃越叠越白。
+                    if (inner) {
+                        var fill = new LinearGradientBrush(Color.FromArgb((byte)(dark ? 13 : 38), 255, 255, 255), Color.FromArgb(10, (byte)(dark ? 0 : 255), (byte)(dark ? 0 : 255), (byte)(dark ? 0 : 255)), 45);
+                        var rim = new LinearGradientBrush(Color.FromArgb(132, 255, 255, 255), Color.FromArgb(24, 255, 255, 255), 45);
+                        bg.DrawRoundedRectangle(fill, new Pen(rim, 1), bounds, radius, radius);
+                        return;
+                    }
+                    // 多层低透明阴影只缓存一次；亮边与渐变表面分层绘制，不降低文字透明度。
+                    // 阴影仅落在卡片外侧，透明表面下不能再叠一整块暗色底。
+                    bg.PushClip(new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(new Rect(x - 28, y - 28, w + 56, h + 64)), new RectangleGeometry(bounds, radius, radius)));
+                    for (int step = 12; step >= 1; step--) {
+                        var shadow = new SolidColorBrush(Color.FromArgb((byte)(dark ? 3 : 1), 25, 28, 32));
+                        bg.DrawRoundedRectangle(shadow, null, new Rect(x - step * 2, y + 8 - step * 2, w + step * 4, h + step * 4), radius + step * 2, radius + step * 2);
+                    }
+                    bg.Pop();
+                    if (blurred is not null) {
+                        bg.PushClip(new RectangleGeometry(bounds, radius, radius));
+                        bg.DrawImage(blurred, new Rect(0, 0, 1920, 1080)); bg.Pop();
+                    }
+                    Color Tint(double alpha) => dark ? Color.FromArgb((byte)(alpha * 255), 38, 41, 46) : Color.FromArgb((byte)(alpha * 255), 249, 250, 252);
+                    var glass = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+                    glass.GradientStops.Add(new(Tint(Math.Min(.98, opacity + .03)), 0));
+                    glass.GradientStops.Add(new(Tint(Math.Max(.10, opacity - .10)), 1));
+                    var edge = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+                    edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString(dark ? "#90FFFFFF" : "#F0FFFFFF"), 0));
+                    edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#10FFFFFF"), .48));
+                    edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString(dark ? "#38FFFFFF" : "#A0FFFFFF"), 1));
+                    bg.DrawRoundedRectangle(glass, new Pen(edge, 1.2), bounds, radius, radius);
+                    bg.DrawRoundedRectangle(null, new Pen(BrushOf(dark ? "#30000000" : "#12000000"), .7), new Rect(x + 1.5, y + 1.5, w - 3, h - 3), radius - 1.5, radius - 1.5);
+                }
+                Panel(left, 48, total, 984);
+                foreach (var panel in panels) Panel(panel.X, panel.Y, panel.Width, panel.Height, true);
+            }
+            layer.Freeze(); if (backgrounds.Count >= 2) backgrounds.Clear(); backgrounds[cacheKey] = layer;
+        }
+        return layer;
     }
     private static bool TransparencyEnabled()
     {

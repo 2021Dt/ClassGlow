@@ -2,8 +2,8 @@ from starlette.responses import JSONResponse
 
 
 def body_limit(path: str, method: str) -> int:
-    # 仅布局发布允许携带压缩背景；其他业务接口仍保持 128 KiB。
-    return 640 * 1024 if method == "PUT" and path.startswith("/classes/") and path.endswith("/layout") else 131072
+    # 自由画布可包含压缩背景与图片组件；其他业务接口仍保持 128 KiB。
+    return 2 * 1024 * 1024 if method == "PUT" and path.startswith("/classes/") and path.endswith("/layout") else 131072
 
 
 class BodyLimitMiddleware:

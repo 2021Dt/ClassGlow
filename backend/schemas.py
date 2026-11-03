@@ -98,7 +98,54 @@ def grid_default():
     }
 
 
+class CanvasWidget(Input):
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,80}$")
+    kind: Literal["homework", "todo", "timetable", "datetime", "countdown", "message", "text", "image", "shape"]
+    x: int = Field(ge=0, le=1552)
+    y: int = Field(ge=0, le=852)
+    w: int = Field(ge=48, le=1600)
+    h: int = Field(ge=48, le=900)
+    title: str = Field(default="", max_length=30)
+    text: str = Field(default="", max_length=2000)
+    image: str = Field(default="", max_length=524311)
+    visible: bool = True
+    locked: bool = False
+    fontSize: int = Field(default=32, ge=16, le=56)
+    textColor: str = Field(default="", pattern=r"^(#[0-9a-fA-F]{6})?$")
+    fillColor: str = Field(default="#FFFFFF", pattern=r"^#[0-9a-fA-F]{6}$")
+    surface: Literal["glass", "solid", "none"] = "glass"
+    opacity: int = Field(default=45, ge=0, le=100)
+    radius: int = Field(default=24, ge=0, le=80)
+    align: Literal["left", "center"] = "left"
+
+    @field_validator("image")
+    @classmethod
+    def valid_image(cls, value):
+        return LayoutInput.raster_background(value)
+
+    @model_validator(mode="after")
+    def usable_size(self):
+        if self.x + self.w > 1600 or self.y + self.h > 900:
+            raise ValueError("组件不能超出画布")
+        # 数据组件保留至少一行正文空间；超出的内容分页，不缩字或悄悄截断。
+        if self.kind in ("homework", "todo", "timetable", "datetime", "countdown", "message") and (
+            self.w < 280 or self.h < 180
+        ):
+            raise ValueError("数据组件至少为 280 × 180，以保证文字可读")
+        if self.kind == "text" and (self.w < 120 or self.h < 100):
+            raise ValueError("文字组件至少为 120 × 100")
+        if self.kind == "text" and self.h < self.fontSize * 1.5 + 32:
+            raise ValueError("文字组件高度不足以显示一行当前字号的文字")
+        if self.kind in ("datetime", "countdown") and self.h < 105 + (self.fontSize + 24) * 1.2:
+            raise ValueError("时钟或倒计时高度不足，请增高组件或调小字号")
+        if self.kind == "image" and self.visible and not self.image:
+            raise ValueError("请为图片组件选择图片，或先隐藏它")
+        return self
+
+
 class LayoutInput(Input):
+    editor: Literal["grid", "canvas"] = "grid"
+    canvas: list[CanvasWidget] = Field(default_factory=list, max_length=24)
     theme: Literal["mica_light", "mica_dark"] = "mica_light"
     material: Literal["subtle", "solid"] = "subtle"
     backgroundMode: Literal["mica", "color", "image"] = "mica"
@@ -145,6 +192,10 @@ class LayoutInput(Input):
     def valid_grid(self):
         if self.backgroundMode == "image" and not self.backgroundImage:
             raise ValueError("请先上传背景图片")
+        if self.editor == "canvas":
+            if len({item.id for item in self.canvas}) != len(self.canvas):
+                raise ValueError("组件标识不能重复")
+            return self
         if set(self.grid) != {"homework", "todo", "timetable"}:
             raise ValueError("必须提交完整网格配置")
         rects = [(key, GridRect.model_validate(value)) for key, value in self.grid.items() if self.modules[key]]

@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 import secrets
 from datetime import UTC, datetime
 from io import BytesIO
@@ -38,6 +39,7 @@ def device_view(d):
         "id": d.id,
         "classId": d.class_id,
         "name": d.name,
+        "clientVersion": s.get("clientVersion", ""),
         "bindingId": d.binding,
         "online": not d.revoked and now() - d.last_seen <= 90,
         "revoked": d.revoked,
@@ -183,13 +185,20 @@ def valid_commands(db, d):
 
 @router.get("/device/snapshot")
 def snapshot(
-    if_none_match: str | None = Header(default=None), d: Device = Depends(device_actor), db: Session = Depends(get_db)
+    if_none_match: str | None = Header(default=None),
+    x_classglow_client_version: str | None = Header(default=None),
+    d: Device = Depends(device_actor),
+    db: Session = Depends(get_db),
 ):
     c = db.get(Classroom, d.class_id)
     entitlement = class_entitlement(db, c)
     commands = valid_commands(db, d)
+    version = re.fullmatch(
+        r"(\d{1,4})\.(\d{1,4})\.(\d{1,4})", x_classglow_client_version or d.state.get("clientVersion", "")
+    )
+    canvas_supported = bool(version and tuple(map(int, version.groups())) >= (0, 4, 0))
     # 许可状态进入 ETag；到期必须返回新快照，不能被内容版本未变的 304 遮住。
-    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}"'
+    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}:{int(canvas_supported)}"'
     # 即使内容未变，只要有待确认命令也必须返回 200，不能让 304 吞掉控制。
     if if_none_match == etag and not commands:
         return Response(status_code=304, headers={"ETag": etag})
@@ -198,6 +207,9 @@ def snapshot(
     basic = layout_default()
     classroom_data = {k: v for k, v in c.data.items() if k not in ("layoutLicenseUserId", "_displayPremium")}
     classroom_data["layout"] = c.data["layout"] if entitlement["premiumActive"] else basic
+    # 老客户端只能显示基础看板；版本能力进入 ETag，升级后同一内容版本也立即重新同步。
+    if classroom_data["layout"].get("editor") == "canvas" and not canvas_supported:
+        classroom_data["layout"] = basic
 
     contents = db.scalars(select(Content).where(Content.class_id == c.id, Content.state == "published")).all()
     return Response(

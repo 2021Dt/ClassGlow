@@ -1,0 +1,143 @@
+/* 同一排卡片使用同一网格和高度，正文在卡片内滚动，避免内容多少决定整页轮廓。 */
+.app-shell:not(.admin-mode) .overview-grid {
+  --overview-card-height: clamp(380px, 31vw, 500px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas: "homework preview" "reminders drafts" "note note";
+  gap: 24px;
+  align-items: stretch;
+}
+.overview-grid > div:not(.daily-note) {
+  display: contents;
+}
+.overview-grid .content-panel {
+  grid-area: homework;
+}
+.overview-grid .preview-card {
+  grid-area: preview;
+}
+.overview-grid .reminders-panel {
+  grid-area: reminders;
+}
+.overview-grid .draft-card {
+  grid-area: drafts;
+}
+.overview-grid .daily-note {
+  grid-area: note;
+  margin: 0;
+}
+.overview-grid .panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 22px;
+}
+.overview-grid .content-panel,
+.overview-grid .preview-card {
+  height: var(--overview-card-height);
+}
+.overview-grid .reminders-panel,
+.overview-grid .draft-card {
+  height: 270px;
+}
+.overview-grid .section-heading {
+  flex-shrink: 0;
+  min-height: 30px;
+  margin: 0 0 20px;
+}
+.overview-grid .bounded-content-list {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+}
+.overview-grid .empty-state {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 0;
+}
+.overview-grid .inline-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px 0;
+}
+.overview-grid .preview-card .board-holder {
+  width: min(100%, calc((var(--overview-card-height) - 135px) * 1.7778));
+  flex-shrink: 0;
+  align-self: center;
+  margin: auto 0;
+}
+.overview-grid .preview-card-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  font-size: 11px;
+}
+.overview-grid .preview-disclaimer {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+.overview-grid .quiet-caption {
+  margin-top: auto;
+  padding-top: 13px;
+}
+.overview-grid .draft-link {
+  padding: 14px 0;
+}
+.app-shell:not(.admin-mode) .settings-grid,
+.app-shell:not(.admin-mode) .device-grid,
+.app-shell:not(.admin-mode) .license-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 24px;
+}
+.settings-grid > .panel,
+.device-grid > .panel,
+.license-grid > .panel {
+  min-width: 0;
+  margin: 0;
+}
+.device-grid .command-history {
+  max-height: 540px;
+  overflow: auto;
+}
+@media (max-width: 1050px) {
+  .app-shell:not(.admin-mode) .overview-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas: "homework" "reminders" "preview" "drafts" "note";
+    --overview-card-height: 400px;
+  }
+  .app-shell:not(.admin-mode) .settings-grid,
+  .app-shell:not(.admin-mode) .device-grid,
+  .app-shell:not(.admin-mode) .license-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 650px) {
+  .app-shell:not(.admin-mode) .overview-grid {
+    --overview-card-height: 360px;
+    gap: 18px;
+  }
+  .overview-grid .panel {
+    padding: 20px;
+  }
+  .overview-grid .reminders-panel,
+  .overview-grid .draft-card {
+    height: 250px;
+  }
+  .overview-grid .content-panel > .section-heading {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .overview-grid .content-panel .date-control {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .overview-grid .content-panel .date-control input {
+    width: calc(100% - 88px);
+    text-align: center;
+  }
+}

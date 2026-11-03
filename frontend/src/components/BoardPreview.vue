@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Classroom, Content, GridKey, Layout } from "../domain";
 import { dateKey, timeLabel } from "../domain";
 import { paginate } from "../pagination";
+import CanvasBoard from "./CanvasBoard.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -115,14 +116,27 @@ onMounted(() => {
 onUnmounted(() => observer?.disconnect());
 import { watch } from "vue";
 watch(
-  () => pages.value.count,
-  (value) => emit("pages", value),
+  () => (props.layout.editor === "canvas" ? null : pages.value.count),
+  (value) => {
+    if (value !== null) emit("pages", value);
+  },
   { immediate: true },
 );
 </script>
 
 <template>
+  <CanvasBoard
+    v-if="layout.editor === 'canvas'"
+    :classroom="classroom"
+    :contents="contents"
+    :layout="layout"
+    :now="now"
+    :page="page"
+    :demo="demo"
+    @pages="emit('pages', $event)"
+  />
   <div
+    v-else
     ref="holder"
     class="board-holder"
     :class="{

@@ -1,10 +1,11 @@
 """只有系统管理员可签发许可；许可码绑定账号、一次兑换，数据库只保存摘要。"""
 
 import secrets
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from . import schemas as S
@@ -48,27 +49,54 @@ def issue(body: Issue, user: User = Depends(system_admin), db: Session = Depends
 
 @router.get("/system/licenses")
 def listing(
-    userId: str, offset: int = Query(0, ge=0), user: User = Depends(system_admin), db: Session = Depends(get_db)
+    userId: str = "",
+    search: str = "",
+    status: Literal["", "pending", "used", "revoked", "expired"] = "",
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    user: User = Depends(system_admin),
+    db: Session = Depends(get_db),
 ):
-    entries = db.scalars(
-        select(FeatureLicense)
-        .where(FeatureLicense.user_id == userId)
-        .order_by(FeatureLicense.expires.desc(), FeatureLicense.id)
-        .offset(offset)
-        .limit(20)
-    )
+    epoch, timestamp = sync_epoch(db), now()
+    query = select(FeatureLicense, User).join(User, User.id == FeatureLicense.user_id)
+    if userId:
+        query = query.where(FeatureLicense.user_id == userId)
+    if search:
+        query = query.where(
+            or_(User.name.contains(search, autoescape=True), User.login.contains(search, autoescape=True))
+        )
+    if status == "used":
+        query = query.where(FeatureLicense.used_at > 0)
+    elif status:
+        query = query.where(FeatureLicense.used_at == 0)
+        if status == "revoked":
+            query = query.where(FeatureLicense.revoked.is_(True))
+        elif status == "pending":
+            query = query.where(
+                FeatureLicense.revoked.is_(False), FeatureLicense.expires > timestamp, FeatureLicense.epoch == epoch
+            )
+        else:
+            query = query.where(
+                FeatureLicense.revoked.is_(False),
+                or_(FeatureLicense.expires <= timestamp, FeatureLicense.epoch != epoch),
+            )
+    entries = db.execute(query.order_by(FeatureLicense.expires.desc(), FeatureLicense.id).offset(offset).limit(limit))
     return {
         "items": [
             {
                 "id": e.id,
+                "userId": target.id,
+                "name": target.name,
+                "login": target.login,
                 "days": e.days,
                 "expiresAt": e.expires,
                 "usedAt": e.used_at,
                 "revoked": e.revoked,
-                "expired": e.expires <= now() or e.epoch != sync_epoch(db),
+                "expired": e.expires <= timestamp or e.epoch != epoch,
             }
-            for e in entries
-        ]
+            for e, target in entries
+        ],
+        "total": db.scalar(select(func.count()).select_from(query.subquery())),
     }
 
 

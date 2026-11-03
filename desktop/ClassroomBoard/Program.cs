@@ -24,6 +24,7 @@ public static class Program
         if (args.Contains("--self-test")) return SelfTest.Run(args);
         if (args.Contains("--network-self-test")) return SelfTest.Network(args).GetAwaiter().GetResult();
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
+        if (args.Contains("--control-preview")) return ControlPreview.Run(args);
         using var singleton = new Mutex(true, AppPaths.MutexName, out bool first);
         if (!first) return 0;
         var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };

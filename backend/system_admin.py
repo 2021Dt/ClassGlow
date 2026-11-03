@@ -4,6 +4,7 @@ import shutil
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
@@ -76,6 +77,10 @@ def user_view(user):
     return {**profile(user), "active": user.active}
 
 
+def available_accounts(timestamp):
+    return (User.active.is_(True), User.activated.is_(True), or_(User.expires_at == 0, User.expires_at > timestamp))
+
+
 @router.get("/setup/status")
 def setup_status(db: Session = Depends(get_db)):
     config = system_config(db)
@@ -93,6 +98,8 @@ def overview(user: User = Depends(system_admin), db: Session = Depends(get_db)):
     database = db.get_bind().url
     data_file = Path(database.database) if database.get_backend_name() == "sqlite" else None
     disk = shutil.disk_usage(settings.storage_dir)
+    timestamp = now()
+    available = available_accounts(timestamp)
     return {
         "siteName": config.site_name,
         "registrationOpen": False,
@@ -106,6 +113,22 @@ def overview(user: User = Depends(system_admin), db: Session = Depends(get_db)):
         "initializedAt": config.initialized_at,
         "users": count(User),
         "activeUsers": count(User, User.active.is_(True)),
+        "availableUsers": count(User, *available),
+        "expiringAccounts": count(User, *available, User.expires_at > 0, User.expires_at <= timestamp + 7 * 86400),
+        "expiredAccounts": count(User, User.active.is_(True), User.expires_at > 0, User.expires_at <= timestamp),
+        "premiumUsers": count(User, *available, User.system_admin.is_(False), User.premium_until > timestamp),
+        "expiringLicenses": count(
+            User,
+            *available,
+            User.system_admin.is_(False),
+            User.premium_until > timestamp,
+            User.premium_until <= timestamp + 7 * 86400,
+        ),
+        "roles": {
+            "admins": count(User, User.system_admin.is_(True)),
+            "headteachers": count(User, User.system_admin.is_(False), User.can_create_classes.is_(True)),
+            "teachers": count(User, User.system_admin.is_(False), User.can_create_classes.is_(False)),
+        },
         "classes": count(Classroom, Classroom.archived.is_(False)),
         "archivedClasses": count(Classroom, Classroom.archived.is_(True)),
         "devices": count(Device, Device.revoked.is_(False)),
@@ -124,16 +147,58 @@ def save_settings(body: SettingsInput, user: User = Depends(system_admin), db: S
 @router.get("/system/users")
 def list_users(
     search: str = "",
+    identity: Literal["", "system_admin", "headteacher", "teacher", "staff"] = "",
+    status: Literal["", "active", "disabled", "expired", "expiring", "pending"] = "",
+    license: Literal["", "active", "free", "expiring", "expired"] = "",
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
     db: Session = Depends(get_db),
 ):
-    where = or_(User.login.contains(search, autoescape=True), User.name.contains(search, autoescape=True))
-    rows = db.scalars(select(User).where(where).order_by(User.login).offset(offset).limit(limit)).all()
+    timestamp = now()
+    where = [or_(User.login.contains(search, autoescape=True), User.name.contains(search, autoescape=True))]
+    if identity == "system_admin":
+        where.append(User.system_admin.is_(True))
+    elif identity:
+        where.append(User.system_admin.is_(False))
+        if identity != "staff":
+            where.append(User.can_create_classes.is_(identity == "headteacher"))
+    if status == "active":
+        where.extend(available_accounts(timestamp))
+    elif status == "disabled":
+        where.append(User.active.is_(False))
+    elif status == "pending":
+        where.extend((User.active.is_(True), User.activated.is_(False)))
+    elif status == "expired":
+        where.extend((User.active.is_(True), User.expires_at > 0, User.expires_at <= timestamp))
+    elif status == "expiring":
+        where.extend((*available_accounts(timestamp), User.expires_at > 0, User.expires_at <= timestamp + 7 * 86400))
+    if license:
+        where.append(User.system_admin.is_(False))
+        if license in ("active", "expiring"):
+            where.extend((*available_accounts(timestamp), User.premium_until > timestamp))
+            if license == "expiring":
+                where.append(User.premium_until <= timestamp + 7 * 86400)
+        elif license == "free":
+            where.append(User.premium_until == 0)
+        else:
+            where.extend((User.premium_until > 0, User.premium_until <= timestamp))
+    # 搜索、筛选和总数使用同一条件，在分页前完成，避免只筛选当前页造成漏人。
+    rows = db.scalars(select(User).where(*where).order_by(User.login, User.id).offset(offset).limit(limit)).all()
+    assignments = {u.id: [] for u in rows}
+    if rows:
+        for membership, classroom in db.execute(
+            select(Membership, Classroom)
+            .join(Classroom, Classroom.id == Membership.class_id)
+            .where(Membership.user_id.in_(assignments), Membership.active.is_(True), Classroom.archived.is_(False))
+            .order_by(Classroom.name)
+        ):
+            assignments[membership.user_id].append(
+                {"id": classroom.id, "name": classroom.name, "subjects": membership.subjects}
+            )
     return {
-        "items": [user_view(row) for row in rows],
-        "total": db.scalar(select(func.count()).select_from(User).where(where)),
+        "items": [{**user_view(row), "classes": assignments[row.id]} for row in rows],
+        "total": db.scalar(select(func.count()).select_from(User).where(*where)),
     }
 
 
@@ -197,14 +262,17 @@ def reset_password(
 @router.get("/system/classes")
 def list_classes(
     search: str = "",
+    status: Literal["", "active", "archived"] = "",
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
     db: Session = Depends(get_db),
 ):
-    where = Classroom.name.contains(search, autoescape=True)
+    where = [Classroom.name.contains(search, autoescape=True)]
+    if status:
+        where.append(Classroom.archived.is_(status == "archived"))
     rows = db.scalars(
-        select(Classroom).where(where).order_by(Classroom.name, Classroom.id).offset(offset).limit(limit)
+        select(Classroom).where(*where).order_by(Classroom.name, Classroom.id).offset(offset).limit(limit)
     ).all()
     return {
         "items": [
@@ -224,7 +292,7 @@ def list_classes(
             }
             for c in rows
         ],
-        "total": db.scalar(select(func.count()).select_from(Classroom).where(where)),
+        "total": db.scalar(select(func.count()).select_from(Classroom).where(*where)),
     }
 
 
@@ -262,6 +330,7 @@ def edit_class(class_id: str, body: ClassUpdate, user: User = Depends(system_adm
 @router.get("/system/devices")
 def list_devices(
     search: str = "",
+    status: Literal["", "online", "offline", "revoked"] = "",
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
@@ -272,6 +341,15 @@ def list_devices(
         .join(Classroom, Classroom.id == Device.class_id)
         .where(or_(Device.name.contains(search, autoescape=True), Classroom.name.contains(search, autoescape=True)))
     )
+    if status == "revoked":
+        query = query.where(Device.revoked.is_(True))
+    elif status:
+        query = query.where(Device.revoked.is_(False))
+        query = (
+            query.where(Device.last_seen > now() - 90)
+            if status == "online"
+            else query.where(Device.last_seen <= now() - 90)
+        )
     rows = db.execute(query.order_by(Device.last_seen.desc()).offset(offset).limit(limit)).all()
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     return {"items": [{**device_view(d), "className": name} for d, name in rows], "total": total}
@@ -298,18 +376,27 @@ def revoke(device_id: str, user: User = Depends(system_admin), db: Session = Dep
 
 @router.get("/system/audit")
 def audit(
+    search: str = "",
+    action: str = "",
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
     db: Session = Depends(get_db),
 ):
-    rows = db.scalars(select(SystemAudit).order_by(SystemAudit.at.desc()).offset(offset).limit(limit)).all()
+    where = [
+        or_(SystemAudit.actor.contains(search, autoescape=True), SystemAudit.target.contains(search, autoescape=True))
+    ]
+    if action:
+        where.append(SystemAudit.action == action)
+    rows = db.scalars(
+        select(SystemAudit).where(*where).order_by(SystemAudit.at.desc(), SystemAudit.id).offset(offset).limit(limit)
+    ).all()
     return {
         "items": [
             {"id": a.id, "actor": a.actor, "action": a.action, "target": a.target, "data": a.data, "at": a.at}
             for a in rows
         ],
-        "total": db.scalar(select(func.count()).select_from(SystemAudit)),
+        "total": db.scalar(select(func.count()).select_from(SystemAudit).where(*where)),
     }
 
 

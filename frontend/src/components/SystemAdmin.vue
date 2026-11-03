@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import {
+  LayoutDashboard,
   Users,
   School,
   Monitor,
@@ -11,94 +12,251 @@ import {
   Plus,
   Download,
   X,
+  Search,
+  ChevronRight,
+  ChevronLeft,
+  ArrowUpRight,
+  LogOut,
+  ShieldCheck,
+  KeyRound,
+  Menu,
+  SlidersHorizontal,
+  Inbox,
+  Check,
+  CircleHelp,
 } from "@lucide/vue";
 import { api, session } from "../api";
-import { timeLabel } from "../domain";
+import { adminDate, auditNames, fileSize } from "../admin";
 import AccountOnboarding from "./AccountOnboarding.vue";
 import LicenseManager from "./LicenseManager.vue";
-
+import AdminOverview from "./AdminOverview.vue";
+import AdminDataTable from "./AdminDataTable.vue";
+import AdminEditDrawer from "./AdminEditDrawer.vue";
 const emit = defineEmits<{
   changed: [];
   restored: [string];
   createClass: [];
+  openClass: [string];
+  teaching: [];
+  logout: [];
 }>();
-const tabs = [
-  { id: "overview", name: "运行概况", icon: Monitor },
-  { id: "users", name: "账号管理", icon: Users },
-  { id: "onboarding", name: "创建账号", icon: Plus },
-  { id: "licenses", name: "高级许可", icon: ScrollText },
-  { id: "classes", name: "全部班级", icon: School },
-  { id: "devices", name: "全部设备", icon: Monitor },
-  { id: "settings", name: "站点设置", icon: Settings },
-  { id: "backups", name: "备份恢复", icon: Database },
-  { id: "audit", name: "系统审计", icon: ScrollText },
+const sections = [
+  {
+    id: "overview",
+    name: "管理概览",
+    description: "学校的人员、教室和许可，一目了然。",
+    icon: LayoutDashboard,
+    group: "工作台",
+  },
+  {
+    id: "users",
+    name: "账号管理",
+    description: "统一管理教师身份、任教范围与账号期限。",
+    icon: Users,
+    group: "学校管理",
+  },
+  {
+    id: "classes",
+    name: "班级管理",
+    description: "查看班级、安排负责人，管理成员与教学内容。",
+    icon: School,
+    group: "学校管理",
+  },
+  {
+    id: "devices",
+    name: "教室设备",
+    description: "掌握教室连接情况，检查同步状态与设备绑定。",
+    icon: Monitor,
+    group: "学校管理",
+  },
+  {
+    id: "licenses",
+    name: "高级许可",
+    description: "为老师发放专属许可码，跟踪兑换与续期。",
+    icon: KeyRound,
+    group: "授权与数据",
+  },
+  {
+    id: "backups",
+    name: "数据备份",
+    description: "保存全站数据副本，重要操作前先做好备份。",
+    icon: Database,
+    group: "授权与数据",
+  },
+  {
+    id: "audit",
+    name: "操作记录",
+    description: "追溯账号、许可和数据的关键管理操作。",
+    icon: ScrollText,
+    group: "授权与数据",
+  },
+  {
+    id: "settings",
+    name: "站点设置",
+    description: "设置学校看板名称，查看服务信息。",
+    icon: Settings,
+    group: "系统",
+  },
 ];
-const tab = ref("overview"),
+const groups = [...new Set(sections.map((s) => s.group))];
+const fromHash = () => {
+  const v = location.hash.replace("#/admin/", "");
+  return sections.some((s) => s.id === v) ? v : "overview";
+};
+const tab = ref(fromHash()),
+  mobileMenu = ref(false),
   overview = ref<any>(null),
   rows = ref<any[]>([]),
-  total = ref(0),
+  activity = ref<any[]>([]);
+const total = ref(0),
   offset = ref(0),
-  search = ref("");
+  pageSize = ref(20),
+  query = ref("");
+const filters = reactive({
+  search: "",
+  identity: "",
+  status: "",
+  license: "",
+  action: "",
+});
 const busy = ref(false),
+  loading = ref(false),
   error = ref(""),
   notice = ref(""),
   backupSupported = ref(true);
-const settingsForm = reactive({ siteName: "", registrationOpen: false });
-const modal = ref<HTMLDialogElement>(),
-  mode = ref(""),
-  target = ref<any>(null);
-const userForm = reactive({
-  login: "",
-  name: "",
-  password: "",
-  systemAdmin: false,
-  active: true,
-  canCreateClasses: false,
-  expiry: "",
-});
-const licenseUserId = ref("");
-const classForm = reactive({ name: "", ownerId: "", archived: false }),
-  ownerSearch = ref(""),
-  ownerOptions = ref<any[]>([]);
-const restoreForm = reactive({ password: "", confirmation: "" });
-const paged = computed(() =>
-  ["users", "classes", "devices", "audit"].includes(tab.value),
+const activeSection = computed(() => sections.find((s) => s.id === tab.value)!);
+const hasFilters = computed(() => Object.values(filters).some(Boolean));
+const settingsForm = reactive({ siteName: "" }),
+  licenseUserId = ref("");
+const creationDialog = ref<HTMLDialogElement>(),
+  creationMounted = ref(false),
+  creationBusy = ref(false);
+const editDrawer = ref<InstanceType<typeof AdminEditDrawer>>();
+const licenseView = ref<InstanceType<typeof LicenseManager>>();
+async function refreshPage() {
+  await load(true);
+  if (tab.value === "licenses") await licenseView.value?.reload();
+}
+const statusOptions = computed(() =>
+  tab.value === "users"
+    ? [
+        ["active", "正常"],
+        ["expiring", "7 天内到期"],
+        ["expired", "已到期"],
+        ["disabled", "已停用"],
+        ["pending", "待设密码"],
+      ]
+    : tab.value === "classes"
+      ? [
+          ["active", "使用中"],
+          ["archived", "已归档"],
+        ]
+      : [
+          ["online", "在线"],
+          ["offline", "离线"],
+          ["revoked", "已解绑"],
+        ],
 );
-const auditNames: Record<string, string> = {
-  system_initialized: "初始化系统",
-  system_settings_changed: "修改站点设置",
-  user_created: "创建账号",
-  account_created: "创建账号",
-  account_invited: "旧版账号邀请",
-  account_activated: "账号完成激活",
-  activation_reissued: "重发激活码",
-  license_issued: "签发高级许可",
-  license_redeemed: "兑换高级许可",
-  license_revoked: "作废许可码",
-  license_ended: "终止高级许可",
-  user_updated: "修改账号",
-  password_reset: "重置密码",
-  class_updated: "修改班级",
-  device_revoked: "撤销设备",
-  backup_created: "创建备份",
-  backup_restored: "恢复备份",
-};
-const modalNames: Record<string, string> = {
-  create: "创建账号",
-  edit: "编辑账号",
-  password: "重置密码",
-  class: "管理班级",
-  revoke: "撤销设备",
-  restore: "恢复数据库备份",
-};
-const size = (bytes: number) =>
-  bytes >= 1073741824
-    ? `${(bytes / 1073741824).toFixed(1)} GB`
-    : `${(bytes / 1048576).toFixed(1)} MB`;
+let requestSequence = 0;
+async function load(withOverview = false) {
+  const sequence = ++requestSequence,
+    currentTab = tab.value;
+  loading.value = true;
+  error.value = "";
+  try {
+    const params = new URLSearchParams({
+      ...filters,
+      offset: String(offset.value),
+      limit: String(pageSize.value),
+    });
+    const path =
+      currentTab === "overview"
+        ? "/system/audit?limit=5"
+        : ["users", "classes", "devices", "audit"].includes(currentTab)
+          ? `/system/${currentTab}?${params}`
+          : currentTab === "backups"
+            ? "/system/backups"
+            : "";
+    const [summary, result] = await Promise.all([
+      withOverview || !overview.value ? api("/system/overview") : null,
+      path ? api(path) : null,
+    ]);
+    // 快速切换筛选时，只呈现最后一次请求的结果，避免旧结果覆盖当前页面。
+    if (sequence !== requestSequence) return;
+    if (summary) {
+      overview.value = summary;
+      settingsForm.siteName = summary.siteName;
+    }
+    if (currentTab === "overview") activity.value = result.items;
+    else if (result) {
+      rows.value = result.items;
+      total.value = result.total ?? result.items.length;
+      if (currentTab === "backups") backupSupported.value = result.supported;
+    }
+  } catch (e) {
+    if (sequence === requestSequence) error.value = (e as Error).message;
+  } finally {
+    if (sequence === requestSequence) loading.value = false;
+  }
+}
+async function go(
+  id: string,
+  values: Record<string, string> = {},
+  push = true,
+) {
+  tab.value = id;
+  mobileMenu.value = false;
+  query.value = "";
+  offset.value = 0;
+  rows.value = [];
+  total.value = 0;
+  notice.value = "";
+  Object.assign(
+    filters,
+    { search: "", identity: "", status: "", license: "", action: "" },
+    values,
+  );
+  if (id !== "licenses") licenseUserId.value = "";
+  if (push) history.pushState(null, "", `#/admin/${id}`);
+  await load(id === "overview");
+}
+function popstate() {
+  void go(fromHash(), {}, false);
+}
+onMounted(() => {
+  window.addEventListener("popstate", popstate);
+  void load(true);
+});
+onUnmounted(() => {
+  window.removeEventListener("popstate", popstate);
+  requestSequence++;
+});
+function filter() {
+  offset.value = 0;
+  void load();
+}
+function search() {
+  filters.search = query.value.trim();
+  filter();
+}
+function resetFilters() {
+  query.value = "";
+  Object.assign(filters, {
+    search: "",
+    identity: "",
+    status: "",
+    license: "",
+    action: "",
+  });
+  filter();
+}
+function paginate(direction: number) {
+  offset.value += direction * pageSize.value;
+  void load();
+}
 async function run(action: () => Promise<void>) {
   busy.value = true;
-  error.value = "";
-  notice.value = "";
+  error.value = notice.value = "";
   try {
     await action();
   } catch (e) {
@@ -107,141 +265,40 @@ async function run(action: () => Promise<void>) {
     busy.value = false;
   }
 }
-async function load() {
-  overview.value = await api("/system/overview");
-  Object.assign(settingsForm, {
-    siteName: overview.value.siteName,
-    registrationOpen: overview.value.registrationOpen,
-  });
-  if (paged.value) {
-    const result = await api(
-      `/system/${tab.value}?${new URLSearchParams({ search: search.value, offset: String(offset.value), limit: "20" })}`,
-    );
-    rows.value = result.items;
-    total.value = result.total;
-  } else if (tab.value === "backups") {
-    const result = await api("/system/backups");
-    rows.value = result.items;
-    backupSupported.value = result.supported;
-  }
+function createAccount() {
+  creationMounted.value = true;
+  creationDialog.value?.showModal();
 }
-async function switchTab(id: string) {
-  tab.value = id;
-  search.value = "";
-  offset.value = 0;
-  rows.value = [];
-  await run(load);
+async function changed(message = "") {
+  await load(true);
+  emit("changed");
+  notice.value = message;
 }
-onMounted(() => run(load));
-function open(kind: string, item: any = null) {
-  mode.value = kind;
-  target.value = item;
-  error.value = "";
-  Object.assign(userForm, {
-    login: item?.login ?? "",
-    name: item?.name ?? "",
-    password: "",
-    active: item?.active ?? true,
-    systemAdmin: item?.systemAdmin ?? false,
-    canCreateClasses: item?.canCreateClasses ?? false,
-    expiry: item?.expiresAt
-      ? new Date(item.expiresAt * 1000 + 8 * 3600000).toISOString().slice(0, 10)
-      : "",
-  });
-  if (kind === "class") {
-    Object.assign(classForm, {
-      name: item.name,
-      ownerId: item.owner.id,
-      archived: item.archived,
-    });
-    ownerOptions.value = [item.owner];
-    ownerSearch.value = "";
-  }
-  restoreForm.password = restoreForm.confirmation = "";
-  modal.value?.showModal();
-}
-async function findOwners() {
-  await run(async () => {
-    const result = await api(
-      `/system/users?search=${encodeURIComponent(ownerSearch.value)}&limit=100`,
-    );
-    ownerOptions.value = result.items.filter((u: any) => u.active);
-    if (
-      target.value?.owner &&
-      !ownerOptions.value.some((u) => u.id === target.value.owner.id)
-    )
-      ownerOptions.value.unshift(target.value.owner);
-  });
-}
-async function save() {
-  await run(async () => {
-    if (mode.value === "create") {
-      const { active, ...body } = userForm;
-      void active;
-      await api("/system/users", "POST", body);
-    } else if (mode.value === "edit") {
-      await api(`/system/users/${target.value.id}`, "PUT", {
-        name: userForm.name,
-        active: userForm.active,
-        systemAdmin: userForm.systemAdmin,
-        canCreateClasses: userForm.canCreateClasses,
-        expiresAt: userForm.expiry
-          ? new Date(`${userForm.expiry}T23:59:59+08:00`).getTime() / 1000
-          : 0,
-      });
-    } else if (mode.value === "password") {
-      await api(`/system/users/${target.value.id}/reset-password`, "POST", {
-        password: userForm.password,
-      });
-      if (target.value.id === session.userId) {
-        modal.value?.close();
-        emit("restored", "密码已重置，请重新登录。");
-        return;
-      }
-    } else if (mode.value === "class") {
-      await api(`/system/classes/${target.value.id}`, "PUT", classForm);
-    } else if (mode.value === "revoke") {
-      await api(`/system/devices/${target.value.id}/revoke`, "POST");
-    } else if (mode.value === "restore") {
-      const result = await api(
-        `/system/backups/${encodeURIComponent(target.value.name)}/restore`,
-        "POST",
-        restoreForm,
-      );
-      modal.value?.close();
-      emit("restored", result.message);
-      return;
-    }
-    modal.value?.close();
-    userForm.password = "";
-    await load();
-    emit("changed");
-    notice.value = "操作已保存。";
-  });
+async function manageLicense(user: any) {
+  licenseUserId.value = user.id;
+  await go("licenses");
 }
 async function saveSettings() {
   await run(async () => {
     await api("/system/settings", "PUT", settingsForm);
-    await load();
-    emit("changed");
-    notice.value = "站点设置已保存。";
+    await changed("站点名称已更新。");
   });
 }
-async function createBackup() {
+async function backup() {
   await run(async () => {
     await api("/system/backups", "POST");
     await load();
-    notice.value = "备份已生成，可以下载到其他位置保存。";
+    notice.value = "备份已完成，建议下载到服务器外保存。";
   });
 }
 async function download(name: string) {
   await run(async () => {
-    const response = await fetch(
+    const r = await fetch(
       `/api/system/backups/${encodeURIComponent(name)}/download`,
       { headers: { Authorization: `Bearer ${session.token}` } },
     );
-    if (!response.ok) throw new Error("下载失败，请重新登录后重试。");
-    const url = URL.createObjectURL(await response.blob()),
+    if (!r.ok) throw new Error("备份下载失败，请重试。");
+    const url = URL.createObjectURL(await r.blob()),
       link = document.createElement("a");
     link.href = url;
     link.download = name;
@@ -249,517 +306,517 @@ async function download(name: string) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 }
+defineExpose({ reload: () => load(true) });
 </script>
-
 <template>
-  <section class="system-page">
-    <header class="page-heading">
-      <div>
-        <p class="eyebrow">
-          {{ overview?.siteName ?? "班级看板" }} · 系统管理员
-        </p>
-        <h1>系统管理</h1>
-        <p class="muted">维护全站账号、班级、设备和数据。</p>
-      </div>
-      <button class="button secondary" :disabled="busy" @click="run(load)">
-        <RefreshCw :size="17" />刷新
-      </button>
-    </header>
-    <nav class="system-tabs" aria-label="系统管理导航">
-      <button
-        v-for="item in tabs"
-        :key="item.id"
-        :class="{ active: tab === item.id }"
-        :disabled="busy"
-        @click="switchTab(item.id)"
+  <div class="admin-shell">
+    <button
+      v-if="mobileMenu"
+      class="admin-nav-scrim"
+      aria-label="收起管理导航"
+      @click="mobileMenu = false"
+    ></button>
+    <aside class="admin-sidebar" :class="{ expanded: mobileMenu }">
+      <a
+        class="admin-brand"
+        href="#/admin/overview"
+        @click.prevent="go('overview')"
+        ><span><School :size="23" /></span
+        ><strong>ClassGlow<small>学校管理控制台</small></strong></a
       >
-        <component :is="item.icon" :size="17" />{{ item.name }}
-      </button>
-    </nav>
-    <p v-if="error && !modal?.open" class="notice danger" role="alert">
-      {{ error }}
-    </p>
-    <p v-if="notice" class="notice subtle" role="status">{{ notice }}</p>
-    <template v-if="overview">
-      <AccountOnboarding
-        v-if="tab === 'onboarding'"
-        @changed="emit('changed')"
-      />
-      <LicenseManager
-        v-else-if="tab === 'licenses'"
-        :initial-user-id="licenseUserId"
-        @changed="emit('changed')"
-      />
-      <template v-else-if="tab === 'overview'">
-        <div class="system-stats">
-          <article class="panel">
-            <span>教师与管理员</span><strong>{{ overview.users }}</strong
-            ><small>{{ overview.activeUsers }} 个启用账号</small>
-          </article>
-          <article class="panel">
-            <span>使用中的班级</span><strong>{{ overview.classes }}</strong
-            ><small>{{ overview.archivedClasses }} 个已归档</small>
-          </article>
-          <article class="panel">
-            <span>已绑定设备</span><strong>{{ overview.devices }}</strong
-            ><small>{{ overview.onlineDevices }} 台在线</small>
-          </article>
-          <article class="panel">
-            <span>可用存储</span
-            ><strong>{{ size(overview.diskFreeBytes) }}</strong
-            ><small>{{
-              overview.database === "sqlite" ? "SQLite 单机运行" : "PostgreSQL"
-            }}</small>
-          </article>
+      <div class="admin-school">
+        <span class="school-emblem"><School :size="17" /></span>
+        <div>
+          <strong>{{ overview?.siteName ?? "班级看板" }}</strong
+          ><small>学校管理空间</small>
         </div>
-        <section class="panel admin-start">
-          <h2>开通老师的工作台</h2>
-          <p class="muted">
-            设置账号、密码和任教班级，老师可以直接登录。高级功能的许可码在这里单独管理。
-          </p>
-          <div class="record-actions">
-            <button class="button primary" @click="switchTab('onboarding')">
-              开通班主任 / 老师账号</button
-            ><button
-              class="button secondary"
-              @click="
-                licenseUserId = '';
-                switchTab('licenses');
-              "
-            >
-              签发高级许可
-            </button>
-          </div>
-        </section>
-        <section class="panel">
-          <h2>服务状态</h2>
-          <dl class="system-details">
-            <div>
-              <dt>站点地址</dt>
-              <dd>{{ overview.publicUrl }}</dd>
-            </div>
-            <div>
-              <dt>本次运行</dt>
-              <dd>{{ Math.floor(overview.uptimeSeconds / 60) }} 分钟</dd>
-            </div>
-            <div>
-              <dt>数据库大小</dt>
-              <dd>
-                {{
-                  overview.databaseBytes === null
-                    ? "由数据库服务管理"
-                    : size(overview.databaseBytes)
-                }}
-              </dd>
-            </div>
-            <div>
-              <dt>服务时间</dt>
-              <dd>{{ timeLabel(overview.serverTime * 1000, true) }}</dd>
-            </div>
-            <div>
-              <dt>账号获取</dt>
-              <dd>由管理员创建</dd>
-            </div>
-            <div>
-              <dt>服务器管理</dt>
-              <dd>通过服务器菜单管理</dd>
-            </div>
-          </dl>
-        </section>
-      </template>
-      <section v-else-if="tab === 'settings'" class="panel system-form">
-        <h2>站点设置</h2>
-        <form @submit.prevent="saveSettings">
-          <fieldset :disabled="busy">
-            <label class="field"
-              >站点名称<input
-                v-model.trim="settingsForm.siteName"
-                required
-                maxlength="80"
-            /></label>
-            <p class="muted">
-              老师使用管理员分配的账号和密码登录。身份、账号期限和高级许可均由系统管理员管理。
-            </p>
-            <label class="field"
-              >公开访问地址<input :value="overview.publicUrl" readonly
-            /></label>
-            <p class="muted small">
-              更换域名时，在服务器部署配置中修改公开地址。
-            </p>
-            <button class="button primary" :disabled="busy">
-              保存站点设置
-            </button>
-          </fieldset>
-        </form>
-      </section>
-      <section v-else-if="tab === 'backups'" class="panel">
-        <div class="section-heading">
-          <h2>数据库备份</h2>
-          <button
-            class="button primary"
-            :disabled="busy || !backupSupported"
-            @click="createBackup"
-          >
-            <Plus :size="16" />立即备份
-          </button>
+        <ShieldCheck :size="15" />
+      </div>
+      <nav aria-label="管理后台导航">
+        <div v-for="group in groups" :key="group" class="admin-nav-group">
+          <p>{{ group }}</p>
+          <a
+            v-for="item in sections.filter((s) => s.group === group)"
+            :key="item.id"
+            :href="`#/admin/${item.id}`"
+            :class="{ active: tab === item.id }"
+            :aria-current="tab === item.id ? 'page' : undefined"
+            @click.prevent="go(item.id)"
+            ><component :is="item.icon" :size="18" /><span>{{ item.name }}</span
+            ><ChevronRight v-if="tab === item.id" :size="14"
+          /></a>
         </div>
-        <p class="muted">
-          备份包含全站业务数据。恢复会替换当前数据并注销所有账号和设备；操作前自动保留当前数据库副本。
-        </p>
-        <p v-if="!backupSupported" class="notice">
-          PostgreSQL 请通过服务器运维工具执行备份和恢复。
-        </p>
-        <p v-if="!rows.length" class="inline-empty">暂无备份。</p>
-        <article v-for="item in rows" :key="item.name" class="system-row">
+      </nav>
+      <div class="admin-sidebar-bottom">
+        <button @click="emit('teaching')">
+          <ArrowUpRight :size="17" />进入教学工作台
+        </button>
+        <div class="admin-profile">
+          <span class="admin-avatar">{{ session.name.slice(0, 1) }}</span>
           <div>
-            <strong>{{ timeLabel(item.at * 1000, true) }}</strong>
-            <p class="muted small">{{ item.name }} · {{ size(item.bytes) }}</p>
+            <strong>{{ session.name }}</strong
+            ><small>系统管理员</small>
           </div>
-          <div class="record-actions">
-            <button
-              class="button secondary"
-              :disabled="busy"
-              @click="download(item.name)"
-            >
-              <Download :size="16" />下载</button
-            ><button
-              class="text-button destructive"
-              :disabled="busy || !backupSupported"
-              @click="open('restore', item)"
-            >
-              恢复此备份
-            </button>
-          </div>
-        </article>
-      </section>
-      <section v-else class="panel">
-        <div class="system-toolbar">
           <button
-            v-if="tab === 'classes'"
-            class="button primary"
-            @click="emit('createClass')"
+            aria-label="退出管理员登录"
+            title="退出登录"
+            @click="emit('logout')"
           >
-            创建班级
-          </button>
-          <form
-            v-if="tab !== 'audit'"
-            class="system-search"
-            @submit.prevent="
-              offset = 0;
-              run(load);
-            "
-          >
-            <label class="sr-only" for="system-search"
-              >搜索{{ tabs.find((t) => t.id === tab)?.name }}</label
-            ><input
-              id="system-search"
-              v-model="search"
-              placeholder="输入姓名、账号或名称"
-            /><button class="button secondary" :disabled="busy">搜索</button>
-          </form>
-          <button
-            v-if="tab === 'users'"
-            class="button primary"
-            :disabled="busy"
-            @click="switchTab('onboarding')"
-          >
-            <Plus :size="16" />创建账号
+            <LogOut :size="17" />
           </button>
         </div>
-        <p v-if="!rows.length" class="inline-empty">
-          {{ busy ? "正在读取…" : "没有符合条件的记录。" }}
-        </p>
-        <article v-for="item in rows" :key="item.id" class="system-row">
-          <template v-if="tab === 'users'"
-            ><div>
-              <h3>
-                {{ item.name }}
-                <span class="badge neutral">{{
-                  item.systemAdmin
-                    ? "系统管理员"
-                    : item.canCreateClasses
-                      ? "班主任"
-                      : "普通老师"
-                }}</span
-                ><span v-if="!item.active" class="badge">已停用</span
-                ><span v-else-if="!item.activated" class="badge amber-badge"
-                  >请设置密码</span
-                >
-              </h3>
-              <p class="muted">{{ item.login }}</p>
-              <p class="muted small">
-                账号：{{
-                  item.expiresAt
-                    ? timeLabel(item.expiresAt * 1000, true) + " 到期"
-                    : "长期有效"
-                }}
-                ·
-                {{
-                  item.systemAdmin
-                    ? "最高管理权限"
-                    : item.premiumActive
-                      ? "高级许可有效"
-                      : "基础版"
-                }}
-              </p>
+      </div>
+    </aside>
+    <div class="admin-workspace">
+      <header class="admin-topbar">
+        <button
+          class="icon-button admin-menu-toggle"
+          aria-label="打开管理导航"
+          :aria-expanded="mobileMenu"
+          @click="mobileMenu = !mobileMenu"
+        >
+          <Menu :size="21" />
+        </button>
+        <div class="admin-breadcrumb">
+          <span>管理后台</span><ChevronRight :size="14" /><strong>{{
+            activeSection.name
+          }}</strong>
+        </div>
+        <div class="admin-topbar-right">
+          <span class="admin-secure"><ShieldCheck :size="14" />管理员空间</span
+          ><span class="admin-avatar small">{{
+            session.name.slice(0, 1)
+          }}</span>
+        </div>
+      </header>
+      <div class="admin-content">
+        <header class="admin-page-heading">
+          <div>
+            <span class="admin-mini-label">{{ activeSection.group }}</span>
+            <h1>{{ activeSection.name }}</h1>
+            <p>{{ activeSection.description }}</p>
+          </div>
+          <div class="admin-heading-actions">
+            <button
+              class="button secondary refresh-admin"
+              :disabled="busy || loading"
+              @click="refreshPage"
+              aria-label="刷新管理数据"
+            >
+              <RefreshCw :size="16" :class="{ spinning: loading }" /><span
+                >刷新</span
+              ></button
+            ><button
+              v-if="['overview', 'users'].includes(tab)"
+              class="button primary"
+              @click="createAccount"
+            >
+              <Plus :size="17" />添加账号</button
+            ><button
+              v-if="tab === 'classes'"
+              class="button primary"
+              @click="emit('createClass')"
+            >
+              <Plus :size="17" />创建班级</button
+            ><button
+              v-if="tab === 'backups'"
+              class="button primary"
+              :disabled="busy || !backupSupported"
+              @click="backup"
+            >
+              <Plus :size="17" />创建备份
+            </button>
+          </div>
+        </header>
+        <div v-if="error" class="admin-feedback error" role="alert">
+          <span>{{ error }}</span
+          ><button class="text-button" @click="load(true)">重新加载</button>
+        </div>
+        <div v-if="notice" class="admin-feedback success" role="status">
+          <Check :size="17" />{{ notice
+          }}<button
+            class="icon-button"
+            aria-label="关闭操作提示"
+            @click="notice = ''"
+          >
+            <X :size="15" />
+          </button>
+        </div>
+        <div v-if="!overview" class="admin-empty">
+          <RefreshCw :size="25" :class="{ spinning: loading }" />
+          <p>{{ loading ? "正在读取管理数据…" : "暂时无法加载，请重试。" }}</p>
+        </div>
+        <template v-else>
+          <AdminOverview
+            v-if="tab === 'overview'"
+            :overview="overview"
+            :activity="activity"
+            @navigate="go"
+            @create-account="createAccount"
+            @create-class="emit('createClass')"
+          />
+          <LicenseManager
+            v-else-if="tab === 'licenses'"
+            ref="licenseView"
+            :initial-user-id="licenseUserId"
+            @changed="emit('changed')"
+          />
+          <div v-else-if="tab === 'settings'" class="admin-settings-grid">
+            <section class="admin-card">
+              <header class="admin-card-heading">
+                <div>
+                  <h2>基本信息</h2>
+                  <p>名称会显示在老师登录页与工作台。</p>
+                </div>
+                <School :size="20" />
+              </header>
+              <form class="admin-settings-form" @submit.prevent="saveSettings">
+                <label class="field"
+                  >学校 / 站点名称<input
+                    v-model.trim="settingsForm.siteName"
+                    required
+                    maxlength="80" /></label
+                ><label class="field"
+                  >网站地址<input :value="overview.publicUrl" readonly
+                /></label>
+                <p class="admin-field-help">
+                  更换域名请由服务器维护人员调整部署配置。
+                </p>
+                <button class="button primary" :disabled="busy">
+                  {{ busy ? "正在保存…" : "保存设置" }}
+                </button>
+              </form>
+            </section>
+            <section class="admin-card">
+              <header class="admin-card-heading">
+                <div>
+                  <h2>服务信息</h2>
+                  <p>用于日常运行核对</p>
+                </div>
+                <ShieldCheck :size="20" />
+              </header>
+              <dl class="admin-service-details">
+                <div>
+                  <dt>数据库</dt>
+                  <dd>
+                    {{
+                      overview.database === "sqlite" ? "SQLite" : "PostgreSQL"
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>数据库大小</dt>
+                  <dd>
+                    {{
+                      overview.databaseBytes === null
+                        ? "由数据库服务管理"
+                        : fileSize(overview.databaseBytes)
+                    }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>可用存储</dt>
+                  <dd>{{ fileSize(overview.diskFreeBytes) }}</dd>
+                </div>
+                <div>
+                  <dt>本次运行</dt>
+                  <dd>{{ Math.floor(overview.uptimeSeconds / 60) }} 分钟</dd>
+                </div>
+                <div>
+                  <dt>服务时间</dt>
+                  <dd>{{ adminDate(overview.serverTime, true) }}</dd>
+                </div>
+              </dl>
+              <div class="admin-tip">
+                <CircleHelp :size="17" />
+                <p>更新、数据库迁移和服务器卸载，由服务器管理菜单负责。</p>
+              </div>
+            </section>
+          </div>
+          <section v-else-if="tab === 'backups'" class="admin-card">
+            <div class="admin-backup-intro">
+              <span class="metric-icon blue"><Database :size="22" /></span>
+              <div>
+                <h2>数据库备份</h2>
+                <p>包含账号、班级、许可与教学内容。下载的备份请妥善保管。</p>
+              </div>
+              <span class="admin-pill muted">{{ rows.length }} 份备份</span>
             </div>
-            <div class="record-actions">
+            <p v-if="!backupSupported" class="admin-feedback info">
+              当前使用 PostgreSQL，请通过服务器菜单备份与恢复。
+            </p>
+            <div v-if="!rows.length" class="admin-empty">
+              <Database :size="30" />
+              <h3>还没有备份</h3>
+              <p>首次投入使用前，建议保存一份完整备份。</p>
               <button
                 class="button secondary"
-                :disabled="busy"
-                @click="open('edit', item)"
+                :disabled="busy || !backupSupported"
+                @click="backup"
               >
-                编辑账号</button
-              ><button
-                v-if="!item.systemAdmin"
-                class="text-button"
+                创建第一份备份
+              </button>
+            </div>
+            <div v-else class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>备份文件</th>
+                    <th>创建时间</th>
+                    <th>大小</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in rows" :key="item.name">
+                    <td data-label="备份文件" class="primary-cell">
+                      <Database :size="18" /><span class="file-name">{{
+                        item.name
+                      }}</span>
+                    </td>
+                    <td data-label="创建时间">
+                      {{ adminDate(item.at, true) }}
+                    </td>
+                    <td data-label="大小">{{ fileSize(item.bytes) }}</td>
+                    <td data-label="操作" class="table-actions">
+                      <button @click="download(item.name)" :disabled="busy">
+                        <Download :size="14" />下载</button
+                      ><button
+                        class="destructive"
+                        :disabled="busy || !backupSupported"
+                        @click="editDrawer?.open('restore', item)"
+                      >
+                        恢复
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="admin-tip">
+              <ShieldCheck :size="17" />
+              <p>
+                恢复会替换全站数据，并让当前账号与设备退出登录。操作前系统会自动保留当前数据库副本。
+              </p>
+            </div>
+          </section>
+          <section
+            v-else
+            class="admin-card admin-list-card"
+            :aria-busy="loading"
+          >
+            <div v-if="tab === 'users'" class="admin-list-tabs">
+              <button
+                :class="{ active: !filters.identity }"
                 @click="
-                  licenseUserId = item.id;
-                  switchTab('licenses');
+                  filters.identity = '';
+                  filter();
                 "
               >
-                管理许可</button
+                全部账号</button
               ><button
-                class="text-button"
-                :disabled="busy"
-                @click="open('password', item)"
+                v-for="r in [
+                  ['headteacher', '班主任'],
+                  ['teacher', '普通老师'],
+                  ['system_admin', '系统管理员'],
+                ]"
+                :key="r[0]"
+                :class="{ active: filters.identity === r[0] }"
+                @click="
+                  filters.identity = r[0]!;
+                  filter();
+                "
               >
-                重置密码
+                {{ r[1] }}
               </button>
-            </div></template
-          >
-          <template v-else-if="tab === 'classes'"
-            ><div>
-              <h3>
-                {{ item.name }}
-                <span class="badge neutral">{{
-                  item.archived ? "已归档" : item.stage
-                }}</span>
-              </h3>
-              <p class="muted">
-                所有者 {{ item.owner.name }}（{{ item.owner.login }}） ·
-                {{ item.members }} 位成员
-              </p>
             </div>
-            <button
-              class="button secondary"
-              :disabled="busy"
-              @click="open('class', item)"
-            >
-              管理班级
-            </button></template
-          >
-          <template v-else-if="tab === 'devices'"
-            ><div>
+            <div class="admin-filterbar">
+              <form class="admin-search" @submit.prevent="search">
+                <Search :size="17" /><input
+                  v-model="query"
+                  :placeholder="
+                    tab === 'users'
+                      ? '搜索姓名或账号'
+                      : tab === 'classes'
+                        ? '搜索班级名称'
+                        : tab === 'devices'
+                          ? '搜索教室或设备名称'
+                          : '搜索操作人或操作对象'
+                  "
+                  :aria-label="`搜索${activeSection.name}`"
+                /><button type="submit">搜索</button>
+              </form>
+              <div class="admin-filter-selects">
+                <SlidersHorizontal :size="16" /><select
+                  v-if="tab !== 'audit'"
+                  v-model="filters.status"
+                  @change="filter"
+                  :aria-label="`${activeSection.name}状态`"
+                >
+                  <option value="">全部状态</option>
+                  <option v-for="s in statusOptions" :key="s[0]" :value="s[0]">
+                    {{ s[1] }}
+                  </option></select
+                ><select
+                  v-if="tab === 'users'"
+                  v-model="filters.license"
+                  @change="filter"
+                  aria-label="高级许可状态"
+                >
+                  <option value="">全部许可</option>
+                  <option value="active">许可有效</option>
+                  <option value="expiring">7 天内到期</option>
+                  <option value="expired">许可已到期</option>
+                  <option value="free">未开通高级功能</option></select
+                ><select
+                  v-if="tab === 'audit'"
+                  v-model="filters.action"
+                  @change="filter"
+                  aria-label="操作类型"
+                >
+                  <option value="">全部操作</option>
+                  <option
+                    v-for="(label, key) in auditNames"
+                    :key="key"
+                    :value="key"
+                  >
+                    {{ label }}
+                  </option></select
+                ><button
+                  v-if="hasFilters"
+                  class="text-button"
+                  @click="resetFilters"
+                >
+                  重置
+                </button>
+              </div>
+            </div>
+            <div v-if="loading" class="admin-loading-line" role="status">
+              正在加载…
+            </div>
+            <div v-if="!rows.length && !loading" class="admin-empty">
+              <Inbox :size="32" />
               <h3>
-                {{ item.name }}
-                <span class="badge neutral">{{
-                  item.revoked ? "已撤销" : item.online ? "在线" : "离线"
-                }}</span>
+                {{ hasFilters ? "没有找到匹配的记录" : "这里还没有记录" }}
               </h3>
-              <p class="muted">
-                {{ item.className }} · 缓存 v{{ item.cached }} / 应用 v{{
-                  item.applied
+              <p>
+                {{
+                  hasFilters
+                    ? "试试其他关键词，或清除筛选条件。"
+                    : tab === "users"
+                      ? "添加老师账号，分配身份和任教班级。"
+                      : tab === "classes"
+                        ? "创建班级后，可以分配老师并绑定教室电脑。"
+                        : tab === "devices"
+                          ? "在教室电脑安装客户端，再由班主任绑定班级。"
+                          : "管理操作完成后会自动记录在这里。"
                 }}
               </p>
-              <p class="muted small">
-                最近联系 {{ timeLabel(item.reported, true) }}
-              </p>
+              <button
+                v-if="hasFilters"
+                class="button secondary"
+                @click="resetFilters"
+              >
+                清除筛选</button
+              ><button
+                v-else-if="tab === 'users'"
+                class="button primary"
+                @click="createAccount"
+              >
+                添加第一个账号</button
+              ><button
+                v-else-if="tab === 'classes'"
+                class="button primary"
+                @click="emit('createClass')"
+              >
+                创建班级
+              </button>
             </div>
-            <button
-              class="text-button destructive"
-              :disabled="busy || item.revoked"
-              @click="open('revoke', item)"
-            >
-              撤销设备
-            </button></template
-          >
-          <template v-else
-            ><div>
-              <h3>{{ auditNames[item.action] ?? item.action }}</h3>
-              <p class="muted">{{ item.actor }} · {{ item.target }}</p>
-              <p class="muted small">{{ timeLabel(item.at * 1000, true) }}</p>
-            </div></template
-          >
-        </article>
-        <footer class="records-pagination">
-          <span
-            >共 {{ total }} 条 · 第 {{ Math.floor(offset / 20) + 1 }} 页</span
-          >
-          <div class="record-actions">
-            <button
-              class="button secondary"
-              :disabled="busy || offset === 0"
-              @click="
-                offset -= 20;
-                run(load);
-              "
-            >
-              上一页</button
-            ><button
-              class="button secondary"
-              :disabled="busy || offset + 20 >= total"
-              @click="
-                offset += 20;
-                run(load);
-              "
-            >
-              下一页
-            </button>
-          </div>
+            <AdminDataTable
+              v-else
+              :kind="tab"
+              :rows="rows"
+              @edit="(kind, item) => editDrawer?.open(kind, item)"
+              @license="manageLicense"
+              @open-class="emit('openClass', $event)"
+            />
+            <footer class="admin-pagination">
+              <span
+                >共 {{ total }} 条<span class="page-range" v-if="total">
+                  · 显示 {{ offset + 1 }}–{{
+                    Math.min(offset + pageSize, total)
+                  }}</span
+                ></span
+              >
+              <div>
+                <select
+                  v-model.number="pageSize"
+                  @change="filter"
+                  aria-label="每页条数"
+                >
+                  <option :value="10">10 条 / 页</option>
+                  <option :value="20">20 条 / 页</option>
+                  <option :value="50">50 条 / 页</option></select
+                ><button
+                  class="icon-button"
+                  aria-label="上一页"
+                  :disabled="loading || offset === 0"
+                  @click="paginate(-1)"
+                >
+                  <ChevronLeft :size="17" /></button
+                ><span class="page-number">{{
+                  Math.floor(offset / pageSize) + 1
+                }}</span
+                ><button
+                  class="icon-button"
+                  aria-label="下一页"
+                  :disabled="loading || offset + pageSize >= total"
+                  @click="paginate(1)"
+                >
+                  <ChevronRight :size="17" />
+                </button>
+              </div>
+            </footer>
+          </section>
+        </template>
+        <footer class="admin-footer">
+          <span>ClassGlow · 让班级管理更从容</span><span>北京时间 UTC+8</span>
         </footer>
-      </section>
-    </template>
+      </div>
+    </div>
     <dialog
-      ref="modal"
-      class="modal system-modal"
-      @cancel="busy && $event.preventDefault()"
+      ref="creationDialog"
+      class="admin-drawer creation-drawer"
+      @cancel="creationBusy && $event.preventDefault()"
+      @close="creationMounted = false"
     >
-      <header class="section-heading">
-        <h2>{{ modalNames[mode] }}</h2>
+      <header>
+        <div>
+          <span class="admin-mini-label">账号管理</span>
+          <h2>添加账号</h2>
+        </div>
         <button
           class="icon-button"
-          aria-label="关闭系统操作"
-          :disabled="busy"
-          @click="modal?.close()"
+          aria-label="关闭添加账号"
+          :disabled="creationBusy"
+          @click="creationDialog?.close()"
         >
           <X :size="20" />
         </button>
       </header>
-      <form @submit.prevent="save">
-        <template v-if="mode === 'create' || mode === 'edit'"
-          ><label v-if="mode === 'create'" class="field"
-            >账号<input
-              v-model.trim="userForm.login"
-              required
-              minlength="3"
-              maxlength="80"
-              pattern="[a-zA-Z0-9_@.\-]+" /></label
-          ><label class="field"
-            >姓名<input
-              v-model.trim="userForm.name"
-              required
-              maxlength="40" /></label
-          ><label v-if="mode === 'create'" class="field"
-            >初始密码<input
-              type="password"
-              v-model="userForm.password"
-              required
-              minlength="10"
-              maxlength="128"
-              autocomplete="new-password" /></label
-          ><label class="system-check"
-            ><input
-              type="checkbox"
-              v-model="userForm.systemAdmin"
-              :disabled="target?.id === session.userId"
-            />系统管理员</label
-          ><label class="system-check" v-if="!userForm.systemAdmin"
-            ><input
-              type="checkbox"
-              v-model="userForm.canCreateClasses"
-            />班主任：允许创建班级</label
-          ><label class="field"
-            >账号到期日（北京时间，留空为长期有效）<input
-              type="date"
-              v-model="userForm.expiry"
-              :disabled="target?.id === session.userId" /></label
-          ><label v-if="mode === 'edit'" class="system-check"
-            ><input
-              type="checkbox"
-              v-model="userForm.active"
-              :disabled="target?.id === session.userId"
-            />账号启用</label
-          >
-          <p class="muted small">
-            停用账号会立即撤销登录；其班级和历史内容保留。
-          </p></template
-        >
-        <template v-if="mode === 'password'"
-          ><p class="muted">
-            为 {{ target?.name }}（{{
-              target?.login
-            }}）设置新密码，原登录会话将失效。
-          </p>
-          <label class="field"
-            >新密码<input
-              type="password"
-              v-model="userForm.password"
-              required
-              minlength="10"
-              maxlength="128"
-              autocomplete="new-password" /></label
-        ></template>
-        <template v-if="mode === 'class'"
-          ><label class="field"
-            >班级名称<input
-              v-model.trim="classForm.name"
-              required
-              maxlength="60" /></label
-          ><label class="field"
-            >查找接任账号<input
-              v-model="ownerSearch"
-              placeholder="姓名或账号" /></label
-          ><button
-            type="button"
-            class="text-button"
-            :disabled="busy"
-            @click="findOwners"
-          >
-            查找账号</button
-          ><label class="field"
-            >班级所有者<select v-model="classForm.ownerId" required>
-              <option
-                v-for="owner in ownerOptions"
-                :key="owner.id"
-                :value="owner.id"
-              >
-                {{ owner.name }} · {{ owner.login }}
-              </option>
-            </select></label
-          ><label class="system-check"
-            ><input
-              type="checkbox"
-              v-model="classForm.archived"
-            />归档班级</label
-          >
-          <p class="muted small">
-            归档撤销设备绑定；恢复班级后需重新绑定。更换所有者后，原所有者保留班级管理员身份。
-          </p></template
-        >
-        <p v-if="mode === 'revoke'" class="notice warning">
-          撤销 {{ target?.name }} 后，该设备需重新配对才能获取班级内容。
-        </p>
-        <template v-if="mode === 'restore'"
-          ><p class="notice warning">
-            用
-            {{ target?.name }}
-            替换全站数据。恢复后使用备份中的账号和密码重新登录，所有教室设备需重新绑定。
-          </p>
-          <label class="field"
-            >当前管理员密码<input
-              type="password"
-              v-model="restoreForm.password"
-              required
-              autocomplete="current-password" /></label
-          ><label class="field"
-            >输入“恢复备份”确认<input
-              v-model="restoreForm.confirmation"
-              required
-              pattern="恢复备份"
-              autocomplete="off" /></label
-        ></template>
-        <p v-if="error" class="field-error" role="alert">{{ error }}</p>
-        <button class="button primary full" :disabled="busy">
-          {{
-            busy
-              ? "正在处理…"
-              : mode === "restore"
-                ? "确认恢复备份"
-                : "保存并确认"
-          }}
-        </button>
-      </form>
+      <div class="admin-drawer-body">
+        <AccountOnboarding
+          v-if="creationMounted"
+          @working="creationBusy = $event"
+          @changed="changed()"
+        />
+      </div>
     </dialog>
-  </section>
+    <AdminEditDrawer
+      ref="editDrawer"
+      @changed="changed"
+      @restored="emit('restored', $event)"
+      @open-class="emit('openClass', $event)"
+    />
+  </div>
 </template>

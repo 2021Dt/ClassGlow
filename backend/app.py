@@ -562,9 +562,17 @@ def layout(class_id: str, body: S.LayoutInput, user: User = Depends(actor), db: 
     c.version += 1
 
     def audit_layout(item):
-        # 审计记录图片指纹，避免每次调整字号都重复保存整张背景。
+        # 图片只在配置快照保存一份，审计使用指纹，避免每次移动组件都复制整张图。
         picture = item.get("backgroundImage", "")
-        return {**item, "backgroundImage": hashlib.sha256(picture.encode()).hexdigest() if picture else ""}
+        widgets = [
+            {**widget, "image": hashlib.sha256(widget["image"].encode()).hexdigest() if widget.get("image") else ""}
+            for widget in item.get("canvas", [])
+        ]
+        return {
+            **item,
+            "canvas": widgets,
+            "backgroundImage": hashlib.sha256(picture.encode()).hexdigest() if picture else "",
+        }
 
     audit(
         db,

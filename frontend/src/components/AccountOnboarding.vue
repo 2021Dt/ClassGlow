@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { api } from "../api";
-const emit = defineEmits<{ changed: [] }>();
+const emit = defineEmits<{ changed: []; working: [boolean] }>();
 function generatePassword() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
   return Array.from(
@@ -26,10 +26,11 @@ const search = ref(""),
   result = ref<any>(null),
   copied = ref(false);
 const teacher = computed(() => form.identity === "teacher");
+watch(busy, (value) => emit("working", value));
 async function findClasses() {
   try {
     const r = await api(
-      `/system/classes?limit=100&search=${encodeURIComponent(search.value)}`,
+      `/system/classes?status=active&limit=100&search=${encodeURIComponent(search.value)}`,
     );
     classes.value = r.items.filter((c: any) => !c.archived);
     total.value = r.total;

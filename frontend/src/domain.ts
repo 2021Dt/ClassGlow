@@ -11,6 +11,8 @@ export interface GridRect {
 }
 export type Theme = "mica_light" | "mica_dark";
 export interface Layout {
+  editor?: "grid" | "canvas";
+  canvas?: CanvasWidget[];
   theme: Theme;
   material: "subtle" | "solid";
   backgroundMode?: "mica" | "color" | "image";
@@ -24,6 +26,27 @@ export interface Layout {
   reverse: boolean;
   revision: number;
   grid: Record<GridKey, GridRect>;
+}
+export type WidgetKind = ModuleKey | "text" | "image" | "shape";
+export interface CanvasWidget {
+  id: string;
+  kind: WidgetKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  title: string;
+  text: string;
+  image: string;
+  visible: boolean;
+  locked: boolean;
+  fontSize: number;
+  textColor: string;
+  fillColor: string;
+  surface: "glass" | "solid" | "none";
+  opacity: number;
+  radius: number;
+  align: "left" | "center";
 }
 export interface Classroom {
   premiumActive?: boolean;
@@ -141,6 +164,7 @@ export interface Content {
   priority?: boolean;
 }
 export interface Device {
+  clientVersion?: string;
   id: string;
   classId: string;
   name: string;
@@ -307,6 +331,29 @@ export function canPublish(c: Classroom, subject: string): boolean {
 export function layoutIssue(layout: Layout): string {
   if (layout.backgroundMode === "image" && !layout.backgroundImage)
     return "请先上传背景图片。";
+  if (layout.editor === "canvas") {
+    if (!layout.canvas || layout.canvas.length > 24)
+      return "画布最多放置 24 个组件。";
+    if (
+      new TextEncoder().encode(JSON.stringify(layout)).length >
+      2 * 1024 * 1024 - 1024
+    )
+      return "图片总量过大，请减少图片或使用更简洁的图片。";
+    for (const item of layout.canvas) {
+      if (
+        item.x < 0 ||
+        item.y < 0 ||
+        item.w < 48 ||
+        item.h < 48 ||
+        item.x + item.w > 1600 ||
+        item.y + item.h > 900
+      )
+        return "组件超出画布边界，请调整后发布。";
+      if (item.kind === "image" && !item.image && item.visible)
+        return "请为图片组件选择图片，或先隐藏它。";
+    }
+    return "";
+  }
   const keys: GridKey[] = ["homework", "todo", "timetable"];
   if (!layout?.grid || !layout.modules) return "布局结构不完整。";
   if (

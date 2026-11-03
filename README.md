@@ -80,7 +80,7 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj
 dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x64 --self-contained true -o dist/windows
 ```
 
-交付推荐使用 [Windows x64 0.3.0 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.3.0-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行先显示中文隐私说明；同意前不联网、不创建业务数据。Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
+交付推荐使用 [Windows x64 0.4.0 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.0-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行先显示中文隐私说明；同意前不联网、不创建业务数据。Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
 
 构建安装包需要 .NET 10 SDK、Python 和 NSIS 3；脚本不会安装全局工具：
 
@@ -88,7 +88,7 @@ dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x6
 uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
 ```
 
-输出 `dist/ClassGlow-0.3.0-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
+输出 `dist/ClassGlow-0.4.0-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
 
 ## 已实现的关键行为
 
@@ -96,7 +96,7 @@ uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
 - 账号登录、可撤销会话、多班与学科权限、邀请申请审批、成员权限维护、所有权转移、归档与恢复接口。
 - 私人云草稿、停顿保存、本机未同步副本、最终输入保存、草稿与正式记录修订校验、多班原子发布与幂等结果查询。
 - 作业、提醒、完成与恢复、撤回、代改原因与修改历史；时间使用北京时间解释，存储带时区时间。
-- 浅灰 / 深灰云母、通透与纯色材质、上传背景图片或选择底色、卡片不透明度、字号与图标留白。Windows 采用一张大卡片容纳展示区，作业 / 提醒 / 课表支持拖动、右下角拉伸、显隐、精确尺寸、三种布局预设和左右镜像；标题与底部更新栏固定。布局和背景通过正式快照一起同步。
+- 浅灰 / 深灰云母、通透与纯色材质、图片 / 纯色背景。Windows 0.4.0 支持自由画布：作业、提醒、课表、时钟、倒计时、寄语、文字、图片、色块共 9 类组件，可添加、拖动、缩放、叠放、隐藏、锁定、复制、调整图层及撤销重做，也可从模板或空白画布开始。长内容分页、组件尺寸固定；旧客户端暂用基础看板并提示升级。
 - 可视化周课表、作息、只读查询、未来生效调整与旧区间保留、指定日期停课或逐节改课、寄语、倒计时、高优先级提醒上限。
 - 短期绑定码与二维码、只读设备凭证、正式快照、条件拉取、缓存与应用版本、控制修订、命令分组、过期与回执；未知结果保留原请求标识，可查询或幂等重试。
 - C# 托盘、DPAPI 状态、原子缓存、按时间过滤、文字分页、主题与材质回退、保守应用、现场暂停优先、壁纸恢复。
