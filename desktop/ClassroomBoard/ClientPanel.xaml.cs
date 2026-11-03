@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace ClassroomBoard;
@@ -22,7 +24,6 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
     {
         this.engine = engine; this.preview = preview; setup = !Bound || engine.State.SetupCompleted == false;
         InitializeComponent();
-        BrandImage.Source = HomeBrandImage.Source = AppWindow.BrandIcon();
         ServerInput.Text = engine.State.Server;
         ShowPage(setup ? Bound ? "display" : "connect" : "home");
         timer.Tick += (_, _) => RefreshState();
@@ -37,14 +38,18 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         DisplayPage.Visibility = target == "display" ? Visibility.Visible : Visibility.Collapsed;
         HomePage.Visibility = target == "home" ? Visibility.Visible : Visibility.Collapsed;
         WizardActions.Visibility = target == "home" ? Visibility.Collapsed : Visibility.Visible;
-        StepLabel.Text = target == "home" ? "CLASSGLOW · 教室电脑"
-            : setup ? target == "connect" ? "02 / 03　连接班级" : "03 / 03　展示方式" : "本机设置";
-        StepLabel.Visibility = setup ? Visibility.Visible : Visibility.Collapsed;
-        PageTitle.Text = target switch { "connect" => "连接这间教室", "display" => "展示设置", _ => "班级已连接" };
+        PageProgress.Visibility = setup ? Visibility.Visible : Visibility.Collapsed;
+        AppWindow.SetProgress(PageProgress, target == "connect" ? 2 : 3);
+        PageArt.Source = (ImageSource)FindResource(target == "connect" ? "GlowConnectArt" : "GlowDisplayArt");
+        PageTitle.Text = target switch { "connect" => "连接班级", "display" => "展示设置", _ => "班级看板" };
         BackButton.Content = setup ? target == "display" ? "上一步" : "稍后绑定" : "返回状态";
-        NextButton.Content = target == "display" ? setup ? "完成设置" : "保存设置" : setup ? "下一步：展示方式" : "返回状态";
+        NextButton.Content = target == "display" ? setup ? "完成" : "保存" : setup ? "继续" : "返回";
         if (target == "display" && (!setup || !preferencesLoaded)) { LoadPreferences(); preferencesLoaded = true; }
         RefreshState();
+        PageScroll.ScrollToTop();
+        // 页面切换只做短淡入，遵从系统关闭动画的设置，不动画化教学内容。
+        if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+            PageBody.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
     }
 
     private void LoadPreferences()
@@ -93,17 +98,16 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
             bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze(); PairQr.Source = bitmap; displayedQr = state.PairQr;
         }
         PairQr.Visibility = hasCode && PairQr.Source is not null ? Visibility.Visible : Visibility.Collapsed;
-        BrandImage.Visibility = PairQr.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        PageArt.Visibility = page == "connect" && PairQr.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
         NextButton.IsEnabled = !pairing && (page == "display" || Bound || preview || !setup);
         BackButton.IsEnabled = !pairing;
-        ClassName.Text = Bound ? classroom : "还没有连接班级";
         StatusText.Text = Bound ? (state.Error.Length > 0 || state.EnableWallpaper ? engine.Status : "桌面展示已关闭")
             : hasCode ? "等待确认绑定" : "未绑定";
         TechnicalStatus.Text = $"ClassGlow {AppPaths.Version}\n已接收 v{state.CachedVersion} / 已展示 v{state.AppliedVersion}\n内容第 {state.Page} / {state.PageCount} 页\n{state.MaterialReason}";
         HomePrimary.Content = Bound ? "立即同步" : "继续绑定班级";
         PauseButton.Visibility = Bound ? Visibility.Visible : Visibility.Collapsed;
-        PauseButton.Content = state.LocalPaused ? "恢复本机展示" : "暂停这台电脑";
-        if (page == "home") PageTitle.Text = Bound ? "班级已连接" : "尚未连接班级";
+        PauseButton.Content = state.LocalPaused ? "恢复展示" : "暂停展示";
+        if (page == "home") PageTitle.Text = Bound ? classroom : "尚未连接班级";
     }
 
     private async void Pair_Click(object sender, RoutedEventArgs e)

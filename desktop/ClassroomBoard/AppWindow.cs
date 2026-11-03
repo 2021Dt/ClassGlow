@@ -27,7 +27,7 @@ public class AppWindow : FluentWindow
         System.Windows.Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary {
             Source = new Uri("/ClassroomBoard;component/ClientTheme.xaml", UriKind.Relative)
         });
-        ApplicationAccentColorManager.Apply(Color.FromRgb(44, 103, 86), ApplicationTheme.Light, false, false);
+        ApplicationAccentColorManager.Apply(Color.FromRgb(36, 120, 237), ApplicationTheme.Light, false, false);
         // 高对比模式优先可读性；不强行保留半透明材质。
         if (SystemParameters.HighContrast) {
             ApplicationThemeManager.Apply(ApplicationTheme.HighContrast, WindowBackdropType.None);
@@ -38,28 +38,36 @@ public class AppWindow : FluentWindow
             resources["GlowInset"] = SystemColors.WindowBrush;
             resources["GlowLine"] = SystemColors.WindowTextBrush;
             resources["GlowAccent"] = SystemColors.HighlightBrush;
+            resources["GlowCardEdge"] = SystemColors.WindowTextBrush;
+            resources["GlowOnAccent"] = SystemColors.HighlightTextBrush;
+            resources["GlowPrimaryFill"] = resources["GlowPrimaryHover"] = resources["GlowPrimaryPressed"] = SystemColors.HighlightBrush;
+            resources["GlowSwitchOff"] = SystemColors.GrayTextBrush;
+            resources["GlowKnob"] = SystemColors.HighlightTextBrush;
+            resources["GlowProgressIdle"] = SystemColors.GrayTextBrush;
             foreach (string key in new[] { "CheckBoxCheckBackgroundFillChecked", "CheckBoxCheckBackgroundFillCheckedPointerOver", "CheckBoxCheckBackgroundFillCheckedPressed", "CheckBoxCheckBorderBrush" }) resources[key] = SystemColors.HighlightBrush;
             resources["CheckBoxCheckGlyphForeground"] = SystemColors.HighlightTextBrush;
         }
     }
 
-    public AppWindow(string title, double width = 820, double height = 800, bool resizable = true)
+    public AppWindow(string title, double width = 720, double height = 640, bool resizable = true)
     {
         Title = title; Width = Math.Min(width, SystemParameters.WorkArea.Width - 32);
         Height = Math.Min(height, SystemParameters.WorkArea.Height - 32);
-        MinWidth = Math.Min(660, Width); MinHeight = Math.Min(480, Height);
+        MinWidth = Math.Min(600, Width); MinHeight = Math.Min(500, Height);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         ResizeMode = resizable ? ResizeMode.CanResize : ResizeMode.CanMinimize;
         ExtendsContentIntoTitleBar = true;
         WindowCornerPreference = WindowCornerPreference.Round;
         WindowBackdropType = SystemParameters.HighContrast ? WindowBackdropType.None : WindowBackdropType.Mica;
         FontFamily = new FontFamily("Microsoft YaHei UI"); FontSize = 14;
+        TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
         UseLayoutRounding = true; SnapsToDevicePixels = true;
         SetResourceReference(ForegroundProperty, "GlowText");
         // WPF UI 在不支持云母的系统上保留底色，不使用易出现黑底的透明分层窗口。
-        Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : new SolidColorBrush(Color.FromRgb(242, 245, 243));
+        Background = SystemParameters.HighContrast ? SystemColors.WindowBrush
+            : new SolidColorBrush(Color.FromArgb(OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) ? (byte)208 : (byte)255, 247, 248, 251));
         Icon = BrandIcon();
-        var titleBar = new TitleBar { Title = "ClassGlow  ·  " + title, Height = 48, ShowMaximize = resizable, ShowMinimize = true,
+        var titleBar = new TitleBar { Title = title.Contains("外观预览") ? "ClassGlow · 外观预览" : "ClassGlow", Height = 40, FontFamily = FontFamily, FontSize = 12, ShowMaximize = resizable, ShowMinimize = true,
             Icon = new ImageIcon { Source = Icon } };
         void CaptionNames()
         {
@@ -72,6 +80,30 @@ public class AppWindow : FluentWindow
     }
 
     public void SetBody(UIElement body) => root.Children.Add(body);
+
+    public static System.Windows.Controls.Image Artwork(string key, double height = 104) => new() {
+        Source = (ImageSource)System.Windows.Application.Current.FindResource(key),
+        Width = height * 128 / 112, Height = height, HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+    };
+
+    public static StackPanel Progress(int step)
+    {
+        var panel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+        SetProgress(panel, step); return panel;
+    }
+
+    public static void SetProgress(StackPanel panel, int step)
+    {
+        // 进度点只是位置提示；下一步由页面按钮控制，不能跳过同意或绑定。
+        panel.Children.Clear();
+        AutomationProperties.SetName(panel, $"第 {step} 步，共 3 步");
+        for (int index = 1; index <= 3; index++) {
+            var dot = new Border { Width = index == step ? 20 : 6, Height = 6, CornerRadius = new CornerRadius(3), Margin = new Thickness(4, 0, 4, 0) };
+            dot.SetResourceReference(Border.BackgroundProperty, index == step ? "GlowAccent" : "GlowProgressIdle");
+            panel.Children.Add(dot);
+        }
+    }
 
     private void RemoveNativeBorder()
     {

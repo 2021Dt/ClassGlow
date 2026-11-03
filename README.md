@@ -80,7 +80,7 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj
 dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x64 --self-contained true -o dist/windows
 ```
 
-交付推荐使用 [Windows x64 0.4.2 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.2-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行分为“隐私说明 → 连接班级 → 展示设置”三页；完成后进入状态页。窗口采用 WPF UI 的圆角标题栏与云母背景；同意前不联网、不创建业务数据。Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
+交付推荐使用 [Windows x64 0.4.3 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.3-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行分为“隐私说明 → 连接班级 → 展示设置”三页；完成后进入状态页。窗口采用 WPF UI 的圆角标题栏与云母背景；同意前不联网、不创建业务数据。Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
 
 构建安装包需要 .NET 10 SDK、Python 和 NSIS 3；脚本不会安装全局工具：
 
@@ -88,7 +88,7 @@ dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x6
 uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
 ```
 
-输出 `dist/ClassGlow-0.4.2-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
+输出 `dist/ClassGlow-0.4.3-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
 
 ## 已实现的关键行为
 

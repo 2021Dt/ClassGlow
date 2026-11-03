@@ -1,0 +1,38 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <!-- 原创矢量插图：随窗口缩放，不下载图片，也不使用 Apple 专属图标或字体。 -->
+ <LinearGradientBrush x:Key="ArtSilver" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#FFFFFF" /><GradientStop Color="#D9E0EC" Offset="1" /></LinearGradientBrush>
+ <LinearGradientBrush x:Key="ArtScreen" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#ECF6FF" /><GradientStop Color="#CCD9FB" Offset="0.65" /><GradientStop Color="#C4BDF1" Offset="1" /></LinearGradientBrush>
+ <LinearGradientBrush x:Key="ArtBlue" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#6AB6FF" /><GradientStop Color="#2369E9" Offset="1" /></LinearGradientBrush>
+ <DrawingGroup x:Key="MonitorDrawing">
+  <GeometryDrawing Brush="Transparent" Geometry="M0,0 H128 V112 H0Z" />
+  <GeometryDrawing Brush="#0C395584"><GeometryDrawing.Geometry><EllipseGeometry Center="64,104" RadiusX="34" RadiusY="3" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtSilver}" Geometry="M57,77 L71,77 L73,97 L83,101 Q86,104 82,105 L46,105 Q42,104 45,101 L55,97 Z"><GeometryDrawing.Pen><Pen Brush="#ABB8CC" Thickness="0.7" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtSilver}"><GeometryDrawing.Geometry><RectangleGeometry Rect="10,12,108,72" RadiusX="10" RadiusY="10" /></GeometryDrawing.Geometry><GeometryDrawing.Pen><Pen Brush="#B8C5D8" Thickness="0.8" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtScreen}"><GeometryDrawing.Geometry><RectangleGeometry Rect="15,17,98,58" RadiusX="6" RadiusY="6" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="#4879B7F4" Geometry="M15,65 C35,39 56,37 78,57 C91,70 105,55 113,43 L113,69 Q113,75 107,75 L21,75 Q15,75 15,69 Z" />
+  <GeometryDrawing Brush="#BFFFFFFF"><GeometryDrawing.Geometry><RectangleGeometry Rect="24,27,38,36" RadiusX="5" RadiusY="5" /></GeometryDrawing.Geometry><GeometryDrawing.Pen><Pen Brush="#F5FFFFFF" Thickness="0.8" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="#CBFFFFFF"><GeometryDrawing.Geometry><RectangleGeometry Rect="68,27,35,15" RadiusX="4" RadiusY="4" /></GeometryDrawing.Geometry><GeometryDrawing.Pen><Pen Brush="White" Thickness="0.7" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="#AFFFFFFF"><GeometryDrawing.Geometry><RectangleGeometry Rect="68,47,35,16" RadiusX="4" RadiusY="4" /></GeometryDrawing.Geometry><GeometryDrawing.Pen><Pen Brush="#EFFFFFFF" Thickness="0.7" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="#75A7E6"><GeometryDrawing.Geometry><RectangleGeometry Rect="30,34,15,3" RadiusX="1.5" RadiusY="1.5" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="#C2D2E8"><GeometryDrawing.Geometry><RectangleGeometry Rect="30,43,25,2" RadiusX="1" RadiusY="1" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="#C2D2E8"><GeometryDrawing.Geometry><RectangleGeometry Rect="30,50,19,2" RadiusX="1" RadiusY="1" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="#9BB4DD"><GeometryDrawing.Geometry><EllipseGeometry Center="64,79.5" RadiusX="1.3" RadiusY="1.3" /></GeometryDrawing.Geometry></GeometryDrawing>
+ </DrawingGroup>
+ <DrawingImage x:Key="GlowDisplayArt" Drawing="{StaticResource MonitorDrawing}" />
+ <DrawingImage x:Key="GlowConnectArt"><DrawingImage.Drawing><DrawingGroup>
+  <StaticResource ResourceKey="MonitorDrawing" />
+  <GeometryDrawing Brush="#0E32486E"><GeometryDrawing.Geometry><EllipseGeometry Center="23,106" RadiusX="19" RadiusY="2.5" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtSilver}"><GeometryDrawing.Geometry><RectangleGeometry Rect="6,43,34,61" RadiusX="8" RadiusY="8" /></GeometryDrawing.Geometry><GeometryDrawing.Pen><Pen Brush="#A6B9D4" Thickness="0.7" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtBlue}"><GeometryDrawing.Geometry><RectangleGeometry Rect="9,47,28,53" RadiusX="5.5" RadiusY="5.5" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Geometry="M17,72 L21,76 L29,67"><GeometryDrawing.Pen><Pen Brush="White" Thickness="2.7" StartLineCap="Round" EndLineCap="Round" LineJoin="Round" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="#C0FFFFFF"><GeometryDrawing.Geometry><RectangleGeometry Rect="19,95,8,1.8" RadiusX="0.9" RadiusY="0.9" /></GeometryDrawing.Geometry></GeometryDrawing>
+ </DrawingGroup></DrawingImage.Drawing></DrawingImage>
+ <DrawingImage x:Key="GlowPrivacyArt"><DrawingImage.Drawing><DrawingGroup>
+  <GeometryDrawing Brush="Transparent" Geometry="M0,0 H128 V112 H0Z" />
+  <GeometryDrawing Brush="#0C395584"><GeometryDrawing.Geometry><EllipseGeometry Center="64,105" RadiusX="29" RadiusY="3" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtSilver}"><GeometryDrawing.Geometry><RectangleGeometry Rect="22,10,84,88" RadiusX="24" RadiusY="24" /></GeometryDrawing.Geometry><GeometryDrawing.Pen><Pen Brush="White" Thickness="1.2" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtScreen}"><GeometryDrawing.Geometry><RectangleGeometry Rect="26,14,76,80" RadiusX="21" RadiusY="21" /></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="{StaticResource ArtBlue}" Geometry="M64,29 C73,36 80,37 86,38 L86,54 C86,70 75,80 64,85 C53,80 42,70 42,54 L42,38 C48,37 55,36 64,29 Z"><GeometryDrawing.Pen><Pen Brush="#DFFFFFFF" Thickness="1" /></GeometryDrawing.Pen></GeometryDrawing>
+  <GeometryDrawing Geometry="M54,55 L61,62 L75,47"><GeometryDrawing.Pen><Pen Brush="White" Thickness="3.5" StartLineCap="Round" EndLineCap="Round" LineJoin="Round" /></GeometryDrawing.Pen></GeometryDrawing>
+ </DrawingGroup></DrawingImage.Drawing></DrawingImage>
+</ResourceDictionary>

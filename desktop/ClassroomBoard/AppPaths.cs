@@ -4,7 +4,7 @@ namespace ClassroomBoard;
 
 public static class AppPaths
 {
-    public const string Version = "0.4.2";
+    public const string Version = "0.4.3";
 #if LIFECYCLE_QA
     // 验证包使用独立目录、启动项和进程锁，绝不触碰正在使用的正式客户端。
     public const string ProductId = "ClassroomBoard.QA";
