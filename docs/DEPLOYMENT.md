@@ -63,6 +63,8 @@ sudo bash classglow-install.sh --existing-nginx
 
 Docker Hub 无法访问时，可在 `deploy/.env` 设置 `PYTHON_IMAGE`、`NODE_IMAGE`、`CADDY_IMAGE` 为示例文件中的 Amazon ECR 地址。这些是 [Docker 官方公开镜像](https://gallery.ecr.aws/docker/library/python)，仅影响本项目构建，不修改 Docker 全局镜像源或代理。
 
+如果宿主机下载正常、Docker 桥接网络中的大文件下载持续停滞，可在本项目 `deploy/.env` 设置 `KANBAN_BUILD_NETWORK=host`。该选项只让镜像构建步骤使用宿主机网络，不修改 Docker 全局配置，应用启动后仍使用 Compose 的隔离网络。Python 时区数据由锁定的 `tzdata` 依赖提供，构建无需额外下载 Debian 系统包索引，符合 [Python 的时区数据查找机制](https://docs.python.org/3/library/zoneinfo.html#data-sources)。
+
 本模式新增的服务器内容如下；其他站点与 Docker 项目保持原配置：
 
 | 位置 | 用途 |

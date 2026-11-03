@@ -4,6 +4,7 @@ x-api: &api
   build:
     context: .
     dockerfile: deploy/Dockerfile.api
+    network: ${KANBAN_BUILD_NETWORK:-default}
     args:
       PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
   environment:
@@ -43,6 +44,7 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.web
+      network: ${KANBAN_BUILD_NETWORK:-default}
       args:
         NODE_IMAGE: ${NODE_IMAGE:-node:24-alpine}
         CADDY_IMAGE: ${CADDY_IMAGE:-caddy:2.11.7-alpine}
