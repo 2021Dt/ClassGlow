@@ -26,7 +26,7 @@ server_status() {
   printf '自动更新：'; systemctl is-active classglow-update.timer || true
   if [[ -f .deploy/database-migration.env ]]; then echo '数据库迁移未收尾：选择“迁移数据库”继续，不要手工删除目标库。'; fi
   if [[ -f .deploy/deployed-commit ]]; then printf '当前版本：'; cut -c1-12 .deploy/deployed-commit; fi
-  dc ps -a
+  dc ps -a --format 'table {{.Service}}\t{{.Status}}'
 }
 
 migrate_database() (
@@ -136,19 +136,26 @@ uninstall_service() (
 console_menu() {
   local choice
   while true; do
+    if [[ -t 1 ]]; then printf '\033[2J\033[H'; fi
     server_status
     cat <<'MENU'
 
- ┌─ ClassGlow 服务器管理 ────────────────────────┐
- │  1  查看状态             2  拉取并部署更新     │
- │  3  初始化管理员         4  重置管理员密码     │
- │  5  立即备份数据库       6  查看备份位置       │
- │  7  迁移 SQLite → PostgreSQL                 │
- │  8  开启自动更新         9  关闭自动更新       │
- │ 10  查看运行日志        11  查看更新记录       │
- │ 12  卸载本项目                               │
- │  0  退出                                     │
- └──────────────────────────────────────────────┘
+  ClassGlow 服务器管理
+  ----------------------------------------
+   1. 查看状态
+   2. 拉取并部署更新
+   3. 初始化管理员
+   4. 重置管理员密码
+   5. 立即备份数据库
+   6. 查看备份位置
+   7. 迁移 SQLite → PostgreSQL
+   8. 开启自动更新
+   9. 关闭自动更新
+  10. 查看运行日志
+  11. 查看更新记录
+  12. 卸载本项目
+   0. 退出
+  ----------------------------------------
 MENU
     read -r -p '请选择：' choice || return 0
     # 独立子进程保留 set -e 语义；失败只返回菜单，不误继续迁移或删除。
