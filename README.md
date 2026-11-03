@@ -4,7 +4,15 @@
 
 当前已实现教师管理、后端和 Windows 客户端的完整业务链路，按本轮要求先使用 SQLite，并保留后续 PostgreSQL 迁移能力。尚未通过真实教室的连续运行与重启验收。详细设计见 [系统与交互设计](docs/DESIGN.md)，实际验证范围见 [验收记录](docs/VERIFICATION.md)。
 
-**部署到服务器和手机访问：**见 [服务器部署与手机使用](docs/DEPLOYMENT.md)。已提供 `compose.production.yaml`、前后端镜像配置和 Caddy HTTPS 代理。单机服务器可以先用持久化 SQLite，显式设置 `KANBAN_ALLOW_SQLITE_PRODUCTION=true`；保持一个 API 进程。手机直接打开 HTTPS 域名，Windows 客户端填写 `https://域名/api/`。
+**部署到服务器和手机访问：**正式域名配置为 `teacher.dgplus.vip`，代码位于 [ClassGlow](https://github.com/2021Dt/ClassGlow)。手机与电脑使用同一个 Web 管理端，教室使用 Windows 客户端；没有 Android APK。操作流程与界面见 [使用说明](docs/USAGE.md)。
+
+Ubuntu / Debian 独立服务器，域名已解析且 80/443 可用时，一条命令安装环境、拉取 `main`、构建前后端、备份并迁移 SQLite、启动 HTTPS：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/install.sh -o classglow-install.sh && sudo bash classglow-install.sh
+```
+
+之后运行 `sudo classglow update` 更新；运行 `sudo classglow auto-on` 开启每 5 分钟检查新提交并自动部署。详细要求、运维命令和恢复方式见 [服务器部署与手机使用](docs/DEPLOYMENT.md)。Windows 客户端服务地址填写 `https://teacher.dgplus.vip/api/`。
 
 ## 启动管理端与服务
 

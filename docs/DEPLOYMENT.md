@@ -2,15 +2,59 @@
 
 本方案面向一台 Linux 服务器，使用 Docker Compose、Caddy、FastAPI 和持久化 SQLite。前端已经是响应式网页，电脑和手机使用同一个 HTTPS 地址。Windows 客户端安装在教室电脑，服务器上不运行桌面客户端。
 
+本项目域名：`teacher.dgplus.vip`。代码仓库：[2021Dt/ClassGlow](https://github.com/2021Dt/ClassGlow)，部署分支为 `main`。以下脚本面向 Ubuntu 22.04/24.04/26.04 或 Debian 12/13、使用 systemd 的独立服务器。教师与管理员操作见 [使用说明](USAGE.md)。
+
+## 一键安装与持续更新
+
+先把域名 A 记录指向服务器公网 IP，开放 TCP 80/443，确认没有其他 Nginx、宝塔或网关占用这两个端口。服务器需要能访问 GitHub、Docker 软件源及镜像源。执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/install.sh -o classglow-install.sh && sudo bash classglow-install.sh
+```
+
+脚本会安装 Git、Docker 和 Compose，克隆代码到 `/opt/classglow`，创建仅服务器保留的 `deploy/.env`，构建前后端镜像，然后停服、备份已有 SQLite、执行 Alembic 迁移、启动服务，最后检查 HTTPS 首页和 API。新安装没有数据库时跳过备份。Docker 安装采用官方 [Ubuntu](https://docs.docker.com/engine/install/ubuntu/) / [Debian](https://docs.docker.com/engine/install/debian/) 软件源；已安装的 Docker 不主动升级或卸载。
+
+目前仓库公开，服务器默认通过 HTTPS 只读拉取，不需要 GitHub 私钥。如果以后将仓库设为私有，先为服务器配置只读 Deploy Key，再将 `/opt/classglow` 的 `origin` 改为 `git@github.com:2021Dt/ClassGlow.git`；首次 SSH 连接需在终端核对 GitHub 主机指纹。无需向服务器复制开发者私钥。
+
+安装成功后，终端显示一次性安装密钥；打开 `https://teacher.dgplus.vip/` 完成初始化。密钥不会写入自动更新日志。管理员账号和口令在网页上自行设置，没有默认口令。安装命令可再次运行，已有配置和数据卷保留。
+
+```bash
+# 手工一键更新：拉取 main、构建、备份、迁移、部署
+sudo classglow update
+
+# 开启每 5 分钟检查新提交并自动部署；服务器重启后仍有效
+sudo classglow auto-on
+
+# 查看当前服务、更新日志和定时器
+sudo classglow status
+sudo classglow auto-status
+sudo classglow logs
+
+# 停止后续自动更新；已经开始的一次更新会完成
+sudo classglow auto-off
+
+# 重新读取安装密钥，或手工在线备份
+sudo classglow setup-key
+sudo classglow backup
+```
+
+“自动整合”是对 `origin/main` 进行快进更新，再一起构建前后端。服务器代码存在未提交修改、本地额外提交或分支分歧时停止，不自动猜测冲突解决方案；服务器配置放入忽略的 `deploy/.env`，业务数据库保存在 Docker 卷。自动更新只在提交改变时部署，手工 `update` 则会重建，也用于配置修改或失败后的重试。脚本拉取后执行新提交中的部署逻辑。
+
+更新先构建，构建期间旧服务继续运行；之后存在备份、迁移和启动造成的短暂停服。自动更新默认关闭，开启后 `main` 的新提交最多在下一次 5 分钟检查时触发更新。持续展示的教室客户端会使用本机缓存。
+
+备份位于数据卷 `/app/data/backups/backup-before-deploy-*.db`，也可在“系统管理 → 备份恢复”下载。不会自动删除历史备份，需定期下载到服务器外并按学校保留策略清理。部署成功提交号保存在 `/opt/classglow/.deploy/deployed-commit`。失败时保留 `/opt/classglow/.deploy/failed` 和日志，后续定时部署暂停；排查后运行 `sudo classglow update` 重试。构建失败时旧服务保留；迁移阶段失败时保持停服。脚本不自动降级数据库或删除数据卷。
+
+一键脚本当前针对 SQLite。将来切换 PostgreSQL 时按第 5 节的备份、迁移流程操作，再调整部署脚本的数据库备份步骤。若服务器已有统一网关，使用下面的 Compose 配置作为基础接入现有网关，不能直接运行占用 80/443 的独立安装方案。
+
 ## 1. 准备服务器
 
 以下命令在服务器的项目根目录执行。服务器需要 Docker Engine 和 Docker Compose 插件，安装方式见 [Docker 官方安装文档](https://docs.docker.com/engine/install/)。小规模试点可先按 2 核、2GB 内存准备；这是起步配置，尚未进行容量压测。
 
-准备域名，例如 `board.example.com`，将 A 记录指向服务器公网 IP；若设置 AAAA，IPv6 也须能到达服务器。开放 TCP 80、443，SSH 按运维需要配置。不需要开放 5173 或 8000。Caddy 在域名解析正确且端口可达时申请并续期 HTTPS 证书，依据 [Caddy 自动 HTTPS 文档](https://caddyserver.com/docs/automatic-https)。
+准备域名，例如 `teacher.dgplus.vip`，将 A 记录指向服务器公网 IP；若设置 AAAA，IPv6 也须能到达服务器。开放 TCP 80、443，SSH 按运维需要配置。不需要开放 5173 或 8000。Caddy 在域名解析正确且端口可达时申请并续期 HTTPS 证书，依据 [Caddy 自动 HTTPS 文档](https://caddyserver.com/docs/automatic-https)。
 
 上传项目源代码，包含 `backend/`、`frontend/`、`scripts/`、`deploy/`、`pyproject.toml`、`uv.lock`、`alembic.ini`、`README.md`、`.dockerignore` 和 `compose.production.yaml`。不上传 `.venv`、`node_modules`、`.qa`、`.tools`、个人 `.env` 或开发数据库。已有数据按第 5 节导入。
 
-## 2. 首次部署
+## 2. 手动部署（已使用一键脚本时跳过这些安装步骤）
 
 ```bash
 cp deploy/.env.example deploy/.env
@@ -21,7 +65,7 @@ nano deploy/.env
 将 `KANBAN_DOMAIN` 改为自己的域名，只填写域名。SQLite 配置保持：
 
 ```dotenv
-KANBAN_DOMAIN=board.example.com
+KANBAN_DOMAIN=teacher.dgplus.vip
 KANBAN_DATABASE_URL=sqlite:////app/data/kanban.db
 KANBAN_ALLOW_SQLITE_PRODUCTION=true
 ```
@@ -33,7 +77,7 @@ docker compose --env-file deploy/.env -f compose.production.yaml config --quiet
 docker compose --env-file deploy/.env -f compose.production.yaml up -d --build
 docker compose --env-file deploy/.env -f compose.production.yaml ps -a
 docker compose --env-file deploy/.env -f compose.production.yaml logs --tail=80 api web migrate
-curl --fail https://board.example.com/api/health
+curl --fail https://teacher.dgplus.vip/api/health
 ```
 
 `migrate` 一次性退出且状态为 0 是正常现象；它完成 Alembic 迁移后，`api` 健康检查通过，才启动 `web`。此顺序使用 [Compose 的完成与健康条件](https://docs.docker.com/compose/how-tos/startup-order/)。网页、接口和 TLS 使用同一域名；API 只在内部网络开放。应用与 Caddy 都没有启用记录完整请求路径的访问日志，以免邀请秘密进入日志。
@@ -56,11 +100,11 @@ docker compose --env-file deploy/.env -f compose.production.yaml exec api python
 
 | 使用位置 | 地址或操作 |
 | --- | --- |
-| 教师电脑、Android Chrome、iPhone Safari | 打开 `https://board.example.com/` 登录；注册入口由系统管理员控制 |
+| 教师电脑、Android Chrome、iPhone Safari | 打开 `https://teacher.dgplus.vip/` 登录；注册入口由系统管理员控制 |
 | 手机常用入口 | 底部“班级”“记录”“我的”；“我的”提供私人草稿、班级设置、大屏控制 |
 | 系统管理员入口 | 电脑左侧“系统管理”；手机“我的 → 系统管理” |
 | 手机展示布局 | 班级概览的展示预览入口；布局与主题须明确发布 |
-| Windows 客户端服务地址 | **`https://board.example.com/api/`**，保留 `/api/` 前缀 |
+| Windows 客户端服务地址 | **`https://teacher.dgplus.vip/api/`**，保留 `/api/` 前缀 |
 | 绑定教室电脑 | 客户端显示 6 位码，教师登录网页核对设备和目标班级后确认 |
 
 当前移动端为响应式 Web，不包含 Android APK、iOS App 或小程序。可以用浏览器的“添加到主屏幕”创建快捷入口；没有离线启动整个应用的 Service Worker。已打开页面在断网时保留未同步正文，恢复网络仅同步草稿，发布仍需用户确认。
@@ -94,7 +138,7 @@ docker compose --env-file deploy/.env -f compose.production.yaml build
 docker compose --env-file deploy/.env -f compose.production.yaml run --rm --no-deps migrate
 # 上一步成功才执行下一步；失败时保留停服状态，检查日志和备份。
 docker compose --env-file deploy/.env -f compose.production.yaml up -d
-curl --fail https://board.example.com/api/health
+curl --fail https://teacher.dgplus.vip/api/health
 ```
 
 恢复使用一个新数据库文件，不覆盖当前文件：

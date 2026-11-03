@@ -7,6 +7,9 @@ deploy/.migration.env
 .venv
 .tools
 .qa
+.deploy
+.idea
+backups
 data
 dist
 desktop
