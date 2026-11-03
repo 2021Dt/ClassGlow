@@ -4,6 +4,8 @@ SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!define MUI_ICON "../ClassroomBoard/Assets/AppIcon.ico"
+!define MUI_UNICON "../ClassroomBoard/Assets/AppIcon.ico"
 
 !macro CheckDirectory PATH
   ; 目录联接可能指向其他资料，不能沿联接覆盖或删除文件。
@@ -31,10 +33,10 @@ SetCompressorDictSize 32
 Name "${TITLE}"
 OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\${FOLDER}"
-VIProductVersion "0.4.3.0"
+VIProductVersion "0.4.4.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${TITLE}"
 VIAddVersionKey /LANG=2052 "FileDescription" "当前用户安装与卸载程序"
-VIAddVersionKey /LANG=2052 "FileVersion" "0.4.3"
+VIAddVersionKey /LANG=2052 "FileVersion" "0.4.4"
 VIAddVersionKey /LANG=2052 "LegalCopyright" "ClassGlow contributors"
 
 !define MUI_ABORTWARNING
@@ -77,7 +79,7 @@ Section "安装"
   CreateShortcut "$SMPROGRAMS\${FOLDER}\班级看板.lnk" "$INSTDIR\ClassroomBoard.exe"
   CreateShortcut "$SMPROGRAMS\${FOLDER}\卸载班级看板.lnk" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${TITLE}"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "0.4.3"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "0.4.4"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "ClassGlow"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\ClassroomBoard.exe"

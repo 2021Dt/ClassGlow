@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
-import { ArrowRight, School } from "@lucide/vue";
+import { ArrowRight, Download } from "@lucide/vue";
 import { api } from "../api";
 defineProps<{
   site: { initialized: boolean; siteName: string };
@@ -27,7 +27,13 @@ async function submit() {
   <div class="auth-shell access-shell">
     <main class="auth-card access-card">
       <div class="brand">
-        <span class="brand-mark"><School :size="24" /></span>{{ site.siteName }}
+        <img
+          class="brand-app-icon"
+          src="/app-icon.webp"
+          width="44"
+          height="44"
+          alt=""
+        />{{ site.siteName }}
       </div>
       <h2>登录</h2>
       <form @submit.prevent="submit">
@@ -56,6 +62,25 @@ async function submit() {
         </button>
       </form>
       <p class="access-help">没有账号或忘记密码？请联系管理员。</p>
+      <a class="client-download-entry" href="/download"
+        ><Download :size="16" />下载 Windows 客户端</a
+      >
     </main>
   </div>
 </template>
+<style scoped>
+.brand-app-icon {
+  border-radius: 12px;
+}
+.client-download-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  text-decoration: none;
+  font-size: 13px;
+}
+</style>

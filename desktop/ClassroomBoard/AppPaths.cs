@@ -4,7 +4,7 @@ namespace ClassroomBoard;
 
 public static class AppPaths
 {
-    public const string Version = "0.4.3";
+    public const string Version = "0.4.4";
 #if LIFECYCLE_QA
     // 验证包使用独立目录、启动项和进程锁，绝不触碰正在使用的正式客户端。
     public const string ProductId = "ClassroomBoard.QA";
@@ -18,6 +18,7 @@ public static class AppPaths
     public static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProductId);
     public static string MutexName => "Local\\" + ProductId + ".CurrentUser";
     public static string StopEventName => "Local\\" + ProductId + ".StopRequested";
+    public static string ShowEventName => "Local\\" + ProductId + ".ShowRequested";
     public const string StartupKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
     public static void QuietLog(string name, string exceptionType)

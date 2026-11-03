@@ -624,8 +624,14 @@ onUnmounted(() => {
   <div v-else class="app-shell" :class="{ 'admin-mode': adminWorkspace }">
     <aside v-if="!adminWorkspace" class="sidebar">
       <div class="brand">
-        <span class="brand-mark"><School :size="23" /></span
-        ><span
+        <img
+          class="brand-app-icon"
+          src="/app-icon.webp"
+          width="44"
+          height="44"
+          alt=""
+        />
+        <span
           >{{ site.siteName }}<small>{{ identity }}工作台</small></span
         >
       </div>
@@ -668,6 +674,9 @@ onUnmounted(() => {
         >
       </button>
       <div class="sidebar-bottom">
+        <a class="client-download-nav" href="/download"
+          ><Monitor :size="17" />下载 Windows 客户端</a
+        >
         <button class="user-control" @click="logout">
           <span class="avatar">{{ session.name.slice(0, 1) }}</span
           ><span>{{ session.name }}<small>退出登录</small></span
@@ -1231,6 +1240,9 @@ onUnmounted(() => {
       账号与高级功能
     </button>
     <div class="account-shortcuts">
+      <a class="button secondary" href="/download"
+        ><Monitor :size="17" />下载 Windows 客户端</a
+      >
       <button
         v-if="session.systemAdmin"
         class="button secondary"

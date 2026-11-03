@@ -19,7 +19,6 @@ namespace ClassroomBoard;
 public class AppWindow : FluentWindow
 {
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref uint value, int size);
-    [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr icon);
     private readonly DockPanel root = new();
 
     public static void InitializeTheme()
@@ -116,28 +115,17 @@ public class AppWindow : FluentWindow
     protected override void OnActivated(EventArgs e) { base.OnActivated(e); RemoveNativeBorder(); }
     protected override void OnDeactivated(EventArgs e) { base.OnDeactivated(e); RemoveNativeBorder(); }
 
-    public static DrawingImage BrandIcon()
+    public static ImageSource BrandIcon()
     {
-        var drawing = new DrawingGroup();
-        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(44, 103, 86)), null,
-            new RectangleGeometry(new Rect(0, 0, 32, 32), 8, 8)));
-        var pen = new System.Windows.Media.Pen(Brushes.White, 1.7) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
-        drawing.Children.Add(new GeometryDrawing(null, pen, Geometry.Parse("M7,13 L16,7 L25,13 M9,12 L9,25 L23,25 L23,12 M13,25 L13,19 L19,19 L19,25 M14,12 L18,12 L18,16 L14,16 Z")));
-        var icon = new DrawingImage(drawing); icon.Freeze(); return icon;
+        var icon = new BitmapImage(new Uri("pack://application:,,,/ClassroomBoard;component/Assets/AppIcon.png"));
+        icon.Freeze(); return icon;
     }
 
     public static System.Drawing.Icon TrayIcon()
     {
-        var visual = new DrawingVisual();
-        using (var context = visual.RenderOpen()) context.DrawImage(BrandIcon(), new Rect(0, 0, 32, 32));
-        var bitmap = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32); bitmap.Render(visual);
-        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        using var stream = new System.IO.MemoryStream(); encoder.Save(stream); stream.Position = 0;
-        using var image = new System.Drawing.Bitmap(stream);
-        IntPtr handle = image.GetHicon();
-        // 托盘持有独立副本，及时释放临时 HICON，避免反复打开产生句柄泄漏。
-        try { using var icon = System.Drawing.Icon.FromHandle(handle); return (System.Drawing.Icon)icon.Clone(); }
-        finally { DestroyIcon(handle); }
+        // 托盘与 EXE 使用同一份多尺寸图标，交由 Windows 选择适合当前缩放的尺寸。
+        using var stream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/ClassroomBoard;component/Assets/AppIcon.ico")).Stream;
+        return new System.Drawing.Icon(stream, System.Windows.Forms.SystemInformation.SmallIconSize);
     }
 
     public static TextBlock Hint(string text) => new() { Text = text, Style = (Style)System.Windows.Application.Current.FindResource("GlowHint") };

@@ -12,18 +12,18 @@
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | 0.4.3，Windows 客户端视觉与控件统一；准确提交通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.4.4，客户端下载页、应用图标与托盘收起行为；准确提交通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
 | 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.4.3 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+| Windows 发布 | 0.4.4 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
 
-0.4.3 沿用 SQLite 与迁移版本 `c091d27b681e`。自由画布存在布局 JSON 中，不需要新增数据库表。Nginx 和 Caddy 的布局请求上限统一为 2 MiB，其他接口在应用层仍限 128 KiB；升级现有 Nginx 部署时，应同步更新本项目 `.deploy/nginx.conf` 的 `client_max_body_size 2m`，先 `nginx -t` 再重载。只修改本项目站点配置。Windows 旧客户端继续展示基础看板，升级后自动取得自由画布；服务端更新不会自动替换教室电脑程序。
+0.4.4 沿用 SQLite 与迁移版本 `c091d27b681e`。自由画布存在布局 JSON 中，不需要新增数据库表。Nginx 和 Caddy 的布局请求上限统一为 2 MiB，其他接口在应用层仍限 128 KiB；升级现有 Nginx 部署时，应同步更新本项目 `.deploy/nginx.conf` 的 `client_max_body_size 2m`，先 `nginx -t` 再重载。只修改本项目站点配置。Windows 旧客户端继续展示基础看板，升级后自动取得自由画布；服务端更新不会自动替换教室电脑程序。
 
 停用、日常空间清理和彻底移除的顺序见 [服务器后期清理](SERVER-CLEANUP.md)。两份文档随代码存放在服务器 `/opt/classglow/docs/`，不包含安装密钥、口令或私钥。
 
@@ -266,7 +266,7 @@ dc run --rm --no-deps \
 
 2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。生产管理员由使用者在服务器菜单自行创建，没有预置管理员或演示数据。公网登录后的真实学校业务仍待开户后验收；本地隔离验证范围见 [验收记录](VERIFICATION.md)。
 
-Windows x64 0.4.3 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.3-win-x64-setup.exe)，大小 52,946,651 字节，SHA-256 为 `6dc736f112c157e7249c4489bc045c63cc08c0f408b33c9d6563e5b33689c7f0`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
+Windows x64 0.4.4 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.4-win-x64-setup.exe)，大小 53,265,525 字节，SHA-256 为 `7cd2985e70343128838d0a335da478397d50af9fce07f6c19c46401120d2e4d5`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
 
 | 现象 | 检查方向 |
 | --- | --- |
@@ -278,3 +278,5 @@ Windows x64 0.4.3 当前用户安装包提供[公网下载](https://teacher.dgpl
 | 客户端已缓存但未应用 | 本机是否启用展示、是否暂停、是否仍有课件处于前台 |
 
 `frontend/e2e/mobile.pw.ts` 是旧版公开注册流程的历史用例，不适用于当前管理员开户、老师直接登录的入口。本次使用隔离账号验收新的身份导航和 390px 页面；后端关键权限与期限检查见 `backend/tests/test_access_licenses.py`，不要对生产账号运行测试。
+
+分享安装包时推荐使用固定下载页 `https://teacher.dgplus.vip/download`。无需登录，下载按钮通过 `/api/client/version` 获取当前发布地址；登录页、教师工作台和管理员后台均有入口。页面展示版本、三步安装说明、手机使用、更新及卸载方法。后续更新先上传并校验新安装包，再修改本项目 `deploy/.env` 中的 `KANBAN_CLIENT_DOWNLOAD_URL`，最后运行 `sudo classglow update`。旧版安装包保留用于回退，不清理其他目录。

@@ -26,8 +26,13 @@ public static class Program
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
         if (args.Contains("--control-preview")) return ControlPreview.Run(args);
         if (args.Contains("--ui-preview")) return UiPreview.Run(args);
+        using var showRequest = new EventWaitHandle(false, EventResetMode.AutoReset, AppPaths.ShowEventName);
         using var singleton = new Mutex(true, AppPaths.MutexName, out bool first);
-        if (!first) return 0;
+        if (!first) {
+            // 再点开始菜单快捷方式时唤回已有窗口，开机启动则继续保持安静。
+            if (!args.Contains("--startup")) showRequest.Set();
+            return 0;
+        }
         var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         AppWindow.InitializeTheme();
         try {
@@ -55,7 +60,8 @@ public static class Program
             AppPaths.QuietLog("runtime.log",e.Exception.GetType().Name);
             e.Handled=true;
         };
-        var menu = new Forms.ContextMenuStrip();
+        using var menu = new Forms.ContextMenuStrip();
+        using var statusWindow = new TrayWindowHost(() => StatusWindow(engine));
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         bool exiting = false;
         async void Quit(bool forUninstall)
@@ -68,20 +74,12 @@ public static class Program
                 try { engine.RestoreWallpaper(); }
                 catch (Exception e) when (e is IOException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException) { AppPaths.QuietLog("runtime.log", e.GetType().Name); }
             }
-            tray.Visible = false; app.Shutdown();
+            tray.Visible = false; statusWindow.Dispose(); app.Shutdown();
         }
         using var stopRequest = new EventWaitHandle(false, EventResetMode.AutoReset, AppPaths.StopEventName);
         var stopListener = ThreadPool.RegisterWaitForSingleObject(stopRequest, (_, _) => app.Dispatcher.BeginInvoke(() => Quit(true)), null, Timeout.Infinite, false);
-        Window? statusWindow = null;
-        void ShowStatus()
-        {
-            if (statusWindow is not null) {
-                if (statusWindow.WindowState == WindowState.Minimized) statusWindow.WindowState = WindowState.Normal;
-                statusWindow.Activate(); return;
-            }
-            statusWindow = StatusWindow(engine); statusWindow.Closed += (_, _) => statusWindow = null; statusWindow.Show();
-        }
-        menu.Items.Add("查看状态与绑定", null, (_, _) => ShowStatus());
+        var showListener = ThreadPool.RegisterWaitForSingleObject(showRequest, (_, _) => app.Dispatcher.BeginInvoke(statusWindow.Open), null, Timeout.Infinite, false);
+        menu.Items.Add("打开班级看板", null, (_, _) => statusWindow.Open());
         menu.Items.Add("立即同步", null, (_, _) => engine.RequestSync());
         menu.Items.Add("本机暂停展示", null, (_, _) => engine.LocalPause(true));
         menu.Items.Add("本机恢复展示", null, (_, _) => engine.LocalPause(false));
@@ -89,7 +87,8 @@ public static class Program
         menu.Items.Add("隐私与本机数据", null, (_, _) => PrivacyNotice.Show(requireConsent: false));
         menu.Items.Add("卸载班级看板…", null, (_, _) => ClientLifecycle.StartUninstaller());
         menu.Items.Add("退出并恢复原壁纸", null, (_, _) => Quit(false));
-        tray.ContextMenuStrip = menu; tray.DoubleClick += (_, _) => ShowStatus();
+        tray.ContextMenuStrip = menu;
+        tray.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) statusWindow.Open(); };
         timer.Tick += async (_, _) => {
             try { await engine.Tick(); tray.Text = ("班级看板 · " + engine.Status)[..Math.Min(60, ("班级看板 · " + engine.Status).Length)]; }
             catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException) { engine.State.Error = "本机运行异常，请在托盘状态页检查"; }
@@ -108,9 +107,10 @@ public static class Program
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += displayChanged;
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += preferenceChanged;
         // 手动打开可查看状态；开机启动不弹窗打断教学。
-        if (!args.Contains("--startup")) ShowStatus();
+        if (!args.Contains("--startup")) statusWindow.Open();
         app.Run(); timer.Stop();
         stopListener.Unregister(null);
+        showListener.Unregister(null);
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= networkChanged;
         Microsoft.Win32.SystemEvents.PowerModeChanged -= powerChanged;
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= displayChanged;

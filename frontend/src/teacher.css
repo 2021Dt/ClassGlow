@@ -141,3 +141,23 @@
     text-align: center;
   }
 }
+
+.brand-app-icon {
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.client-download-nav {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.client-download-nav:hover {
+  color: var(--green);
+}
+.account-shortcuts a {
+  text-decoration: none;
+}

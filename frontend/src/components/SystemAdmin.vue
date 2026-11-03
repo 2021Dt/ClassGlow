@@ -312,8 +312,14 @@ defineExpose({ reload: () => load(true) });
         class="admin-brand"
         href="#/admin/overview"
         @click.prevent="go('overview')"
-        ><span><School :size="23" /></span
-        ><strong>ClassGlow<small>学校管理控制台</small></strong></a
+        ><img
+          class="brand-app-icon"
+          src="/app-icon.webp"
+          width="40"
+          height="40"
+          alt=""
+        />
+        <strong>ClassGlow<small>学校管理控制台</small></strong></a
       >
       <div class="admin-school">
         <span class="school-emblem"><School :size="17" /></span>
@@ -339,6 +345,9 @@ defineExpose({ reload: () => load(true) });
         </div>
       </nav>
       <div class="admin-sidebar-bottom">
+        <a class="client-download-nav" href="/download"
+          ><Download :size="17" />下载 Windows 客户端</a
+        >
         <button @click="emit('teaching')">
           <ArrowUpRight :size="17" />进入教学工作台
         </button>
