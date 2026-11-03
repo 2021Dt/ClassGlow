@@ -5,10 +5,15 @@ description = "教室桌面看板管理服务"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "fastapi>=0.115,<1", "uvicorn[standard]>=0.34,<1",
-  "sqlalchemy>=2.0,<2.2", "psycopg[binary]>=3.2,<4",
-  "pwdlib[argon2]>=0.2,<1", "pydantic-settings>=2.7,<3",
-  "alembic>=1.14,<2", "qrcode[pil]>=8,<9"
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+  "sqlalchemy>=2.0,<2.2",
+  "psycopg[binary]>=3.2,<4",
+  "pwdlib[argon2]>=0.2,<1",
+  "pydantic-settings>=2.7,<3",
+  "alembic>=1.14,<2",
+  "qrcode[pil]>=8,<9",
+  "tzdata>=2025.2,<2028",
 ]
 
 [dependency-groups]
