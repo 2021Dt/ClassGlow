@@ -12,6 +12,7 @@ const allowed = computed(
   () => isAdmin(props.classroom) && !props.classroom.archived,
 );
 const form = reactive({ message: "", event: "", eventDate: "", revision: 1 });
+const tab = ref("timetable");
 const error = ref(""),
   notice = ref(""),
   confirmation = ref<HTMLDialogElement>(),
@@ -122,10 +123,28 @@ async function archive() {
 
 <template>
   <div class="settings-page">
+    <nav class="settings-tabs" aria-label="班级设置分类">
+      <button
+        v-for="item in [
+          { id: 'timetable', label: '课表' },
+          { id: 'display', label: '寄语与倒计时' },
+          { id: 'members', label: '班级成员' },
+          { id: 'data', label: '数据与记录' },
+        ]"
+        :key="item.id"
+        :class="{ active: tab === item.id }"
+        @click="tab = item.id"
+      >
+        {{ item.label }}
+      </button>
+    </nav>
     <div v-if="error" class="notice danger" role="alert">{{ error }}</div>
     <div v-if="notice" class="notice subtle" role="status">{{ notice }}</div>
-    <div class="settings-grid">
-      <section class="panel">
+    <div
+      v-if="tab === 'display' || tab === 'data'"
+      class="settings-grid settings-single-panel"
+    >
+      <section v-if="tab === 'display'" class="panel">
         <h2>寄语与倒计时</h2>
         <form @submit.prevent="saveDisplay">
           <fieldset :disabled="!allowed || busy">
@@ -149,12 +168,12 @@ async function archive() {
             </div>
             <button class="button primary">发布展示信息</button
             ><button type="button" class="text-button" @click="load">
-              重新读取正式配置
+              撤销未保存修改
             </button>
           </fieldset>
         </form>
       </section>
-      <section class="panel">
+      <section v-if="tab === 'data'" class="panel">
         <h2>数据与班级维护</h2>
         <p class="muted small">
           导出包含本班配置、正式内容和历史，不包含账号口令、会话、设备凭证或私人草稿。
@@ -181,10 +200,18 @@ async function archive() {
       </section>
     </div>
     <ClassMaintenance
+      v-if="tab === 'members'"
       :classroom="classroom"
       @refresh="emit('refresh')"
-    /><TimetableEditor :classroom="classroom" @refresh="emit('refresh')" />
-    <section v-if="isAdmin(classroom)" class="panel audit-panel">
+    /><TimetableEditor
+      v-if="tab === 'timetable'"
+      :classroom="classroom"
+      @refresh="emit('refresh')"
+    />
+    <section
+      v-if="tab === 'data' && isAdmin(classroom)"
+      class="panel audit-panel"
+    >
       <div class="section-heading">
         <h2>班级维护记录</h2>
         <button class="text-button" @click="loadAudits">读取最近操作</button>
@@ -227,3 +254,30 @@ async function archive() {
     </div>
   </dialog>
 </template>
+
+<style scoped>
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.settings-tabs button {
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.settings-tabs button.active {
+  color: var(--green);
+  background: #e5efe8;
+  font-weight: 600;
+}
+.settings-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.settings-grid > .panel {
+  max-width: 900px;
+}
+</style>

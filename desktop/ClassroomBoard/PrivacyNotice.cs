@@ -25,7 +25,7 @@ public static class PrivacyNotice
         三、本机保存的位置
         数据目录：{AppPaths.DataDirectory}
         设备凭证和班级快照保存在 state.bin，使用当前 Windows 用户的 DPAPI 加密。渲染后的桌面 PNG 是明文图片，可能包含教学内容，无法宣称为加密文件。临时渲染图、同意记录和有大小上限的异常日志均放在同一目录。
-        运行包安装在当前用户的 LocalAppData\Programs\{AppPaths.InstallFolder}。安装器仅登记当前用户的卸载入口和开始菜单快捷方式，不安装驱动、系统服务或计划任务，不修改防火墙。
+        运行包安装在您选择的专用目录，默认位置为当前用户的 LocalAppData\Programs\{AppPaths.InstallFolder}。安装器登记当前用户的卸载入口和开始菜单快捷方式，可选创建桌面快捷方式，不安装驱动、系统服务或计划任务，不修改防火墙。
 
         四、需要您主动开启的功能
         壁纸展示和开机启动默认关闭。勾选“随当前用户登录启动”时，只写入 HKCU\{AppPaths.StartupKey} 中名为 {AppPaths.ProductId} 的值。勾选壁纸展示后，仅修改所选显示器，记录原壁纸路径用于恢复；不会强制切换课件或其他程序。

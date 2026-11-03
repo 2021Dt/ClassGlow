@@ -32,6 +32,7 @@ import {
   FolderOpen,
   Maximize2,
   Minimize2,
+  ArrowLeft,
 } from "@lucide/vue";
 import type {
   CanvasWidget,
@@ -60,11 +61,14 @@ const props = defineProps<{
   contents: Content[];
   now: number;
   disabled: boolean;
+  disabledReason?: string;
   publishError?: string;
   publishNotice?: string;
+  standalone?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [Layout]; publish: [] }>();
 const selected = ref(""),
+  mobilePanel = ref("library"),
   propertyTab = ref("component"),
   zoom = ref(100),
   snap = ref(true),
@@ -145,10 +149,12 @@ function add(kind: WidgetKind) {
   change({ ...model.value, editor: "canvas", canvas: [...items.value, item] });
   selected.value = item.id;
   propertyTab.value = "component";
+  mobilePanel.value = "inspector";
 }
 function select(id: string) {
   selected.value = id;
   propertyTab.value = "component";
+  mobilePanel.value = "inspector";
 }
 function undo() {
   const previous = history.value.pop();
@@ -318,7 +324,7 @@ function move(event: PointerEvent) {
   );
 }
 function keyboard(event: KeyboardEvent) {
-  if (event.key === "Escape") focused.value = false;
+  if (event.key === "Escape" && !props.standalone) focused.value = false;
   if (
     props.disabled ||
     /INPUT|TEXTAREA|SELECT/.test((event.target as HTMLElement).tagName)
@@ -387,14 +393,26 @@ onUnmounted(() => {
 <template>
   <section
     class="canvas-studio"
-    :class="{ 'studio-focused': focused }"
+    :class="{
+      'studio-focused': focused || standalone,
+      'studio-page': standalone,
+    }"
     @keydown="keyboard"
   >
     <header class="studio-toolbar">
       <div class="studio-heading">
+        <a
+          v-if="standalone"
+          class="studio-back"
+          href="/"
+          aria-label="返回教师工作台"
+          title="返回教师工作台"
+          ><ArrowLeft :size="18"
+        /></a>
         <span><Layers :size="18" /></span>
         <div>
-          <strong>看板设计</strong>
+          <strong>{{ standalone ? classroom.name : "看板设计" }}</strong
+          ><small v-if="standalone">看板画布</small>
         </div>
       </div>
       <div class="studio-history">
@@ -416,7 +434,11 @@ onUnmounted(() => {
         </button>
       </div>
       <div class="studio-save-actions">
-        <button class="button secondary" @click="focused = !focused">
+        <button
+          v-if="!standalone"
+          class="button secondary"
+          @click="focused = !focused"
+        >
           <component :is="focused ? Minimize2 : Maximize2" :size="15" />
           <span>{{ focused ? "收起画布" : "展开画布" }}</span>
         </button>
@@ -441,8 +463,8 @@ onUnmounted(() => {
     <p v-if="publishNotice" class="notice subtle studio-notice" role="status">
       {{ publishNotice }}
     </p>
-    <p v-if="disabled" class="notice subtle studio-notice">
-      自由设计需开通高级许可。
+    <p v-if="disabledReason" class="notice subtle studio-notice">
+      {{ disabledReason }}
     </p>
     <div v-if="feedback" class="notice subtle studio-notice" role="status">
       {{ feedback }}
@@ -450,7 +472,21 @@ onUnmounted(() => {
     <p v-if="issue" class="notice warning studio-notice" role="alert">
       {{ issue }}
     </p>
-    <div class="studio-body">
+    <div class="studio-body" :class="`mobile-panel-${mobilePanel}`">
+      <nav v-if="standalone" class="studio-mobile-panels" aria-label="画布工具">
+        <button
+          :aria-pressed="mobilePanel === 'library'"
+          @click="mobilePanel = 'library'"
+        >
+          添加组件与模板
+        </button>
+        <button
+          :aria-pressed="mobilePanel === 'inspector'"
+          @click="mobilePanel = 'inspector'"
+        >
+          组件属性与外观
+        </button>
+      </nav>
       <aside class="studio-library">
         <div class="studio-section-title">
           <strong>添加组件</strong><span>{{ items.length }}/24</span>

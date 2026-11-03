@@ -23,6 +23,7 @@ public static class Program
         if (args.Contains("--render-preview")) return PreviewExport.Run(args);
         if (args.Contains("--self-test")) return SelfTest.Run(args);
         if (args.Contains("--network-self-test")) return SelfTest.Network(args).GetAwaiter().GetResult();
+        if (args.Contains("--pairing-check")) return SelfTest.Pairing(args).GetAwaiter().GetResult();
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
         if (args.Contains("--control-preview")) return ControlPreview.Run(args);
         if (args.Contains("--ui-preview")) return UiPreview.Run(args);
@@ -127,6 +128,31 @@ public static class Program
 
 public static class SelfTest
 {
+    public static async Task<int> Pairing(string[] args)
+    {
+        string? output = args.SkipWhile(a => a != "--output").Skip(1).FirstOrDefault();
+        string? server = args.SkipWhile(a => a != "--server").Skip(1).FirstOrDefault();
+        if (output is null || server is null) return 2;
+        Directory.CreateDirectory(output);
+        // 只在这个验证进程内模拟失效代理；不修改 Windows 代理、壁纸或真实客户端数据。
+        HttpClient.DefaultProxy = new System.Net.WebProxy("http://127.0.0.1:7890") { BypassProxyOnLocal = false };
+        using var engine = new Engine(new StateStore(output));
+        engine.State.EnableWallpaper = false;
+        try {
+            await engine.Pair(server);
+            bool paired = engine.State.PairCode.Length == 6;
+            await engine.RevokeForUninstall();
+            await engine.StopAsync();
+            File.Delete(Path.Combine(output, "state.bin"));
+            File.WriteAllText(Path.Combine(output, "pairing-result.json"), new JsonObject {
+                ["passed"] = paired, ["proxyBypassed"] = true, ["pairingRevoked"] = true,
+                ["server"] = server, ["wallpaperChanged"] = false }.ToJsonString());
+            return paired ? 0 : 1;
+        } catch (Exception e) {
+            File.WriteAllText(Path.Combine(output, "pairing-error.txt"), e.ToString());
+            return 1;
+        }
+    }
     public static async Task<int> Network(string[] args)
     {
         // 本地假服务只发响应头和部分正文，验证整体截止时间；不创建托盘或修改壁纸。

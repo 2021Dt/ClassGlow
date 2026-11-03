@@ -1,4 +1,25 @@
 /* 自由画布与 Windows 共用 1600 × 900 设计坐标；缩放只用于编辑预览。 */
+.canvas-studio.studio-page {
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.studio-heading small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: #8a9890;
+  margin-top: 2px;
+}
+.studio-back {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 32px;
+  margin-right: 8px;
+  border-right: 1px solid #e1e7e2;
+}
 .canvas-studio.studio-focused {
   position: fixed;
   inset: 12px;
@@ -976,5 +997,69 @@ body:has(.studio-focused) {
   .studio-canvas-column .icon-button {
     min-width: 34px;
     min-height: 34px;
+  }
+}
+
+.canvas-studio.studio-focused.studio-page {
+  inset: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.studio-mobile-panels {
+  display: none;
+}
+/* 小屏先展示画布，再切换工具，避免打开页面后需要穿过整段组件列表。 */
+@media (max-width: 1000px) {
+  .studio-page .studio-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .studio-page .studio-canvas-column {
+    order: 0;
+    min-height: 0;
+  }
+  .studio-page .studio-viewport {
+    height: clamp(240px, 38dvh, 430px);
+    min-height: 0;
+    padding: 24px 12px;
+    display: flex;
+    align-items: safe center;
+  }
+  .studio-page .studio-mobile-panels {
+    order: 1;
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px;
+    border-block: 1px solid #e3eae6;
+    background: #fff;
+  }
+  .studio-mobile-panels button {
+    flex: 1;
+    padding: 12px 8px;
+    border-radius: 9px;
+    background: #f4f6f4;
+    color: #75867c;
+    font-size: 12px;
+  }
+  .studio-mobile-panels button[aria-pressed="true"] {
+    background: #e4efe9;
+    color: #2b6654;
+    font-weight: 600;
+  }
+  .studio-page .studio-library,
+  .studio-page .studio-inspector {
+    order: 2;
+    max-height: none;
+    border: 0;
+  }
+  .studio-page .mobile-panel-library .studio-inspector,
+  .studio-page .mobile-panel-inspector .studio-library {
+    display: none;
+  }
+  .studio-page .studio-palette {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

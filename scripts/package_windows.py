@@ -4,6 +4,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,8 +20,9 @@ def main():
     nsis = args.nsis or Path(os.environ["LOCALAPPDATA"]) / "tauri/NSIS/makensis.exe"
     if not nsis.is_file():
         raise SystemExit("请安装 NSIS 3，并通过 --nsis 指定 makensis.exe；脚本不会安装全局工具。")
-    payload = ROOT / "dist" / ("windows-qa" if args.qa else "windows-0.4.4")
-    output = ROOT / "dist" / ("ClassGlow-0.4.4-uninstall-QA.exe" if args.qa else "ClassGlow-0.4.4-win-x64-setup.exe")
+    version = ET.parse(ROOT / "desktop/ClassroomBoard/ClassroomBoard.csproj").findtext(".//Version")
+    payload = ROOT / "dist" / ("windows-qa" if args.qa else f"windows-{version}")
+    output = ROOT / "dist" / (f"ClassGlow-{version}-uninstall-QA.exe" if args.qa else f"ClassGlow-{version}-win-x64-setup.exe")
     build = ROOT / ".qa" / ("installer-qa" if args.qa else "installer")
     build.mkdir(parents=True, exist_ok=True)
     command = [
@@ -39,7 +41,10 @@ def main():
     if args.qa:
         command += ["-p:DefineConstants=LIFECYCLE_QA"]
     subprocess.run(command, check=True, cwd=ROOT)
-    shutil.copyfile(ROOT / "desktop/installer/privacy.txt", payload / "隐私与卸载说明.txt")
+    privacy = (ROOT / "desktop/installer/privacy.txt").read_text(encoding="utf-8-sig")
+    # NSIS 许可页单独读取文本，不能依赖 .nsi 的 /INPUTCHARSET；明确使用带 BOM 的 UTF-16。
+    (build / "license.txt").write_text(privacy, encoding="utf-16")
+    (payload / "隐私与卸载说明.txt").write_text(privacy, encoding="utf-8-sig")
     folders = sorted(
         (path.relative_to(payload) for path in payload.rglob("*") if path.is_dir()), key=lambda p: len(p.parts)
     )
@@ -58,6 +63,8 @@ def main():
         "/INPUTCHARSET",
         "UTF8",
         "/V2",
+        f"/DAPP_VERSION={version}",
+        f"/DLICENSE_FILE={build / 'license.txt'}",
         f"/DOUTPUT_FILE={output}",
         f"/DINSTALL_FILES={build / 'install.nsh'}",
         f"/DUNINSTALL_FILES={build / 'uninstall.nsh'}",

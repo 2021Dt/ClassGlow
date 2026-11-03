@@ -16,7 +16,8 @@ public sealed class Engine : IDisposable
     private readonly StateStore store;
     private readonly Renderer renderer;
     private readonly IWallpaper wallpaper;
-    private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(8) };
+    // 教室客户端直连所配置的服务，不继承个人代理软件遗留的本机端口；不修改系统代理设置。
+    private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(8) };
     private double nextPoll, nextHeartbeat, nextRender;
     private double nextCleanup;
     private int failures;

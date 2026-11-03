@@ -291,12 +291,14 @@ onUnmounted(() => {
     <form class="editor-form" @submit.prevent="publish">
       <header class="sheet-header">
         <div>
-          <p class="eyebrow">{{ form.sourceId ? "修改草稿" : "新建内容" }}</p>
+          <p class="eyebrow">
+            {{ form.sourceId ? "修改已发布内容" : "发布到班级" }}
+          </p>
           <h2>
             {{
               preview
                 ? "发布前预览"
-                : `编辑${form.kind === "homework" ? "作业" : "提醒"}`
+                : `${form.sourceId ? "修改" : "发布"}${form.kind === "homework" ? "作业" : "提醒"}`
             }}
           </h2>
         </div>
@@ -312,38 +314,55 @@ onUnmounted(() => {
       <div class="sheet-body">
         <fieldset class="editor-fields" :disabled="busy || !!pendingPublish">
           <template v-if="!preview">
-            <fieldset class="target-field">
-              <legend>发布到 <span class="required">*</span></legend>
-              <div class="class-checks">
-                <label
-                  v-for="c in model.classes"
-                  :key="c.id"
-                  :class="{ selected: form.classIds.includes(c.id) }"
-                  ><input
-                    type="checkbox"
-                    :value="c.id"
-                    v-model="form.classIds"
-                    :disabled="
-                      !!form.sourceId ||
-                      (!premiumAvailable() &&
-                        form.classIds.length >= 1 &&
-                        !form.classIds.includes(c.id))
-                    "
-                  />{{ c.name }}</label
-                ><label
-                  v-for="id in missingTargets"
-                  :key="id"
-                  class="invalid-target"
-                  ><input
-                    type="checkbox"
-                    :value="id"
-                    v-model="form.classIds"
-                    :disabled="!!form.sourceId"
-                  />失效目标 · 取消选择后可继续</label
+            <details
+              class="compose-targets"
+              :open="!form.classIds.length || !!invalidTargets.length"
+            >
+              <summary>
+                <span>发布班级</span
+                ><strong>{{
+                  model.classes
+                    .filter((c) => form.classIds.includes(c.id))
+                    .map((c) => c.name)
+                    .join("、") || "请选择班级"
+                }}</strong
+                ><small>更改</small>
+              </summary>
+              <fieldset class="target-field">
+                <legend>发布到 <span class="required">*</span></legend>
+                <div class="class-checks">
+                  <label
+                    v-for="c in model.classes"
+                    :key="c.id"
+                    :class="{ selected: form.classIds.includes(c.id) }"
+                    ><input
+                      type="checkbox"
+                      :value="c.id"
+                      v-model="form.classIds"
+                      :disabled="
+                        !!form.sourceId ||
+                        (!premiumAvailable() &&
+                          form.classIds.length >= 1 &&
+                          !form.classIds.includes(c.id))
+                      "
+                    />{{ c.name }}</label
+                  ><label
+                    v-for="id in missingTargets"
+                    :key="id"
+                    class="invalid-target"
+                    ><input
+                      type="checkbox"
+                      :value="id"
+                      v-model="form.classIds"
+                      :disabled="!!form.sourceId"
+                    />失效目标 · 取消选择后可继续</label
+                  >
+                </div>
+                <small v-if="!premiumAvailable() && model.classes.length > 1"
+                  >多班发布需高级许可</small
                 >
-              </div>
-              <small v-if="!premiumAvailable()">多班发布需高级许可</small>
-            </fieldset>
+              </fieldset>
+            </details>
             <label class="field"
               >{{ form.kind === "homework" ? "科目" : "提醒范围" }}
               <select v-model="form.subject">
@@ -386,46 +405,51 @@ onUnmounted(() => {
                 "
               />高优先级提醒 <small>每班最多 3 条</small></label
             >
-            <div class="form-divider"></div>
-            <h3 class="form-subheading">展示时间</h3>
-            <button
-              v-if="friday && form.kind === 'homework'"
-              type="button"
-              class="text-button"
-              @click="chooseWeekend"
-            >
-              周末作业，展示至下周一 08:00
-            </button>
-            <p class="muted small">北京时间 · 展示以“结束展示”为准</p>
-            <div class="form-grid">
+            <details class="compose-schedule">
+              <summary>
+                <span>展示至 {{ timeLabel(form.until, true) }}</span
+                ><small>修改时间与截止日期</small>
+              </summary>
+              <h3 class="form-subheading">展示时间</h3>
+              <button
+                v-if="friday && form.kind === 'homework'"
+                type="button"
+                class="text-button"
+                @click="chooseWeekend"
+              >
+                周末作业，展示至下周一 08:00
+              </button>
+              <p class="muted small">北京时间 · 展示以“结束展示”为准</p>
+              <div class="form-grid">
+                <label class="field"
+                  >开始展示<input
+                    type="datetime-local"
+                    v-model="fromInput"
+                    required
+                    @change="changeFrom" /></label
+                ><label class="field"
+                  >结束展示<input
+                    type="datetime-local"
+                    v-model="untilInput"
+                    required
+                    @change="changeUntil"
+                /></label>
+              </div>
               <label class="field"
-                >开始展示<input
+                >{{ form.kind === "homework" ? "提交截止" : "活动时间"
+                }}<span class="optional">选填</span
+                ><input
                   type="datetime-local"
-                  v-model="fromInput"
-                  required
-                  @change="changeFrom" /></label
-              ><label class="field"
-                >结束展示<input
-                  type="datetime-local"
-                  v-model="untilInput"
-                  required
-                  @change="changeUntil"
+                  v-model="dueInput"
+                  @change="form.due = dueInput ? toInstant(dueInput) : ''"
               /></label>
-            </div>
-            <label class="field"
-              >{{ form.kind === "homework" ? "提交截止" : "活动时间"
-              }}<span class="optional">选填</span
-              ><input
-                type="datetime-local"
-                v-model="dueInput"
-                @change="form.due = dueInput ? toInstant(dueInput) : ''"
-            /></label>
-            <p
-              v-if="form.due && new Date(form.due) < new Date(form.from)"
-              class="notice warning"
-            >
-              截止时间早于开始展示，请核对是否符合安排。
-            </p>
+              <p
+                v-if="form.due && new Date(form.due) < new Date(form.from)"
+                class="notice warning"
+              >
+                截止时间早于开始展示，请核对是否符合安排。
+              </p>
+            </details>
             <label
               v-if="source && source.authorId !== session.userId"
               class="field"
@@ -468,9 +492,7 @@ onUnmounted(() => {
                 <dd>{{ timeLabel(form.due, true) }}</dd>
               </div>
             </dl>
-            <p class="notice subtle">
-              确认发布后生成正式记录。设备同步和实际应用分别反馈。
-            </p>
+            <p class="notice subtle">发布后，已连接的教室电脑会自动同步。</p>
           </template>
         </fieldset>
         <p v-if="error" class="field-error error-box" role="alert">
@@ -571,7 +593,9 @@ onUnmounted(() => {
                 ? "正在提交…"
                 : pendingPublish
                   ? "使用原请求重试"
-                  : `发布到 ${form.classIds.length} 个班`
+                  : form.classIds.length > 1
+                    ? `发布到 ${form.classIds.length} 个班`
+                    : "确认发布"
             }}
           </button>
         </div>

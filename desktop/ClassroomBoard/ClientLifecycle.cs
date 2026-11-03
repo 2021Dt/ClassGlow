@@ -84,14 +84,14 @@ public static partial class ClientLifecycle
                     catch (DeviceAuthorizationException) { /* 凭证已经失效，同样不再拥有设备权限。 */ }
                     catch (Exception e) when (e is System.Net.Http.HttpRequestException or OperationCanceledException or InvalidDataException or JsonException or InvalidOperationException) {
                         remoteRemoved = false;
-                        if (silent || MessageBox.Show("暂时无法联系服务器。是否继续卸载本机程序和数据？继续后，请由教师在网页“大屏控制”撤销原设备；服务器上的教学内容保留。", "离线卸载", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return 3;
+                        if (silent || MessageBox.Show("暂时无法联系服务器。是否继续卸载本机程序和数据？继续后，请由教师在网页“教室电脑”撤销原设备；服务器上的教学内容保留。", "离线卸载", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return 3;
                     }
                 }
                 RemoveStartup();
                 bool leftovers = CleanupData(store.DirectoryPath, AppPaths.ProductId == "ClassroomBoard");
                 if (!silent && (leftovers || !remoteRemoved)) MessageBox.Show(
                     (leftovers ? "本程序数据已删除。目录中另外放置的文件已保留：\n" + store.DirectoryPath + "\n\n" : "") +
-                    (!remoteRemoved ? "服务器设备授权尚未确认撤销，请由教师在网页“大屏控制”核对。" : ""), "卸载提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    (!remoteRemoved ? "服务器设备授权尚未确认撤销，请由教师在网页“教室电脑”核对。" : ""), "卸载提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 return 0;
             } finally { singleton.ReleaseMutex(); }
         } catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException or System.Security.SecurityException) {

@@ -1,4 +1,7 @@
 /* 同一排卡片使用同一网格和高度，正文在卡片内滚动，避免内容多少决定整页轮廓。 */
+.app-shell:not(.admin-mode) .settings-grid.settings-single-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
 .app-shell:not(.admin-mode) .overview-grid {
   --overview-card-height: clamp(380px, 31vw, 500px);
   display: grid;
@@ -160,4 +163,63 @@
 }
 .account-shortcuts a {
   text-decoration: none;
+}
+
+/* 常用入口保持可见，时间等低频设置按需展开。 */
+.compose-targets,
+.compose-schedule {
+  border: 1px solid #e2e9e3;
+  border-radius: 12px;
+  margin: 0 0 20px;
+  padding: 0 16px;
+}
+.compose-targets summary,
+.compose-schedule summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+}
+.compose-targets summary::-webkit-details-marker,
+.compose-schedule summary::-webkit-details-marker {
+  display: none;
+}
+.compose-targets summary > span {
+  color: var(--muted);
+}
+.compose-targets summary strong {
+  font-weight: 500;
+  font-size: 13px;
+}
+.compose-targets summary small,
+.compose-schedule summary small {
+  margin-left: auto;
+  color: var(--green);
+  font-size: 11px;
+}
+.compose-targets[open] summary,
+.compose-schedule[open] summary {
+  border-bottom: 1px solid #e9eee8;
+  margin-bottom: 16px;
+}
+.compose-schedule .form-subheading {
+  margin-bottom: 8px;
+}
+.compose-schedule .field {
+  margin-bottom: 16px;
+}
+@media (max-width: 700px) {
+  .guide-entry span {
+    display: none;
+  }
+  .guide-entry {
+    padding: 8px 3px;
+  }
+  .app-shell:not(.admin-mode) .topbar-right {
+    gap: 10px;
+  }
 }

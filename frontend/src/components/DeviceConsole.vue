@@ -131,7 +131,7 @@ function acceptReceipt(command: Command) {
     ...model.commands.filter((c) => c.id !== command.id),
   ];
   remember(null);
-  notice.value = `${actions[command.action]}：${states[command.state] ?? "结果待确认"}。实际状态以设备回执为准。`;
+  notice.value = `${actions[command.action]}：${states[command.state] ?? "结果待确认"}。`;
   emit("refresh");
 }
 async function submitPending() {
@@ -234,7 +234,7 @@ const summary = computed(() => {
   if (d.deferred) return "已同步，等待返回桌面";
   if (d.error) return "设备需要检查";
   if (needsCanvasUpdate.value) return "基础看板运行中，等待客户端升级";
-  return d.applied ? "看板运行中" : "等待首次应用";
+  return d.applied ? "看板运行中" : "等待首次展示";
 });
 let poll: ReturnType<typeof setInterval>;
 let polling = false;
@@ -299,7 +299,31 @@ onUnmounted(() => clearInterval(poll));
     <section v-if="!device" class="panel empty-state">
       <Monitor :size="36" />
       <h2>尚未绑定教室电脑</h2>
-      <p>输入 Windows 客户端显示的 6 位绑定码。</p>
+      <ol class="connect-guide">
+        <li>
+          <span>1</span>
+          <div>
+            <strong>在教室电脑安装客户端</strong
+            ><a href="/download" target="_blank" rel="noopener"
+              >下载 Windows 客户端</a
+            >
+          </div>
+        </li>
+        <li>
+          <span>2</span>
+          <div>
+            <strong>打开客户端，生成绑定码</strong
+            ><small>首次打开需阅读隐私说明。</small>
+          </div>
+        </li>
+        <li>
+          <span>3</span>
+          <div>
+            <strong>回到这里输入 6 位绑定码</strong
+            ><small>核对电脑名称和班级，确认绑定。</small>
+          </div>
+        </li>
+      </ol>
       <button class="button primary" :disabled="!allowed" @click="emit('bind')">
         输入绑定码
       </button>
@@ -324,51 +348,54 @@ onUnmounted(() => clearInterval(poll));
                 device.localPaused
                   ? "需现场老师在托盘恢复，手机不能解除。"
                   : device.online
-                    ? "课件可能覆盖桌面；应用回执不代表学生已读。"
+                    ? "电脑回到桌面时显示看板。"
                     : "内容和布局仍可发布，设备恢复联网后同步。"
               }}
             </p>
           </div>
         </div>
-        <dl class="device-facts">
-          <div>
-            <dt>Windows 客户端</dt>
-            <dd>{{ device.clientVersion || "尚未上报版本" }}</dd>
-          </div>
-          <div>
-            <dt>班级正式版本</dt>
-            <dd>v{{ classroom.version }}</dd>
-          </div>
-          <div>
-            <dt>设备缓存版本</dt>
-            <dd>v{{ device.cached }}</dd>
-          </div>
-          <div>
-            <dt>设备应用版本</dt>
-            <dd>v{{ device.applied }}</dd>
-          </div>
-          <div>
-            <dt>最近联系</dt>
-            <dd>{{ timeLabel(device.reported, true) }}</dd>
-          </div>
-          <div>
-            <dt>班级目标样式</dt>
-            <dd>
-              {{ theme(classroom.layout.theme) }} ·
-              {{ classroom.layout.material === "solid" ? "纯色" : "柔和" }}
-            </dd>
-          </div>
-          <div>
-            <dt>最近应用的看板样式</dt>
-            <dd>
-              {{
-                device.applied
-                  ? `${theme(device.effectiveTheme)} · ${device.effectiveMaterial === "solid" ? "纯色" : "柔和"}`
-                  : "尚未应用"
-              }}
-            </dd>
-          </div>
-        </dl>
+        <details class="device-details">
+          <summary>设备详情</summary>
+          <dl class="device-facts">
+            <div>
+              <dt>Windows 客户端</dt>
+              <dd>{{ device.clientVersion || "尚未上报版本" }}</dd>
+            </div>
+            <div>
+              <dt>班级正式版本</dt>
+              <dd>v{{ classroom.version }}</dd>
+            </div>
+            <div>
+              <dt>设备缓存版本</dt>
+              <dd>v{{ device.cached }}</dd>
+            </div>
+            <div>
+              <dt>设备应用版本</dt>
+              <dd>v{{ device.applied }}</dd>
+            </div>
+            <div>
+              <dt>最近联系</dt>
+              <dd>{{ timeLabel(device.reported, true) }}</dd>
+            </div>
+            <div>
+              <dt>班级目标样式</dt>
+              <dd>
+                {{ theme(classroom.layout.theme) }} ·
+                {{ classroom.layout.material === "solid" ? "纯色" : "柔和" }}
+              </dd>
+            </div>
+            <div>
+              <dt>最近应用的看板样式</dt>
+              <dd>
+                {{
+                  device.applied
+                    ? `${theme(device.effectiveTheme)} · ${device.effectiveMaterial === "solid" ? "纯色" : "柔和"}`
+                    : "尚未应用"
+                }}
+              </dd>
+            </div>
+          </dl>
+        </details>
         <p v-if="needsCanvasUpdate" class="notice warning">
           自由画布需要 Windows 0.4.0
           或更新版本。当前设备暂用基础看板，升级后会自动取得你的设计。
@@ -498,3 +525,55 @@ onUnmounted(() => clearInterval(poll));
     </div>
   </dialog>
 </template>
+
+<style scoped>
+.connect-guide {
+  list-style: none;
+  margin: 24px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: left;
+}
+.connect-guide li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.connect-guide li > span {
+  background: #eaf2ec;
+  color: var(--green);
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.connect-guide li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.connect-guide strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.connect-guide small,
+.connect-guide a {
+  font-size: 12px;
+}
+.device-details {
+  margin: 20px 0;
+}
+.device-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.device-details[open] summary {
+  margin-bottom: 14px;
+}
+</style>

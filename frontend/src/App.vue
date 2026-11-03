@@ -10,21 +10,19 @@ import {
   ChevronDown,
   Plus,
   Bell,
-  ArrowUpRight,
-  Check,
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   X,
   Users,
   ShieldCheck,
   School,
   ArrowRight,
+  CircleHelp,
 } from "@lucide/vue";
-import BoardPreview from "./components/BoardPreview.vue";
+import TeacherHome from "./components/TeacherHome.vue";
+import FirstUseGuide from "./components/FirstUseGuide.vue";
+import { classroomForDisplay } from "./classroomView";
 import EditorSheet from "./components/EditorSheet.vue";
-import BoardDesigner from "./components/BoardDesigner.vue";
 import SettingsPage from "./components/SettingsPage.vue";
 import ContentRecords from "./components/ContentRecords.vue";
 import DeviceConsole from "./components/DeviceConsole.vue";
@@ -41,20 +39,14 @@ import {
   session,
 } from "./api";
 import {
-  addDays,
-  dateKey,
-  defaultLayout,
   emptyModel,
   isAdmin,
-  layoutIssue,
   newDraft,
-  statusLabel,
   timeLabel,
   visible,
   type Content,
   type Draft,
   type Kind,
-  type Layout,
 } from "./domain";
 
 const localStorage = window.localStorage;
@@ -77,6 +69,7 @@ async function initialized(token: string) {
     page.value = session.systemAdmin ? "system" : "overview";
     history.replaceState(null, "", "/" + location.search);
     await handleEntry();
+    maybeStartGuide();
   });
 }
 async function systemSignedOut(message: string) {
@@ -120,11 +113,11 @@ function enterTeaching(classId?: string) {
   history.replaceState(null, "", "/" + location.search);
 }
 const allNav = [
-  { id: "overview", label: "班级概览", icon: LayoutDashboard },
-  { id: "contents", label: "作业与提醒", icon: BookOpen },
-  { id: "drafts", label: "私人草稿", icon: FilePenLine },
-  { id: "appearance", label: "展示设计", icon: Palette },
-  { id: "devices", label: "大屏控制", icon: Monitor },
+  { id: "overview", label: "首页", icon: LayoutDashboard },
+  { id: "contents", label: "发布记录", icon: BookOpen },
+  { id: "drafts", label: "草稿箱", icon: FilePenLine },
+  { id: "appearance", label: "看板画布", icon: Palette },
+  { id: "devices", label: "教室电脑", icon: Monitor },
   { id: "settings", label: "班级设置", icon: Settings },
 ];
 const current = computed(() =>
@@ -134,9 +127,6 @@ const admin = computed(
   () => isAdmin(current.value) && !current.value?.archived,
 );
 const premium = computed(() => premiumAvailable(now.value));
-const effectiveLayout = computed(() =>
-  current.value?.premiumActive ? current.value.layout : defaultLayout(),
-);
 const identity = computed(() =>
   session.systemAdmin
     ? "系统管理员"
@@ -152,9 +142,7 @@ const nav = computed(() =>
         : !session.systemAdmin && ["overview", "drafts"].includes(item.id),
     )
     .map((item) =>
-      item.id === "overview"
-        ? { ...item, label: admin.value ? "班级工作台" : "教学工作台" }
-        : item,
+      item.id === "overview" ? { ...item, label: "首页" } : item,
     ),
 );
 watch(
@@ -172,25 +160,12 @@ watch(
       page.value = session.systemAdmin ? "system" : "overview";
   },
 );
-const today = dateKey(),
-  selectedDate = ref(today);
 const inClass = computed(() =>
   model.contents.filter((c) => c.classId === current.value?.id),
 );
 const active = computed(() =>
   inClass.value.filter((c) => visible(c, now.value)),
 );
-const dated = computed(() => {
-  const start = new Date(`${selectedDate.value}T00:00:00+08:00`).getTime();
-  const end = start + 86400000;
-  // 按北京时间的半开区间查询，当日零点已结束的内容不混入下一天。
-  return inClass.value.filter(
-    (c) =>
-      c.state === "published" &&
-      new Date(c.from).getTime() < end &&
-      new Date(c.until).getTime() > start,
-  );
-});
 const drafts = computed(() => {
   const local = pendingInputs();
   const combined = model.drafts.map(
@@ -208,8 +183,7 @@ const drafts = computed(() => {
 const devices = computed(() =>
   model.devices.filter((d) => d.classId === model.selected),
 );
-const editor = ref<Draft | null>(null),
-  layoutDraft = ref<Layout>(defaultLayout());
+const editor = ref<Draft | null>(null);
 const recordsView = ref<InstanceType<typeof ContentRecords>>();
 const classDialog = ref<HTMLDialogElement>(),
   bindDialog = ref<HTMLDialogElement>(),
@@ -237,90 +211,56 @@ const dateText = computed(() =>
     weekday: "long",
   }).format(now.value),
 );
-let hydratingLayout = false;
-const layoutKey = () =>
-  `kanban-layout-input-${session.userId}-${model.selected}`;
-function loadLayout() {
-  if (!current.value) return;
-  hydratingLayout = true;
-  try {
-    const stored = JSON.parse(localStorage.getItem(layoutKey()) ?? "null");
-    layoutDraft.value =
-      stored && !layoutIssue(stored) && Number.isInteger(stored.revision)
-        ? stored
-        : clone(current.value.layout);
-    if (stored)
-      flash(
-        stored.revision === current.value.layout.revision
-          ? "已恢复本机未发布的布局预览。"
-          : "已保留旧修订的本机布局，请与正式布局比较后再发布。",
-      );
-  } catch {
-    layoutDraft.value = clone(current.value.layout);
-  } finally {
-    hydratingLayout = false;
-  }
-}
-watch(
-  layoutDraft,
-  () => {
-    if (hydratingLayout || page.value !== "appearance" || !admin.value) return;
-    try {
-      localStorage.setItem(layoutKey(), JSON.stringify(layoutDraft.value));
-    } catch {
-      error.value = "本机无法保存布局预览，请保持此页打开。";
-    }
-  },
-  { deep: true, flush: "sync" },
+const previewClass = computed(() =>
+  current.value ? classroomForDisplay(current.value, now.value) : undefined,
 );
-const previewClass = computed(() => {
-  const c = current.value;
-  if (!c) return undefined;
-  const key = dateKey(now.value),
-    weekday = new Date(`${key}T12:00:00+08:00`).getUTCDay() || 7;
-  const template = c.templates?.find(
-    (t) => t.effectiveFrom <= key && key <= t.effectiveUntil,
-  );
-  const override = c.overrides?.[key];
-  const periods =
-    override?.mode === "closed"
-      ? []
-      : override?.mode === "custom"
-        ? override.periods
-        : (template?.weekdays[
-            String(override?.mode === "weekday" ? override.weekday : weekday)
-          ] ?? []);
-  const time = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Shanghai",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(now.value);
-  const currentPeriod = periods.findIndex(
-    (p) => p.start <= time && time < p.end,
-  );
-  const next = periods.find((p) => p.start > time);
-  return {
-    ...c,
-    timetable: periods.map((p) => p.subject),
-    currentPeriod,
-    nextPeriod:
-      currentPeriod < 0 && next ? `下一节 ${next.subject} ${next.start}` : "",
-    timetableState:
-      template || override?.mode === "closed" || override?.mode === "custom"
-        ? "configured"
-        : "pending",
-  };
-});
+
 watch(
   () => current.value?.id,
   () => {
     if (current.value) {
-      loadLayout();
       localStorage.setItem(`kanban-class-${session.userId}`, model.selected);
     }
   },
 );
+const guideOpen = ref(false);
+function startGuide() {
+  page.value = "overview";
+  guideOpen.value = true;
+}
+function maybeStartGuide() {
+  if (
+    !session.userId ||
+    session.systemAdmin ||
+    !current.value ||
+    page.value !== "overview" ||
+    pairCode.value ||
+    location.search.includes("invite=")
+  )
+    return;
+  try {
+    if (!localStorage.getItem(`classglow-guide-v1-${session.userId}`))
+      guideOpen.value = true;
+  } catch {
+    /* 存储受限时可手动打开引导。 */
+  }
+}
+function openStudio() {
+  if (!current.value || !admin.value) return;
+  if (!premium.value) {
+    page.value = "license";
+    flash("自定义看板需要高级许可。");
+    return;
+  }
+  const url = `/studio?class=${encodeURIComponent(current.value.id)}`;
+  // 同源新页由浏览器复制 sessionStorage，避免在 URL 中放入登录凭证。
+  if (!window.open(url, "_blank")) location.assign(url);
+}
+function navigate(target: string) {
+  if (target === "appearance") openStudio();
+  else page.value = target;
+}
+
 let noticeTimer: ReturnType<typeof setTimeout>;
 function flash(message: string) {
   notice.value = message;
@@ -429,6 +369,7 @@ async function createClass() {
     classForm.name = "";
     await adminView.value?.reload();
     flash("班级已创建");
+    maybeStartGuide();
   });
 }
 function edit(kind: Kind, draft?: Draft, source?: Content) {
@@ -473,7 +414,7 @@ function edit(kind: Kind, draft?: Draft, source?: Content) {
 async function published(count: number) {
   editor.value = null;
   await run(refresh);
-  flash(`已发布到 ${count} 个班，设备同步与应用状态请在控制台查看。`);
+  flash(count === 1 ? "已发布" : `已发布到 ${count} 个班`);
 }
 function ask(title: string, body: string, action: () => Promise<void>) {
   confirmTitle.value = title;
@@ -526,35 +467,6 @@ async function showHistory(c: Content) {
     detailsDialog.value?.showModal();
   });
 }
-function publishLayout() {
-  if (!current.value) return;
-  const issue = layoutIssue(layoutDraft.value);
-  if (issue) {
-    error.value = issue;
-    return;
-  }
-  ask(
-    "发布布局与主题",
-    `将更新${current.value.name}的 ${devices.value.length} 台绑定设备。离线设备恢复后同步；现场材质限制继续生效。`,
-    async () => {
-      await api(
-        `/classes/${model.selected}/layout`,
-        "PUT",
-        clone(layoutDraft.value),
-      );
-      await refresh();
-      hydratingLayout = true;
-      layoutDraft.value = clone(current.value!.layout);
-      hydratingLayout = false;
-      try {
-        localStorage.removeItem(layoutKey());
-      } catch {
-        /* 正式发布已确认，不因本机清理失败重复发布。 */
-      }
-      flash("布局已发布，设备按无打扰规则应用。");
-    },
-  );
-}
 async function inspectPair() {
   await run(async () => {
     const r = await api("/device-pairings/inspect", "POST", {
@@ -595,8 +507,8 @@ onMounted(async () => {
       }
     });
     loading.value = false;
+    maybeStartGuide();
   }
-  if (current.value) loadLayout();
   ticker = setInterval(() => {
     now.value = Date.now();
   }, 5000);
@@ -643,7 +555,7 @@ onUnmounted(() => {
           :aria-label="item.label"
           :title="item.label"
           :class="{ active: page === item.id }"
-          @click="page = item.id"
+          @click="navigate(item.id)"
         >
           <component :is="item.icon" :size="19" />{{ item.label
           }}<span
@@ -689,6 +601,7 @@ onUnmounted(() => {
         <div
           v-if="page !== 'system' && model.classes.length"
           class="class-selector"
+          data-tour="class-switch"
         >
           <School :size="19" /><select
             v-model="model.selected"
@@ -709,6 +622,13 @@ onUnmounted(() => {
           <Plus :size="16" /><span class="create-class-label">创建班级</span>
         </button>
         <div class="topbar-right">
+          <button
+            class="text-button guide-entry"
+            @click="startGuide"
+            aria-label="查看使用引导"
+          >
+            <CircleHelp :size="17" /><span>使用引导</span>
+          </button>
           <span class="role-label"
             ><ShieldCheck :size="15" />{{ identity }}</span
           ><button
@@ -810,10 +730,7 @@ onUnmounted(() => {
               </p>
               <h1>{{ nav.find((n) => n.id === page)?.label }}</h1>
             </div>
-            <div
-              class="heading-actions"
-              v-if="page === 'overview' || page === 'contents'"
-            >
+            <div class="heading-actions" v-if="page === 'contents'">
               <button
                 v-if="admin"
                 class="button secondary"
@@ -830,250 +747,22 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
-          <template v-if="page === 'overview'">
-            <div v-if="admin" class="sync-strip">
-              <span
-                class="status-dot"
-                :class="{ amber: !devices.some((d) => d.online) }"
-              ></span
-              ><strong>{{
-                devices.length
-                  ? `${devices.filter((d) => d.online).length} 台设备在线`
-                  : "尚未绑定教室设备"
-              }}</strong
-              ><button class="text-button" @click="page = 'devices'">
-                {{ devices.length ? "控制大屏" : "前往绑定"
-                }}<ArrowUpRight :size="15" />
-              </button>
-            </div>
-            <div class="overview-grid">
-              <div>
-                <section class="panel content-panel">
-                  <div class="section-heading">
-                    <h2>
-                      <BookOpen :size="20" />今日作业<span class="count-pill">{{
-                        dated.filter((c) => c.kind === "homework").length
-                      }}</span>
-                    </h2>
-                    <div class="date-control">
-                      <button
-                        class="icon-button"
-                        aria-label="查看前一天"
-                        @click="selectedDate = addDays(selectedDate, -1)"
-                      >
-                        <ChevronLeft :size="16" /></button
-                      ><input
-                        type="date"
-                        v-model="selectedDate"
-                        aria-label="查看作业日期"
-                      /><button
-                        class="icon-button"
-                        aria-label="查看后一天"
-                        @click="selectedDate = addDays(selectedDate, 1)"
-                      >
-                        <ChevronRight :size="16" />
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    v-if="selectedDate !== today"
-                    class="notice subtle small"
-                  >
-                    只切换查看日期，不改变大屏日期。<button
-                      class="text-button"
-                      @click="selectedDate = today"
-                    >
-                      返回今天
-                    </button>
-                  </div>
-                  <div
-                    v-if="!dated.some((c) => c.kind === 'homework')"
-                    class="empty-state compact"
-                  >
-                    <BookOpen :size="28" />
-                    <h3>还没有作业</h3>
-                    <button
-                      class="text-button"
-                      :disabled="current.archived"
-                      @click="edit('homework')"
-                    >
-                      发布第一条作业<ArrowRight :size="15" />
-                    </button>
-                  </div>
-                  <div
-                    class="bounded-content-list"
-                    role="region"
-                    aria-label="今日作业列表，可滚动查看"
-                    tabindex="0"
-                  >
-                    <article
-                      v-for="c in dated.filter((c) => c.kind === 'homework')"
-                      :key="c.id"
-                      class="homework-row"
-                    >
-                      <div
-                        class="subject-icon"
-                        :class="{
-                          blue: c.subject === '数学',
-                          gold: c.subject === '英语',
-                        }"
-                      >
-                        {{ c.subject.slice(0, 1) }}
-                      </div>
-                      <div class="homework-body">
-                        <div class="row-heading">
-                          <h3>{{ c.subject }}</h3>
-                          <span class="record-meta"
-                            >{{ c.author }} · {{ timeLabel(c.created) }}</span
-                          >
-                        </div>
-                        <p>{{ c.body }}</p>
-                        <div class="row-footer">
-                          <span
-                            >{{ statusLabel(c, now) }} · 展示至
-                            {{ timeLabel(c.until, true) }}</span
-                          ><button
-                            class="text-button"
-                            :disabled="
-                              current.archived ||
-                              (!admin && c.authorId !== session.userId)
-                            "
-                            @click="edit('homework', undefined, c)"
-                          >
-                            编辑<ArrowUpRight :size="13" />
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  </div>
-                </section>
-                <section class="panel reminders-panel">
-                  <div class="section-heading">
-                    <h2>
-                      <Bell :size="19" />班级提醒<span class="count-pill">{{
-                        dated.filter((c) => c.kind === "todo").length
-                      }}</span>
-                    </h2>
-                    <button
-                      v-if="admin"
-                      class="text-button"
-                      :disabled="current.archived"
-                      @click="edit('todo')"
-                    >
-                      <Plus :size="16" />添加
-                    </button>
-                  </div>
-                  <p
-                    v-if="!dated.some((c) => c.kind === 'todo')"
-                    class="inline-empty"
-                  >
-                    暂无提醒
-                  </p>
-                  <div
-                    class="bounded-content-list reminder-list"
-                    role="region"
-                    aria-label="班级提醒列表，可滚动查看"
-                    tabindex="0"
-                  >
-                    <article
-                      v-for="c in dated.filter((c) => c.kind === 'todo')"
-                      :key="c.id"
-                      class="todo-row"
-                    >
-                      <button
-                        class="todo-check"
-                        aria-label="标记提醒完成"
-                        :disabled="
-                          current.archived ||
-                          (!admin && c.authorId !== session.userId)
-                        "
-                        @click="changeContent(c, 'complete')"
-                      >
-                        <Check :size="14" />
-                      </button>
-                      <div>
-                        <p>{{ c.body }}</p>
-                        <small>{{ c.subject }} · {{ c.author }}</small>
-                      </div>
-                      <span
-                        v-if="c.due && new Date(c.due).getTime() < now"
-                        class="badge amber-badge"
-                        >已逾期</span
-                      >
-                    </article>
-                  </div>
-                </section>
-              </div>
-              <div class="overview-side">
-                <section class="panel preview-card">
-                  <div class="section-heading">
-                    <h2><Monitor :size="19" />大屏预览</h2>
-                    <span class="badge neutral">预览</span>
-                  </div>
-                  <BoardPreview
-                    v-if="previewClass"
-                    :classroom="previewClass"
-                    :contents="active"
-                    :layout="effectiveLayout"
-                    :now="now"
-                  />
-                  <div class="preview-card-footer">
-                    <span
-                      >{{
-                        current.layout.theme === "mica_light"
-                          ? "云母浅灰"
-                          : "云母深灰"
-                      }}
-                      ·
-                      {{
-                        current.layout.material === "subtle"
-                          ? "柔和材质"
-                          : "纯色"
-                      }}</span
-                    ><button
-                      v-if="admin"
-                      class="text-button"
-                      @click="page = 'appearance'"
-                    >
-                      调整展示<ArrowUpRight :size="14" />
-                    </button>
-                  </div>
-                </section>
-                <section class="panel draft-card">
-                  <div class="section-heading">
-                    <h2><FilePenLine :size="19" />继续草稿</h2>
-                    <span class="count-pill">{{ drafts.length }}</span>
-                  </div>
-                  <p v-if="!drafts.length" class="inline-empty">暂无草稿</p>
-                  <button
-                    v-for="d in drafts.slice(0, 2)"
-                    :key="d.id"
-                    class="draft-link"
-                    @click="edit(d.kind, d)"
-                  >
-                    <span class="draft-mini-icon"
-                      ><FilePenLine :size="19" /></span
-                    ><span
-                      ><strong
-                        >{{ d.subject
-                        }}{{ d.kind === "homework" ? "作业" : "提醒" }}</strong
-                      ><small
-                        >{{ timeLabel(d.updated, true) }} ·
-                        {{ d.revision ? "可继续编辑" : "本机未同步" }}</small
-                      ></span
-                    ><ArrowRight :size="17" />
-                  </button>
-                </section>
-                <div v-if="current.message" class="daily-note">
-                  <span>班级寄语</span>
-                  <p>
-                    {{ current.message }}
-                  </p>
-                  <span class="note-decoration" aria-hidden="true">✳</span>
-                </div>
-              </div>
-            </div>
-          </template>
+          <TeacherHome
+            v-if="page === 'overview' && previewClass"
+            :classroom="previewClass"
+            :contents="active"
+            :devices="devices"
+            :drafts="drafts"
+            :can-manage="admin"
+            :user-id="session.userId"
+            @compose="edit"
+            @edit="edit($event.kind, undefined, $event)"
+            @records="page = 'contents'"
+            @drafts="page = 'drafts'"
+            @timetable="page = 'settings'"
+            @devices="page = 'devices'"
+            @design="openStudio"
+          />
           <ContentRecords
             v-else-if="page === 'contents'"
             ref="recordsView"
@@ -1128,17 +817,6 @@ onUnmounted(() => {
               </div>
             </article>
           </section>
-          <BoardDesigner
-            v-else-if="page === 'appearance' && admin && previewClass"
-            v-model="layoutDraft"
-            :classroom="previewClass"
-            :contents="active"
-            :now="now"
-            :disabled="!admin || !premium"
-            :publish-error="error"
-            :publish-notice="notice"
-            @publish="publishLayout"
-          />
           <DeviceConsole
             v-else-if="page === 'devices' && admin"
             :classroom="current"
@@ -1149,7 +827,7 @@ onUnmounted(() => {
               pairName = '';
               bindDialog?.showModal();
             "
-            @design="page = 'appearance'"
+            @design="openStudio"
           />
           <template v-else-if="page === 'settings' && admin"
             ><SettingsPage :classroom="current" @refresh="run(refresh)"
@@ -1240,6 +918,15 @@ onUnmounted(() => {
       账号与高级功能
     </button>
     <div class="account-shortcuts">
+      <button
+        class="button secondary"
+        @click="
+          accountDialog?.close();
+          startGuide();
+        "
+      >
+        <CircleHelp :size="17" />使用引导
+      </button>
       <a class="button secondary" href="/download"
         ><Monitor :size="17" />下载 Windows 客户端</a
       >
@@ -1278,7 +965,7 @@ onUnmounted(() => {
           accountDialog?.close();
         "
       >
-        大屏控制
+        教室电脑
       </button>
     </div>
     <article v-for="t in incomingTransfers" :key="t.id" class="record-row">
@@ -1422,4 +1109,10 @@ onUnmounted(() => {
       <p class="record-body">{{ entry.after.body }}</p>
     </article>
   </dialog>
+  <FirstUseGuide
+    v-if="guideOpen && session.token"
+    :can-manage="admin"
+    :user-id="session.userId"
+    @close="guideOpen = false"
+  />
 </template>

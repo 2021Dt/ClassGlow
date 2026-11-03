@@ -198,4 +198,9 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         if (preview) PrivacyNotice.Create(requireConsent: false, preview: true).ShowDialog();
         else PrivacyNotice.Show(requireConsent: false);
     }
+    private void Uninstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (PreviewOnly()) return;
+        ClientLifecycle.StartUninstaller();
+    }
 }

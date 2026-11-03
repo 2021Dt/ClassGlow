@@ -4,6 +4,7 @@ SetCompressor /SOLID lzma
 SetCompressorDictSize 32
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
 !define MUI_ICON "../ClassroomBoard/Assets/AppIcon.ico"
 !define MUI_UNICON "../ClassroomBoard/Assets/AppIcon.ico"
 
@@ -33,20 +34,31 @@ SetCompressorDictSize 32
 Name "${TITLE}"
 OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\${FOLDER}"
-VIProductVersion "0.4.4.0"
+InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"
+Var PreviousInstall
+VIProductVersion "${APP_VERSION}.0"
 VIAddVersionKey /LANG=2052 "ProductName" "${TITLE}"
 VIAddVersionKey /LANG=2052 "FileDescription" "当前用户安装与卸载程序"
-VIAddVersionKey /LANG=2052 "FileVersion" "0.4.4"
+VIAddVersionKey /LANG=2052 "FileVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=2052 "LegalCopyright" "ClassGlow contributors"
 
 !define MUI_ABORTWARNING
 !define MUI_LICENSEPAGE_CHECKBOX
 !define MUI_LICENSEPAGE_TEXT_TOP "请了解安装位置、本机变更和卸载范围。首次运行还会单独请求联网与本机数据处理同意。"
 !define MUI_LICENSEPAGE_CHECKBOX_TEXT "我已阅读上述安装与本机变更说明"
+!define MUI_WELCOMEPAGE_TEXT "本向导将安装班级看板。您可以选择安装位置和桌面快捷方式。$\r$\n$\r$\n更新前，请从系统托盘退出正在运行的班级看板。安装完成后不会自动启动程序。$\r$\n$\r$\n点击“下一步”继续。"
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "privacy.txt"
+!define MUI_PAGE_HEADER_TEXT "安装与隐私说明"
+!define MUI_PAGE_HEADER_SUBTEXT "了解安装位置、本机变更及卸载范围。"
+!define MUI_LICENSEPAGE_TEXT_BOTTOM "阅读后勾选下方选框，点击“下一步”继续。联网与展示权限将在首次运行时单独确认。"
+!insertmacro MUI_PAGE_LICENSE "${LICENSE_FILE}"
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE VerifyInstallDirectory
+!insertmacro MUI_PAGE_DIRECTORY
+!define MUI_COMPONENTSPAGE_TEXT_TOP "选择是否在桌面创建快捷方式。开始菜单与卸载入口会自动添加。"
+!define MUI_COMPONENTSPAGE_NODESC
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_TEXT "安装完成。请从开始菜单手动打开程序并阅读首次隐私说明。默认不联网、不启用启动项、不更换壁纸。"
+!define MUI_FINISHPAGE_TEXT "安装完成。您可以从桌面或开始菜单打开班级看板。卸载程序位于安装目录，也可以在 Windows“已安装的应用”中卸载。"
 !insertmacro MUI_PAGE_FINISH
 !define MUI_UNCONFIRMPAGE_TEXT_TOP "将停止同步、恢复本程序仍占用的壁纸，删除本程序文件、本机凭证、缓存、日志、启动项、快捷方式及卸载登记。服务器教学内容和目录中另外放置的文件保留。"
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -57,8 +69,7 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "ClassGlow contributors"
 
 Function .onInit
   SetShellVarContext current
-  ; 固定当前用户专用目录，不允许 /D 将安装目标改成桌面、盘符根目录等位置。
-  StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${FOLDER}"
+  ReadRegStr $PreviousInstall HKCU "${UNINSTALL_KEY}" "InstallLocation"
   !insertmacro CheckDirectory "$INSTDIR"
   !insertmacro CheckDirectory "$SMPROGRAMS\${FOLDER}"
   System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "Local\${PRODUCT_ID}.CurrentUser") p.r0'
@@ -70,8 +81,38 @@ Function .onInit
   ${EndIf}
 FunctionEnd
 
-Section "安装"
+Function VerifyInstallDirectory
+  ; NSIS 的 GetFullPathName 会将尚不存在的目录变为空串；Win32 接口不要求目录已存在。
+  System::Call 'kernel32::GetFullPathNameW(w "$INSTDIR", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r0'
+  ${If} $0 == 0
+  ${OrIf} $0 >= ${NSIS_MAX_STRLEN}
+    MessageBox MB_OK|MB_ICONINFORMATION "无法使用这个安装路径，请选择一个较短的文件夹路径。"
+    Abort
+  ${EndIf}
+  StrCpy $INSTDIR $1
+  ${GetRoot} "$INSTDIR" $0
+  ; 使用专用文件夹，卸载时仍只删除清单内的程序文件。
+  ${If} $INSTDIR == "$0\"
+  ${OrIf} $INSTDIR == "$0"
+  ${OrIf} $INSTDIR == "$DESKTOP"
+  ${OrIf} $INSTDIR == "$DOCUMENTS"
+    MessageBox MB_OK|MB_ICONINFORMATION "请选择一个专用文件夹，例如 D:\ClassGlow。"
+    Abort
+  ${EndIf}
+  !insertmacro CheckDirectory "$INSTDIR"
+  ${If} $PreviousInstall != ""
+  ${AndIf} $PreviousInstall != $INSTDIR
+    IfFileExists "$PreviousInstall\ClassroomBoard.exe" 0 install_path_ok
+    MessageBox MB_OK|MB_ICONINFORMATION "已安装在 $PreviousInstall。升级请保留原位置；如需更换位置，请先卸载旧版，再选择新目录安装。"
+    Abort
+  ${EndIf}
+  install_path_ok:
+FunctionEnd
+
+Section "班级看板（必需）"
+  SectionIn RO
   SetShellVarContext current
+  Call VerifyInstallDirectory
   !include "${INSTALL_FILES}"
   Delete "$INSTDIR\local-cleanup.complete"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -79,7 +120,7 @@ Section "安装"
   CreateShortcut "$SMPROGRAMS\${FOLDER}\班级看板.lnk" "$INSTDIR\ClassroomBoard.exe"
   CreateShortcut "$SMPROGRAMS\${FOLDER}\卸载班级看板.lnk" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${TITLE}"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "0.4.4"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "ClassGlow"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\ClassroomBoard.exe"
@@ -89,9 +130,15 @@ Section "安装"
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
 SectionEnd
 
+Section "创建桌面快捷方式"
+  CreateShortcut "$DESKTOP\${TITLE}.lnk" "$INSTDIR\ClassroomBoard.exe"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "DesktopShortcut" "$DESKTOP\${TITLE}.lnk"
+SectionEnd
+
 Function un.onInit
   SetShellVarContext current
-  ${If} $INSTDIR != "$LOCALAPPDATA\Programs\${FOLDER}"
+  ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"
+  ${If} $INSTDIR != $0
     MessageBox MB_OK|MB_ICONSTOP "卸载路径与本程序的当前用户安装目录不符，请从已安装的应用重新发起。" /SD IDOK
     SetErrorLevel 1
     Abort
@@ -133,6 +180,10 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${FOLDER}\班级看板.lnk"
   Delete "$SMPROGRAMS\${FOLDER}\卸载班级看板.lnk"
   RMDir "$SMPROGRAMS\${FOLDER}"
+  ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "DesktopShortcut"
+  ${If} $0 == "$DESKTOP\${TITLE}.lnk"
+    Delete "$0"
+  ${EndIf}
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
   Delete "$INSTDIR\local-cleanup.complete"
   Delete "$INSTDIR\Uninstall.exe"
