@@ -10,7 +10,7 @@ namespace ClassroomBoard;
 
 public static class PrivacyNotice
 {
-    public const string Revision = "2026-11-04.1";
+    public const string Revision = "2026-11-04.2";
     public static string Text => $"""
         班级看板 · Windows 客户端隐私与本机变更说明
         版本：{Revision}
@@ -23,6 +23,7 @@ public static class PrivacyNotice
         没有广告、第三方统计或自动上报崩溃的功能。不读取浏览器历史、键盘输入、摄像头、麦克风和个人文档，不截取整个桌面，不采集其他窗口或用户原壁纸；回传仅来自本程序自己生成的班级看板图片。为避免打断教学，仅检查前台是否为桌面，并读取显示器尺寸和系统显示偏好。
 
         三、本机保存的位置
+        玻璃材质由本机已有的 Microsoft Edge WebView2 运行时处理随安装包提供的离线网页。该网页不访问互联网、不接收设备凭证或作业正文，只处理布局与背景图片；未安装运行时的电脑自动使用兼容材质，不自动安装其他软件。生成后的材质 PNG、校验信息与临时 material-webview 缓存位于下述本程序数据目录，生成完成会关闭渲染进程，卸载时清理。系统共享的 WebView2 运行时由 Windows 或 Microsoft Edge 管理，不随本程序删除。
         数据目录：{AppPaths.DataDirectory}
         设备凭证和班级快照保存在 state.bin，使用当前 Windows 用户的 DPAPI 加密。渲染后的桌面 PNG 是明文图片，可能包含教学内容，无法宣称为加密文件。临时渲染图、同意记录和有大小上限的异常日志均放在同一目录。
         即使首次界面未能正常打开，程序也可能在本机记录启动诊断，包含时间、应用/系统/运行时版本、绘制方式、异常类型和应用方法名，不包含异常正文、本机文件路径、账号或凭证；不会自动上传。

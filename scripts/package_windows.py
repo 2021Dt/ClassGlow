@@ -25,6 +25,8 @@ def main():
     output = ROOT / "dist" / (f"ClassGlow-{version}-uninstall-QA.exe" if args.qa else f"ClassGlow-{version}-win-x64-setup.exe")
     build = ROOT / ".qa" / ("installer-qa" if args.qa else "installer")
     build.mkdir(parents=True, exist_ok=True)
+    npm = shutil.which("npm") or "npm"
+    subprocess.run([npm, "exec", "vite", "build", "--", "--config", "vite.desktop.config.ts"], check=True, cwd=ROOT / "frontend")
     command = [
         dotnet,
         "publish",
@@ -41,6 +43,13 @@ def main():
     if args.qa:
         command += ["-p:DefineConstants=LIFECYCLE_QA"]
     subprocess.run(command, check=True, cwd=ROOT)
+    renderer = payload / "Renderer"
+    if renderer.exists():
+        # 只替换本次版本产物中的离线网页目录，不清理用户安装目录。
+        assert renderer.resolve().is_relative_to((ROOT / "dist").resolve())
+        shutil.rmtree(renderer)
+    shutil.copytree(ROOT / "dist/desktop-material", renderer)
+    shutil.copyfile(ROOT / "frontend/public/third-party-notices.txt", renderer / "third-party-notices.txt")
     privacy = (ROOT / "desktop/installer/privacy.txt").read_text(encoding="utf-8-sig")
     # NSIS 许可页单独读取文本，不能依赖 .nsi 的 /INPUTCHARSET；明确使用带 BOM 的 UTF-16。
     (build / "license.txt").write_text(privacy, encoding="utf-16")

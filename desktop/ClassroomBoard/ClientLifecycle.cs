@@ -41,7 +41,8 @@ public static partial class ClientLifecycle
         if (Directory.Exists(root)) {
             // 不能穿过用户放入的目录联接；只清理本程序已知文件，不递归扫用户目录。
             if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) throw new IOException("数据目录是目录联接，请先在系统中核对目标。");
-            string[] known = ["state.bin", "state.bin.tmp", "privacy.json", "runtime.log", "runtime.log.old", "startup.log", "startup.log.old"];
+            GlassMaterial.CleanupProfile(root);
+            string[] known = ["state.bin", "state.bin.tmp", "privacy.json", "runtime.log", "runtime.log.old", "startup.log", "startup.log.old", "glass-material.png", "glass-material.png.tmp", "glass-material.key"];
             foreach (string path in Directory.EnumerateFiles(root)) {
                 string name = Path.GetFileName(path);
                 if (known.Contains(name) || OwnedRaster(name)) File.Delete(path);

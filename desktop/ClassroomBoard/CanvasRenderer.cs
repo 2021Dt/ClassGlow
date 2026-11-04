@@ -124,7 +124,9 @@ public sealed partial class Renderer
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen()) {
             dc.PushTransform(new ScaleTransform(width / 1920d, height / 1080d));
-            dc.DrawDrawing(Background(layout, theme, material, 0, 0, highContrast, []));
+            bool cachedGlass = material == "subtle" && MaterialLayer is not null;
+            if (cachedGlass) dc.DrawImage(MaterialLayer, new Rect(0, 0, 1920, 1080));
+            else dc.DrawDrawing(Background(layout, theme, material, 0, 0, highContrast, []));
             // 整个显示器对应 1600 × 900 设计坐标，组件与编辑器的选框保持一致。
             dc.PushTransform(new ScaleTransform(1.2, 1.2));
             foreach (var part in parts) {
@@ -136,11 +138,14 @@ public sealed partial class Renderer
                 Brush ink = !highContrast && item.Str("textColor").Length > 0 ? BrushOf(item.Str("textColor")) : text;
                 var outline = ShapeOutline(item, box, radius);
                 dc.PushClip(outline);
-                if (!highContrast && item.Str("backgroundImage").Length > 0) {
+                // 依照图层重新覆盖当前卡片的缓存区域，防止下层正文穿到上层卡片表面。
+                if (cachedGlass && (surface != "none" || item.Str("image").Length > 0 || item.Str("backgroundImage").Length > 0))
+                    dc.DrawImage(MaterialLayer, new Rect(0, 0, 1600, 900));
+                if (!cachedGlass && !highContrast && item.Str("backgroundImage").Length > 0) {
                     dc.DrawRectangle(BrushOf(item.Str("fillColor", "#FFFFFF")), null, box);
                     dc.DrawRectangle(PictureBrush(item.Str("backgroundImage"), item.Str("backgroundFit", "cover"), item.Str("backgroundPosition", "center")), null, box);
                 }
-                if (surface != "none") {
+                if (!cachedGlass && surface != "none") {
                     var color = (Color)ColorConverter.ConvertFromString(item.Str("fillColor", "#FFFFFF"));
                     color.A = (byte)Math.Round(item.Int("opacity", 45) * 2.55);
                     Brush fill = highContrast ? SystemColors.WindowBrush : new SolidColorBrush(color);
@@ -167,7 +172,7 @@ public sealed partial class Renderer
                     if (item.Str("align") == "right") formatted.TextAlignment = TextAlignment.Right;
                     dc.DrawText(formatted, new Point(x, y));
                 }
-                if (kind == "image" && item.Str("image").Length > 0) {
+                if (kind == "image" && item.Str("image").Length > 0 && !cachedGlass) {
                     using var stream = new MemoryStream(Convert.FromBase64String(item.Str("image").Split(',', 2)[1]));
                     var picture = new BitmapImage(); picture.BeginInit(); picture.CacheOption = BitmapCacheOption.OnLoad; picture.StreamSource = stream; picture.EndInit(); picture.Freeze();
                     double scale = Math.Min(box.Width / picture.PixelWidth, box.Height / picture.PixelHeight);

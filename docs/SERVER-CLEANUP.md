@@ -18,6 +18,8 @@
 
 ## 菜单卸载
 
+0.4.10 的玻璃底图只在 Windows 本机生成，服务器不增加渲染服务、浏览器或端口，也不新增数据库表。发布包使用 `.deploy/downloads/ClassGlow-0.4.10-win-x64-setup.exe`，上传暂存目录 `.deploy/incoming-0410` 校验并安装文件后移除。客户端的 `Renderer` 文件、`glass-material.png`、`glass-material.key` 与专用 `material-webview` 缓存由本机卸载器清理，系统共享 WebView2 不删除，详见 [Windows 隐私与卸载](WINDOWS-PRIVACY.md)。
+
 0.4.9 的发布记录删除会移除该条内容及其修改历史，仅保留不含正文的删除审计；旧备份中的内容不会随之消失。需要清除备份副本时，在管理员“数据备份”核对后逐份删除。本版没有新增服务器服务、定时器、数据库表或上传目录；安装包位于 `.deploy/downloads/ClassGlow-0.4.9-win-x64-setup.exe`，上传暂存目录 `.deploy/incoming-049` 在校验与移动后移除。网页第三方许可是随前端构建分发的静态文本，随项目一并移除。
 
 优先使用 `sudo classglow` 的“卸载本项目”，或直接 `sudo classglow uninstall`。默认选项会撤下本项目服务、自动更新、命令入口和 Nginx 链接，保留项目目录和数据；恢复时重新运行安装命令即可。彻底删除选项会删除 `/opt/classglow`（包括其中另放的文件）与项目数据卷，必须先离机备份并输入指定确认文字。脚本先核对固定目录、站点链接、命令入口和服务归属，遇到不一致会停止。

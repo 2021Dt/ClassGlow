@@ -9,6 +9,13 @@
 .canvas-board .board-shell {
   backdrop-filter: none;
 }
+.canvas-widget.widget-surface-glass {
+  /* 原库的外阴影需要留在卡片之外；正文仍由内部定高容器裁切。 */
+  overflow: visible;
+}
+.canvas-widget > img {
+  border-radius: inherit;
+}
 .canvas-studio .studio-palette .studio-magic-card {
   border-radius: 16px;
   border-width: 1px;

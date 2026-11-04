@@ -20,6 +20,7 @@ public class AppWindow : FluentWindow
 {
     [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref uint value, int size);
     private readonly DockPanel root = new();
+    public bool ReduceMaterial { get; set; }
 
     public static void InitializeTheme()
     {
@@ -60,7 +61,7 @@ public class AppWindow : FluentWindow
         ResizeMode = resizable ? ResizeMode.CanResize : ResizeMode.CanMinimize;
         ExtendsContentIntoTitleBar = true;
         WindowCornerPreference = WindowCornerPreference.Round;
-        // 启动页使用普通合成背景，避免首次 ShowDialog 依赖云母的 DWM 背景替换。
+        // 第一帧仍用普通合成，保留白屏兼容修复；内容显示后才应用系统云母。
         WindowBackdropType = WindowBackdropType.None;
         FontFamily = new FontFamily("Microsoft YaHei UI"); FontSize = 14;
         TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
@@ -80,6 +81,21 @@ public class AppWindow : FluentWindow
         titleBar.Loaded += (_, _) => CaptionNames(); StateChanged += (_, _) => CaptionNames();
         DockPanel.SetDock(titleBar, Dock.Top); root.Children.Add(titleBar);
         Content = root;
+        ContentRendered += (_, _) => RefreshMaterial();
+    }
+
+    public void RefreshMaterial()
+    {
+        bool mica = !ReduceMaterial && !SystemParameters.HighContrast && !SystemParameters.IsRemoteSession &&
+            Renderer.TransparencyEnabled() && WindowBackdrop.IsSupported(WindowBackdropType.Mica);
+        // 系统不支持或关闭透明时，继续使用已经可见的普通背景。
+        if (mica && WindowBackdrop.ApplyBackdrop(this, WindowBackdropType.Mica)) {
+            WindowBackdropType = WindowBackdropType.Mica;
+            Background = Brushes.Transparent;
+        } else {
+            WindowBackdropType = WindowBackdropType.None;
+            Background = SystemParameters.HighContrast ? SystemColors.WindowBrush : new SolidColorBrush(Color.FromRgb(247, 248, 251));
+        }
     }
 
     public void SetBody(UIElement body) => root.Children.Add(body);

@@ -42,10 +42,18 @@ public static class LifecycleChecks
             catch (COMException) { Check(File.Exists(frame), "恢复失败时删了恢复材料"); }
             desktop.Fail = false; File.Delete(original);
             engine.RestoreWallpaper(); Check(desktop.Path == "", "原图丢失时仍依赖本产品图片");
-            foreach (string name in new[] { "state.bin", "state.bin.tmp", "privacy.json", "runtime.log", "runtime.log.old" }) File.WriteAllText(System.IO.Path.Combine(data, name), "test-only");
+            foreach (string name in new[] { "state.bin", "state.bin.tmp", "privacy.json", "runtime.log", "runtime.log.old", "glass-material.png", "glass-material.png.tmp", "glass-material.key" }) File.WriteAllText(System.IO.Path.Combine(data, name), "test-only");
+            // 新材质缓存必须随卸载清理；用户另外放入的子目录继续保留。
+            string profile = System.IO.Path.Combine(data, GlassMaterial.ProfileFolder, "Default", "Cache");
+            Directory.CreateDirectory(profile); File.WriteAllText(System.IO.Path.Combine(profile, "material.bin"), "test-only");
+            string personalDirectory = System.IO.Path.Combine(data, "teacher-files");
+            Directory.CreateDirectory(personalDirectory); File.WriteAllText(System.IO.Path.Combine(personalDirectory, "notes.txt"), "keep");
             string personal = System.IO.Path.Combine(data, "teacher-notes.txt"); File.WriteAllText(personal, "keep");
             Check(ClientLifecycle.CleanupData(data, false), "未报告保留的其他文件");
             Check(Directory.GetFiles(data).Length == 1 && File.ReadAllText(personal) == "keep", "未正确区分程序文件与其他文件");
+            Check(!Directory.Exists(System.IO.Path.Combine(data, GlassMaterial.ProfileFolder)), "遗留了材质临时目录");
+            Check(File.ReadAllText(System.IO.Path.Combine(personalDirectory, "notes.txt")) == "keep", "删除了用户自行放入的子目录");
+            File.Delete(System.IO.Path.Combine(personalDirectory, "notes.txt")); Directory.Delete(personalDirectory);
             File.Delete(personal); Check(!ClientLifecycle.CleanupData(data, false), "空数据目录未移除");
             var expiry = DateTimeOffset.UtcNow;
             state.Snapshot = new JsonObject { ["classroom"] = new JsonObject { ["premiumUntil"] = expiry.ToUnixTimeSeconds(), ["layout"] = new JsonObject { ["backgroundMode"] = "image" }, ["basicLayout"] = new JsonObject { ["backgroundMode"] = "mica" } } };
@@ -57,7 +65,7 @@ public static class LifecycleChecks
             Check(state.Snapshot["classroom"]!["layout"].Str("backgroundMode") == "image", "到期删除了定制方案");
             state.ClockUncertain = true;
             Check(Renderer.EffectiveLayout(state, expiry.AddSeconds(-1)).Str("backgroundMode") == "mica", "时钟异常时仍使用限时高级布局");
-            File.WriteAllText(System.IO.Path.Combine(root, "result.json"), JsonSerializer.Serialize(new { passed = true, checks = 10, physicalWallpaperChanged = false, registryChanged = false }));
+            File.WriteAllText(System.IO.Path.Combine(root, "result.json"), JsonSerializer.Serialize(new { passed = true, checks = 12, physicalWallpaperChanged = false, registryChanged = false }));
             return 0;
         } catch (Exception e) {
             File.WriteAllText(System.IO.Path.Combine(root, "failure.txt"), e.ToString()); return 1;

@@ -17,6 +17,7 @@ public sealed class Engine : IDisposable
     public string Status => State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => "等待返回桌面后安静应用", _ => "等待同步或启用展示" };
     private readonly StateStore store;
     private readonly Renderer renderer;
+    private readonly GlassMaterial glass;
     private readonly IWallpaper wallpaper;
     // 教室客户端直连所配置的服务，不继承个人代理软件遗留的本机端口；不修改系统代理设置。
     private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(8) };
@@ -34,7 +35,7 @@ public sealed class Engine : IDisposable
     private static double Utc => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
     private DateTimeOffset Clock => DateTimeOffset.UtcNow.AddSeconds(State.ClockOffset).ToOffset(TimeSpan.FromHours(8));
 
-    public Engine(StateStore stateStore, ClientState? initial = null, IWallpaper? desktop = null) { store = stateStore; wallpaper = desktop ?? new Wallpaper(); State = initial ?? store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); }
+    public Engine(StateStore stateStore, ClientState? initial = null, IWallpaper? desktop = null) { store = stateStore; wallpaper = desktop ?? new Wallpaper(); State = initial ?? store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); glass = new(store.DirectoryPath); }
     public static bool IsTimeUncertain(double current, double lastContact) => current<1577836800 || current>4102444800 || lastContact>0 && current<lastContact-120;
     public void Save() { if (!stopping) store.Save(State); }
     public async Task StopAsync()
@@ -42,6 +43,8 @@ public sealed class Engine : IDisposable
         stopping = true; shutdown.Cancel();
         // 卸载先取消并等待在途请求，避免清理后异步续写 state.bin。
         while (busy || pendingRequests > 0) await Task.Delay(25);
+        try { GlassMaterial.CleanupProfile(store.DirectoryPath); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* 运行时仍占用文件时，由下次启动生成或卸载清理。 */ }
     }
     public static Uri ValidateServer(string value)
     {
@@ -128,7 +131,7 @@ public sealed class Engine : IDisposable
             }
             if (stopping) return;
             if (State.Snapshot is not null && (changed || Utc >= nextRender)) {
-                try { ApplyCurrent(); }
+                try { await ApplyCurrent(); }
                 catch (Exception e) when (e is IOException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) {
                     State.ApplyState = "error"; State.Error = "生成或设置画面失败，保留上个已应用版本"; Save();
                 }
@@ -147,6 +150,8 @@ public sealed class Engine : IDisposable
                     nextDisplayUpload = Utc + 10;
                 }
             }
+        } catch (OperationCanceledException) when (stopping) {
+            // 退出时取消材质准备属于正常收尾，不触发启动故障对话框。
         } finally { busy = false; }
     }
     private async Task PollSnapshot()
@@ -238,13 +243,13 @@ public sealed class Engine : IDisposable
                 else if (action == "resume") {
                     bool oldRemotePause = State.RemotePaused;
                     State.RemotePaused = false;
-                    try { if (!ApplyCurrent(force: true)) throw new InvalidOperationException("前台状态已变化，尚未应用恢复画面"); }
+                    try { if (!await ApplyCurrent(force: true)) throw new InvalidOperationException("前台状态已变化，尚未应用恢复画面"); }
                     catch { State.RemotePaused = oldRemotePause; throw; }
                 }
-                else if (action == "set_page") { if (!ApplyCurrent(command.Int("page"), true)) throw new InvalidOperationException("前台状态已变化，尚未应用目标页"); State.ManualUntil = Clock.ToUnixTimeSeconds() + 120; }
+                else if (action == "set_page") { if (!await ApplyCurrent(command.Int("page"), true)) throw new InvalidOperationException("前台状态已变化，尚未应用目标页"); State.ManualUntil = Clock.ToUnixTimeSeconds() + 120; }
                 else if (action == "auto_page") {
                     double oldManualUntil = State.ManualUntil, oldAutoStart=State.AutoPageStartedAt; State.ManualUntil = 0; State.AutoPageStartedAt=Clock.ToUnixTimeSeconds();
-                    try { if (!ApplyCurrent(force: true)) throw new InvalidOperationException("前台状态已变化，尚未恢复自动翻页"); }
+                    try { if (!await ApplyCurrent(force: true)) throw new InvalidOperationException("前台状态已变化，尚未恢复自动翻页"); }
                     catch { State.ManualUntil = oldManualUntil; State.AutoPageStartedAt=oldAutoStart; throw; }
                 }
                 result = Report(); result["commandId"] = id; result["result"] = "executed"; result["startedAt"] = started; result["finishedAt"] = Clock.ToUnixTimeMilliseconds() / 1000d;
@@ -256,7 +261,7 @@ public sealed class Engine : IDisposable
         // 已处理组序号长期保留，详细回执只保留近期上限，避免常驻进程无界增长。
         if (State.Results.Count > 1000) { foreach (string oldId in State.Results.Keys.Take(State.Results.Count - 1000).ToList()) State.Results.Remove(oldId); Save(); }
     }
-    private bool ApplyCurrent(int requestedPage = 0, bool force = false)
+    private async Task<bool> ApplyCurrent(int requestedPage = 0, bool force = false)
     {
         if (!State.EnableWallpaper) { State.ApplyState = "waiting"; State.Error = "请在本机状态页启用桌面展示"; return false; }
         if (!wallpaper.SafeToApply()) { State.ApplyState = "deferred"; return false; }
@@ -271,6 +276,9 @@ public sealed class Engine : IDisposable
         bool licenseFallback = !ReferenceEquals(layout, State.Snapshot!["classroom"]!["layout"]);
         string renderKey = $"{State.CachedVersion}:{State.ETag}:{licenseFallback}:{Clock:yyyyMMddHHmm}:{phase}:{State.ReduceEffects}:{System.Windows.SystemParameters.HighContrast}:{System.Windows.SystemParameters.ClientAreaAnimation}";
         if (!force && !changed && renderKey == lastRenderKey) return true;
+        renderer.MaterialLayer = await glass.GetAsync(State, Clock, monitor.Rect.Right - monitor.Rect.Left, monitor.Rect.Bottom - monitor.Rect.Top, shutdown.Token);
+        // 首次生成材质期间，老师仍可暂停或打开课件；应用前重新核对现场状态。
+        if (stopping || State.LocalPaused || State.RemotePaused || !State.EnableWallpaper || !wallpaper.SafeToApply()) return false;
         Frame frame;
         try { frame = renderer.Render(State, Clock, monitor.Rect.Right - monitor.Rect.Left, monitor.Rect.Bottom - monitor.Rect.Top, requestedPage); }
         catch when (!State.ReduceEffects) {
@@ -278,6 +286,7 @@ public sealed class Engine : IDisposable
             try { frame = renderer.Render(State, Clock, monitor.Rect.Right - monitor.Rect.Left, monitor.Rect.Bottom - monitor.Rect.Top, requestedPage) with { Reason = "材质生成失败，已回退纯色" }; }
             finally { State.ReduceEffects = false; }
         }
+        if (frame.Material == "subtle" && glass.Reason.Length > 0) frame = frame with { Reason = glass.Reason };
         wallpaper.Set(monitor.Id, frame.Path);
         // 只有实际设置成功后更新这些字段，渲染或 COM 失败均不能提前推进。
         if (State.PageSetId != frame.PageSetId || State.AutoPageStartedAt<=0) { State.ManualUntil = 0; State.AutoPageStartedAt=Clock.ToUnixTimeSeconds(); }

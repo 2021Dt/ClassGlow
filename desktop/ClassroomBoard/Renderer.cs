@@ -31,6 +31,7 @@ public static class JsonRead
 
 public sealed partial class Renderer(string directory)
 {
+    public BitmapSource? MaterialLayer { get; set; }
     private static readonly Typeface Font = new("Microsoft YaHei");
     private readonly Dictionary<string, DrawingGroup> backgrounds = new();
     private readonly Dictionary<string, BitmapSource> pictures = new();
@@ -323,7 +324,7 @@ public sealed partial class Renderer(string directory)
         }
         return layer;
     }
-    private static bool TransparencyEnabled()
+    internal static bool TransparencyEnabled()
     {
         try { return Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1) is int value && value != 0; }
         catch { return false; }

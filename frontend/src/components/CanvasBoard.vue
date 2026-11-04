@@ -15,12 +15,17 @@ const props = withDefaults(
     page?: number;
     demo?: boolean;
     pageMap?: ReturnType<typeof canvasPages>;
+    materialOnly?: boolean;
+    outputSize?: { width: number; height: number };
   }>(),
   { page: 1, demo: false },
 );
 const emit = defineEmits<{ pages: [number] }>();
 const holder = ref<HTMLElement>(),
-  scale = ref(0.4);
+  measuredScale = ref(0.4);
+const scale = computed(() =>
+  props.outputSize ? props.outputSize.width / 1600 : measuredScale.value,
+);
 let observer: ResizeObserver;
 let resizeFrame = 0;
 const measureContext = document.createElement("canvas").getContext("2d")!;
@@ -139,12 +144,13 @@ function heading(item: CanvasWidget) {
     : title;
 }
 onMounted(() => {
+  if (props.outputSize) return;
   observer = new ResizeObserver((entries) => {
     const width = entries[0]!.contentRect.width;
     // 下一帧再更新缩放，避免在尺寸通知中触发嵌套的布局刷新。
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => {
-      scale.value = width / 1600;
+      measuredScale.value = width / 1600;
     });
   });
   if (holder.value) observer.observe(holder.value);
@@ -167,7 +173,10 @@ onUnmounted(() => {
     <div
       class="board-canvas"
       :class="`margin-${layout.iconMargin}`"
-      :style="{ ...background, transform: `scale(${scale})` }"
+      :style="{
+        ...background,
+        transform: `scale(${scale}, ${outputSize ? outputSize.height / 900 : scale})`,
+      }"
     >
       <div class="board-shell board-surface" :style="panelImageStyle(layout)">
         <div class="canvas-board-content">
@@ -179,7 +188,17 @@ onUnmounted(() => {
             :style="style(item)"
             :aria-label="item.title || widgetLabels[item.kind]"
           >
-            <LiquidGlassLayer v-if="item.surface === 'glass' && item.kind !== 'shape' && layout.material !== 'solid'" :width="item.w" :height="item.h" :radius="item.radius" :scale="scale" />
+            <LiquidGlassLayer
+              v-if="
+                item.surface === 'glass' &&
+                item.kind !== 'shape' &&
+                layout.material !== 'solid'
+              "
+              :width="item.w"
+              :height="item.h"
+              :radius="item.radius"
+              :scale="scale"
+            />
             <img
               v-if="item.kind === 'image' && item.image"
               :src="item.image"
@@ -187,26 +206,26 @@ onUnmounted(() => {
               draggable="false"
             />
             <div
-              v-else-if="item.kind === 'image'"
+              v-else-if="item.kind === 'image' && !materialOnly"
               class="canvas-image-placeholder"
             >
               选择一张图片
             </div>
-            <template v-else-if="item.kind === 'datetime'"
+            <template v-else-if="item.kind === 'datetime' && !materialOnly"
               ><div class="canvas-clock">
                 <strong>{{ classroom.name }}</strong
                 ><time>{{ timeLabel(now) }}</time>
                 <p>{{ dateText }}</p>
               </div></template
             >
-            <template v-else-if="item.kind === 'countdown'"
+            <template v-else-if="item.kind === 'countdown' && !materialOnly"
               ><div class="canvas-countdown">
                 <p>{{ countdown(item).title }}</p>
                 <strong>{{ countdown(item).value }}</strong>
                 <small>{{ countdown(item).date }}</small>
               </div></template
             >
-            <template v-else-if="item.kind !== 'shape'"
+            <template v-else-if="item.kind !== 'shape' && !materialOnly"
               ><h3 v-if="item.kind !== 'text' && item.showTitle !== false">
                 {{ heading(item) }}
               </h3>

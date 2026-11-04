@@ -98,7 +98,10 @@ public static class Program
         menu.Items.Add("立即同步", null, (_, _) => engine.RequestSync());
         menu.Items.Add("本机暂停展示", null, (_, _) => engine.LocalPause(true));
         menu.Items.Add("本机恢复展示", null, (_, _) => engine.LocalPause(false));
-        menu.Items.Add("减少材质效果", null, (_, _) => { engine.State.ReduceEffects = !engine.State.ReduceEffects; engine.Save(); engine.RequestSync(); });
+        menu.Items.Add("减少材质效果", null, (_, _) => {
+            engine.State.ReduceEffects = !engine.State.ReduceEffects; engine.Save(); engine.RequestSync();
+            foreach (var window in app.Windows.OfType<AppWindow>()) { window.ReduceMaterial = engine.State.ReduceEffects; window.RefreshMaterial(); }
+        });
         menu.Items.Add("隐私与本机数据", null, (_, _) => PrivacyNotice.Show(requireConsent: false));
         menu.Items.Add("卸载班级看板…", null, (_, _) => ClientLifecycle.StartUninstaller());
         menu.Items.Add("退出并恢复原壁纸", null, (_, _) => Quit(false));
@@ -134,7 +137,7 @@ public static class Program
     }
     private static Window StatusWindow(Engine engine)
     {
-        var window = new AppWindow("教室电脑");
+        var window = new AppWindow("教室电脑") { ReduceMaterial = engine.State.ReduceEffects };
         window.SetBody(new ClientPanel(engine)); return window;
     }
 

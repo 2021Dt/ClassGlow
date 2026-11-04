@@ -4,7 +4,8 @@ namespace ClassroomBoard;
 
 public static class AppPaths
 {
-    public const string Version = "0.4.7";
+    // 对外上报与安装包共用项目版本，避免升级后仍被服务器识别成旧客户端。
+    public static string Version => typeof(AppPaths).Assembly.GetName().Version!.ToString(3);
 #if LIFECYCLE_QA
     // 验证包使用独立目录、启动项和进程锁，绝不触碰正在使用的正式客户端。
     public const string ProductId = "ClassroomBoard.QA";

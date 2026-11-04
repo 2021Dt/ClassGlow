@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <StartupObject>ClassroomBoard.Program</StartupObject>
-    <Version>0.4.9</Version>
+    <Version>0.4.10</Version>
     <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -17,6 +17,7 @@
     <Resource Include="Assets/AppIcon.png" />
     <Resource Include="Assets/AppIcon.ico" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <None Update="ThirdPartyNotices.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
