@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { Layout } from "../domain";
+import CardImageControls from "./CardImageControls.vue";
 const props = defineProps<{ modelValue: Layout; disabled?: boolean }>();
 const emit = defineEmits<{ "update:modelValue": [Layout] }>();
 const busy = ref(false),
@@ -65,7 +66,7 @@ async function upload(event: Event) {
 </script>
 <template>
   <fieldset class="background-controls" :disabled="disabled || busy">
-    <legend>背景与通透度</legend>
+    <legend>桌面背景</legend>
     <label class="field"
       >背景类型<select
         :value="modelValue.backgroundMode ?? 'mica'"
@@ -114,14 +115,29 @@ async function upload(event: Event) {
         JPG / PNG / WebP，最大 8 MB；自动居中裁切为 16:9。
       </p>
     </template>
+    <CardImageControls
+      :image="modelValue.panelImage"
+      :fit="modelValue.panelImageFit"
+      :position="modelValue.panelImagePosition"
+      :disabled="disabled"
+      large
+      @update="
+        change({
+          panelImage: $event.image,
+          panelImageFit: $event.fit,
+          panelImagePosition: $event.position,
+        })
+      "
+    />
     <label class="field"
-      >卡片不透明度 · {{ modelValue.surfaceOpacity ?? 38 }}%<input
+      >{{ modelValue.panelImage ? "底板图片遮罩" : "底板不透明度" }} ·
+      {{ modelValue.surfaceOpacity ?? 38 }}%<input
         type="range"
-        min="20"
+        min="0"
         max="95"
         step="1"
         :value="modelValue.surfaceOpacity ?? 38"
-        :disabled="modelValue.material === 'solid'"
+        :disabled="modelValue.material === 'solid' && !modelValue.panelImage"
         @input="
           change({
             surfaceOpacity: Number(($event.target as HTMLInputElement).value),
@@ -129,7 +145,11 @@ async function upload(event: Event) {
         "
     /></label>
     <p class="muted small">
-      数值越小越通透，正文颜色保持不变。纯色材质始终不透明。
+      {{
+        modelValue.panelImage
+          ? "遮罩越高，文字越容易看清。"
+          : "数值越小越通透。"
+      }}
     </p>
     <p v-if="busy" class="muted small">正在处理图片…</p>
     <p v-if="error" class="notice danger" role="alert">{{ error }}</p>
@@ -163,7 +183,7 @@ async function upload(event: Event) {
 }
 .background-controls input[type="range"] {
   width: 100%;
-  accent-color: #426b5c;
+  accent-color: var(--green);
 }
 .background-thumbnail {
   width: 100%;

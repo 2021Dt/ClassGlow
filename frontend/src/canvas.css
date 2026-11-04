@@ -128,16 +128,16 @@ body:has(.studio-focused) {
   position: absolute;
   inset: 18px 24px auto;
   margin: 0;
-  font-size: 28px;
-  line-height: 42px;
-  font-weight: 500;
+  font-size: var(--widget-title-size, 28px);
+  line-height: var(--widget-title-line, 42px);
+  font-weight: inherit;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .canvas-widget-body {
   position: absolute;
-  inset: 68px 24px 20px;
+  inset: var(--widget-body-top, 68px) 24px 20px;
   overflow: hidden;
 }
 .canvas-widget-body.free-text {
@@ -182,7 +182,7 @@ body:has(.studio-focused) {
 }
 .canvas-clock strong {
   font-size: 24px;
-  font-weight: 500;
+  font-weight: inherit;
   line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -217,7 +217,7 @@ body:has(.studio-focused) {
 }
 .canvas-countdown strong {
   font-size: var(--widget-display-size);
-  font-weight: 500;
+  font-weight: inherit;
   line-height: 1.2;
 }
 .canvas-countdown small {
@@ -568,6 +568,17 @@ body:has(.studio-focused) {
   font-size: 9px;
   color: #9aac9f;
 }
+.studio-rotation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 2px 14px;
+  padding: 0 14px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
 .studio-canvas-hint {
   text-align: center;
   font-size: 9px;
@@ -749,6 +760,90 @@ body:has(.studio-focused) {
   padding: 7px;
   min-height: 34px;
   gap: 4px;
+}
+.studio-piece-row,
+.studio-composition-actions,
+.studio-piece-form,
+.studio-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.studio-piece-row > .text-button {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  justify-content: flex-start;
+  text-align: left;
+}
+.studio-template strong > small {
+  display: inline;
+  margin-left: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.studio-multi-select[aria-pressed="true"] {
+  background: #e5f1ff;
+  border-radius: 7px;
+  padding-inline: 7px;
+}
+.studio-composition {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+.studio-composition-actions,
+.studio-member-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+}
+.studio-piece-form > input {
+  flex: 1;
+  min-width: 0;
+}
+.studio-piece-form > button {
+  flex-shrink: 0;
+  padding: 6px 8px;
+  min-height: 35px;
+  font-size: 12px;
+}
+.studio-checkbox {
+  margin: 12px 0;
+  font-size: 12px;
+}
+.studio-checkbox > input {
+  width: 15px;
+  min-height: 15px;
+  margin: 0;
+}
+.studio-shape-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 12px 0;
+}
+.studio-shape-options > button {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 7px 2px;
+  background: #f5f5f7;
+  color: #42424a;
+  border-radius: 8px;
+  font-size: 11px;
+}
+.studio-shape-options > button[aria-pressed="true"] {
+  background: #eaf3ff;
+  color: #0071e3;
+  box-shadow: inset 0 0 0 1px #0071e3;
+}
+.studio-shape-options > button > span {
+  display: block;
+  width: 22px;
+  height: 17px;
+  background: currentColor;
 }
 .studio-upload {
   display: flex;

@@ -21,6 +21,8 @@ export const accountRole = (user: any) =>
 export function accountStatus(user: any) {
   if (!user.active) return { label: "已停用", tone: "muted" };
   if (!user.activated) return { label: "待设密码", tone: "amber" };
+  if (user.frozenUntil > user.serverTime)
+    return { label: "安全冻结", tone: "amber" };
   if (user.expiresAt && user.expiresAt <= user.serverTime)
     return { label: "已到期", tone: "red" };
   return { label: "正常", tone: "green" };
@@ -28,6 +30,8 @@ export function accountStatus(user: any) {
 export const auditNames: Record<string, string> = {
   system_initialized: "初始化系统",
   system_settings_changed: "修改站点设置",
+  announcement_published: "发布公告",
+  announcement_withdrawn: "撤回公告",
   user_created: "创建账号",
   account_created: "创建账号",
   account_invited: "旧版账号邀请",
@@ -35,6 +39,10 @@ export const auditNames: Record<string, string> = {
   activation_reissued: "重发激活码",
   user_updated: "修改账号",
   password_reset: "重置密码",
+  account_frozen: "临时冻结账号",
+  account_unfrozen: "解除安全冻结",
+  password_recovery_issued: "生成密码重置码",
+  password_recovered: "验证重置码并改密",
   license_issued: "签发高级许可",
   license_redeemed: "兑换高级许可",
   license_revoked: "作废许可码",

@@ -6,6 +6,7 @@ import sys
 from pydantic import ValidationError
 from sqlalchemy import delete, select
 
+from backend.account_security import clear_freeze
 from backend.db import SessionLocal, Token, User, now
 from backend.schemas import Credentials
 from backend.security import passwords
@@ -60,6 +61,7 @@ def main():
                     raise ValueError("没有找到该系统管理员，没有修改任何账号。")
                 admin.password = passwords.hash(password)
                 admin.active, admin.activated, admin.expires_at = True, True, 0
+                clear_freeze(db, admin, "server-console")
                 db.execute(delete(Token).where(Token.user_id == admin.id))
                 log_system(db, "server-console", "password_reset", admin.login)
             db.commit()

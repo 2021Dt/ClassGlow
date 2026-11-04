@@ -77,11 +77,21 @@ class RestoreInput(S.Input):
 
 
 def user_view(user):
-    return {**profile(user), "active": user.active}
+    return {
+        **profile(user),
+        "active": user.active,
+        "frozenUntil": user.frozen_until,
+        "freezeReason": user.freeze_reason,
+    }
 
 
 def available_accounts(timestamp):
-    return (User.active.is_(True), User.activated.is_(True), or_(User.expires_at == 0, User.expires_at > timestamp))
+    return (
+        User.active.is_(True),
+        User.activated.is_(True),
+        User.frozen_until <= timestamp,
+        or_(User.expires_at == 0, User.expires_at > timestamp),
+    )
 
 
 @router.get("/setup/status")
@@ -151,7 +161,7 @@ def save_settings(body: SettingsInput, user: User = Depends(system_admin), db: S
 def list_users(
     search: str = "",
     identity: Literal["", "system_admin", "headteacher", "teacher", "staff"] = "",
-    status: Literal["", "active", "disabled", "expired", "expiring", "pending"] = "",
+    status: Literal["", "active", "disabled", "expired", "expiring", "pending", "frozen"] = "",
     license: Literal["", "active", "free", "expiring", "expired"] = "",
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -170,6 +180,8 @@ def list_users(
         where.extend(available_accounts(timestamp))
     elif status == "disabled":
         where.append(User.active.is_(False))
+    elif status == "frozen":
+        where.extend((User.active.is_(True), User.frozen_until > timestamp))
     elif status == "pending":
         where.extend((User.active.is_(True), User.activated.is_(False)))
     elif status == "expired":
@@ -251,12 +263,15 @@ def edit_user(user_id: str, body: UserUpdate, user: User = Depends(system_admin)
 def reset_password(
     user_id: str, body: PasswordInput, user: User = Depends(system_admin), db: Session = Depends(get_db)
 ):
-    target = db.get(User, user_id)
+    target = db.scalar(select(User).where(User.id == user_id).with_for_update())
     if not target:
         fail(404, "user_missing", "账号不存在。")
     target.password = passwords.hash(body.password)
     # 旧版待激活账号也可由管理员直接设置登录密码，不让老师再处理激活步骤。
     target.activated = True
+    from .account_security import clear_freeze
+
+    clear_freeze(db, target, user.login)
     db.execute(delete(Token).where(Token.user_id == target.id))
     log_system(db, user.login, "password_reset", target.login)
     return {"ok": True}

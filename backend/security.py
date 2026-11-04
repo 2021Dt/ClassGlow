@@ -51,14 +51,37 @@ def bearer(authorization: str | None) -> str:
     return authorization[7:]
 
 
+def frozen_detail(user: User) -> dict:
+    return {
+        "code": "account_frozen",
+        "message": "为保护你的账号安全，账号已暂时冻结。",
+        "frozenUntil": user.frozen_until,
+        "serverTime": now(),
+    }
+
+
+def check_frozen(user: User):
+    if user.frozen_until > now():
+        raise HTTPException(403, frozen_detail(user))
+
+
 def actor(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
     session = db.get(Token, digest(bearer(authorization)))
-    if not session or session.expires <= now() or session.epoch != sync_epoch(db):
+    if not session or session.epoch != sync_epoch(db):
         fail(401, "session_expired", "登录已失效，请重新登录。")
     # 同一账号写入串行化，也使相同幂等键的并发重试取得同一结果。
     user = db.scalar(select(User).where(User.id == session.user_id).with_for_update())
+    # 等待账号锁期间可能发生换端登录或重置密码，取得锁后重新读取撤销结果。
+    session = db.scalar(select(Token).where(Token.digest == session.digest).execution_options(populate_existing=True))
+    if not session:
+        fail(401, "session_expired", "登录已失效，请重新登录。")
     if not user or not user.active or not user.activated:
         fail(401, "session_expired", "账号不可用。")
+    check_frozen(user)
+    if session.expires <= now():
+        if session.revoked_reason == "session_replaced":
+            fail(401, "session_replaced", "账号已在另一处登录。如非本人操作，请联系管理员重置密码。")
+        fail(401, "session_expired", "登录已失效，请重新登录。")
     if user.expires_at and user.expires_at <= now():
         fail(401, "account_expired", "账号使用期限已到，请联系系统管理员续期。数据会保留。")
     return user

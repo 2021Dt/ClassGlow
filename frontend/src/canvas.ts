@@ -11,14 +11,20 @@ export const widgetLabels: Record<WidgetKind, string> = {
   message: "班级寄语",
   text: "自由文字",
   image: "图片",
-  shape: "装饰色块",
+  shape: "图形",
 };
-export function widgetMinimum(kind: WidgetKind) {
+export function widgetMinimum(kind: WidgetKind, showTitle = true) {
   return ["image", "shape"].includes(kind)
     ? { w: 48, h: 48 }
     : kind === "text"
       ? { w: 120, h: 100 }
-      : { w: 280, h: 180 };
+      : {
+          w: 280,
+          h:
+            showTitle || kind === "datetime" || kind === "countdown"
+              ? 180
+              : 100,
+        };
 }
 export function newWidget(
   kind: WidgetKind,
@@ -37,6 +43,13 @@ export function newWidget(
     visible: true,
     locked: false,
     fontSize: 32,
+    fontFamily: "sans",
+    fontWeight: 400,
+    lineHeight: 1.5,
+    titleSize: 28,
+    backgroundImage: "",
+    backgroundFit: "cover",
+    backgroundPosition: "center",
     textColor: "",
     fillColor: kind === "shape" ? "#A5C7B7" : "#FFFFFF",
     surface: kind === "text" ? "none" : kind === "shape" ? "solid" : "glass",
@@ -86,16 +99,58 @@ export function toCanvas(layout: Layout): Layout {
   );
   return { ...clone(layout), editor: "canvas", canvas };
 }
+
+/** 试排只改组件位置与尺寸；自定义组合或锁定组件留给教师自己安排。 */
+export function homeworkPriorityLayout(layout: Layout): Layout | null {
+  const items = layout.canvas ?? [];
+  const visible = items.filter((item) => item.visible);
+  type Placement = Pick<CanvasWidget, "x" | "y" | "w" | "h">;
+  const slots: Partial<Record<WidgetKind, Placement>> = {
+    homework: { x: 0, y: 0, w: visible.length === 1 ? 1600 : 980, h: 900 },
+    datetime: { x: 1000, y: 0, w: 290, h: 180 },
+    countdown: { x: 1310, y: 0, w: 290, h: 180 },
+    message: { x: 1000, y: 200, w: 600, h: 180 },
+    todo: { x: 1000, y: 400, w: 600, h: 180 },
+    timetable: { x: 1000, y: 600, w: 600, h: 300 },
+  };
+  const positions = new Map<string, Placement>();
+  const placed = new Set<WidgetKind>();
+  for (const item of visible) {
+    const slot = slots[item.kind];
+    if (!slot || item.locked || item.groupId || placed.has(item.kind))
+      return null;
+    const fitted = clampWidget({ ...item, ...slot });
+    if (fitted.w !== slot.w || fitted.h !== slot.h) return null;
+    positions.set(item.id, slot);
+    placed.add(item.kind);
+  }
+  return {
+    ...layout,
+    canvas: items.map((item) => ({ ...item, ...positions.get(item.id) })),
+  };
+}
 export function clampWidget(item: CanvasWidget): CanvasWidget {
   item = {
     ...item,
-    fontSize: Math.max(16, Math.min(56, item.fontSize)),
+    fontSize: Math.max(16, Math.min(96, item.fontSize)),
+    titleSize: Math.max(16, Math.min(64, item.titleSize ?? 28)),
+    lineHeight: Math.max(1.2, Math.min(2, item.lineHeight ?? 1.5)),
     opacity: Math.max(0, Math.min(100, item.opacity)),
     radius: Math.max(0, Math.min(80, item.radius)),
   };
-  const min = widgetMinimum(item.kind);
-  if (item.kind === "text")
-    min.h = Math.max(min.h, Math.ceil(item.fontSize * 1.5 + 32));
+  const min = widgetMinimum(item.kind, item.showTitle);
+  if (item.kind === "text") {
+    min.w = Math.max(min.w, item.fontSize + 32);
+    min.h = Math.max(min.h, Math.ceil(item.fontSize * item.lineHeight! + 32));
+  }
+  if (["homework", "todo", "timetable", "message"].includes(item.kind))
+    min.h = Math.max(
+      min.h,
+      Math.ceil(
+        (item.showTitle === false ? 32 : 46 + item.titleSize! * 1.5) +
+          item.fontSize * item.lineHeight!,
+      ),
+    );
   if (["datetime", "countdown"].includes(item.kind))
     min.h = Math.max(min.h, Math.ceil(105 + (item.fontSize + 24) * 1.2));
   const w = Math.max(min.w, Math.min(CANVAS_WIDTH, Math.round(item.w))),
@@ -108,7 +163,18 @@ export function clampWidget(item: CanvasWidget): CanvasWidget {
     y: Math.max(0, Math.min(CANVAS_HEIGHT - h, Math.round(item.y))),
   };
 }
-export async function widgetImage(file: File) {
+
+/** 用同一个位移移动整组，碰到画布边缘时保持组内相对位置。 */
+export function moveCanvasItems(items: CanvasWidget[], dx: number, dy: number) {
+  const left = Math.min(...items.map((item) => item.x));
+  const top = Math.min(...items.map((item) => item.y));
+  const right = Math.max(...items.map((item) => item.x + item.w));
+  const bottom = Math.max(...items.map((item) => item.y + item.h));
+  const x = Math.max(-left, Math.min(CANVAS_WIDTH - right, dx));
+  const y = Math.max(-top, Math.min(CANVAS_HEIGHT - bottom, dy));
+  return items.map((item) => ({ ...item, x: item.x + x, y: item.y + y }));
+}
+export async function widgetImage(file: File, large = false) {
   if (
     !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
     file.size > 8 * 1024 * 1024
@@ -116,7 +182,11 @@ export async function widgetImage(file: File) {
     throw new Error("请选择 8 MB 以内的 JPG、PNG 或 WebP 图片。");
   const bitmap = await createImageBitmap(file);
   try {
-    const scale = Math.min(1, 1280 / bitmap.width, 960 / bitmap.height),
+    const scale = Math.min(
+        1,
+        (large ? 1920 : 1280) / bitmap.width,
+        (large ? 1080 : 960) / bitmap.height,
+      ),
       canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -126,7 +196,7 @@ export async function widgetImage(file: File) {
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     for (const quality of [0.8, 0.65, 0.5, 0.35]) {
       const data = canvas.toDataURL("image/jpeg", quality);
-      if (data.length <= 240000) return data;
+      if (data.length <= (large ? 500000 : 240000)) return data;
     }
     throw new Error("图片细节较多，请换一张更小的图片。");
   } finally {

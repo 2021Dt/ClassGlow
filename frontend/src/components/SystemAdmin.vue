@@ -23,6 +23,7 @@ import {
   SlidersHorizontal,
   Inbox,
   Check,
+  Megaphone,
 } from "@lucide/vue";
 import { api, session } from "../api";
 import { adminDate, auditNames, fileSize } from "../admin";
@@ -32,6 +33,7 @@ import LicenseManager from "./LicenseManager.vue";
 import AdminOverview from "./AdminOverview.vue";
 import AdminDataTable from "./AdminDataTable.vue";
 import AdminEditDrawer from "./AdminEditDrawer.vue";
+import AdminAnnouncements from "./AdminAnnouncements.vue";
 const emit = defineEmits<{
   changed: [];
   restored: [string];
@@ -63,6 +65,12 @@ const sections = [
     id: "devices",
     name: "教室设备",
     icon: Monitor,
+    group: "学校管理",
+  },
+  {
+    id: "announcements",
+    name: "公告管理",
+    icon: Megaphone,
     group: "学校管理",
   },
   {
@@ -125,14 +133,17 @@ const creationDialog = ref<HTMLDialogElement>(),
   creationBusy = ref(false);
 const editDrawer = ref<InstanceType<typeof AdminEditDrawer>>();
 const licenseView = ref<InstanceType<typeof LicenseManager>>();
+const announcementView = ref<InstanceType<typeof AdminAnnouncements>>();
 async function refreshPage() {
   await load(true);
   if (tab.value === "licenses") await licenseView.value?.reload();
+  if (tab.value === "announcements") await announcementView.value?.reload();
 }
 const statusOptions = computed(() =>
   tab.value === "users"
     ? [
         ["active", "正常"],
+        ["frozen", "安全冻结"],
         ["expiring", "7 天内到期"],
         ["expired", "已到期"],
         ["disabled", "已停用"],
@@ -454,6 +465,10 @@ defineExpose({ reload: () => load(true) });
             @navigate="go"
             @create-account="createAccount"
             @create-class="emit('createClass')"
+          />
+          <AdminAnnouncements
+            v-else-if="tab === 'announcements'"
+            ref="announcementView"
           />
           <LicenseManager
             v-else-if="tab === 'licenses'"

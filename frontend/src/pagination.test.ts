@@ -10,6 +10,10 @@ import {
 import { paginate, wrapText } from "./pagination";
 
 describe("内容完整性与日期边界", () => {
+  it("中文标点与前文一起换行，正文没有丢失", () => {
+    const lines = wrapText("今天认真学习。", 6, (s) => Array.from(s).length);
+    expect(lines).toEqual(["今天认真学", "习。"]);
+  });
   it("只有一行容量的小模块也能推进分页，不丢失正文", () => {
     const result = paginate(
       [{ id: "tiny", subject: "数学", body: "一二三四五六七八" } as Content],
@@ -33,6 +37,22 @@ describe("内容完整性与日期边界", () => {
     layout.grid.todo.x = 7;
     layout.grid.todo.w = 6;
     expect(layoutIssue(layout)).toContain("边界");
+  });
+  it("能装入一页的作业整条换页，超长作业带着学科进入续页", () => {
+    const items = [
+      { id: "a", subject: "语文", body: "一\n二" },
+      { id: "b", subject: "数学", body: "三\n四" },
+      { id: "c", subject: "英语", body: "五\n六\n七\n八" },
+    ] as Content[];
+    const pages = paginate(items, 3, 10, (s) => s.length, true);
+    expect(pages[0]?.map((item) => item.id)).toEqual(["a"]);
+    expect(pages[1]?.[0]?.lines).toEqual(["三", "四"]);
+    expect(pages[1]?.[0]?.continued).toBe(false);
+    expect(pages.at(-1)?.[0]).toMatchObject({
+      subject: "英语",
+      continued: true,
+      lines: ["八"],
+    });
   });
   it("500 字长文分页后逐字保留，包含空行和 Unicode 字符", () => {
     const text = `${"测".repeat(490)}\n\n最后一句🙂`;

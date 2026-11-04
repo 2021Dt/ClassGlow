@@ -38,14 +38,24 @@ def test_canvas_publish_snapshot_backup_and_bounds(client, tmp_path):
             "w": 600,
             "h": 300,
             "text": "让每一种想象都有位置",
-            "fontSize": 48,
+            "fontSize": 72,
+            "fontFamily": "kai",
+            "fontWeight": 600,
+            "lineHeight": 1.8,
+            "align": "right",
+            "backgroundImage": picture,
+            "backgroundFit": "contain",
+            "backgroundPosition": "bottom",
         }
     ]
-    layout.update(editor="canvas", canvas=widgets)
+    layout.update(editor="canvas", canvas=widgets, panelImage=picture, panelImageFit="cover", panelImagePosition="top", surfaceOpacity=0)
     assert len(json.dumps(layout).encode()) > 640 * 1024
     response = c.put(f"/classes/{class_id}/layout", headers=headers, json=layout)
     assert response.status_code == 200, response.text
     saved_layout = response.json()
+    assert saved_layout["canvas"][-1]["fontFamily"] == "kai"
+    assert saved_layout["canvas"][-1]["backgroundImage"] == picture
+    assert saved_layout["panelImage"] == picture
     snapshot = c.get("/device/snapshot", headers=device_headers).json()
     assert snapshot["classroom"]["layout"] == saved_layout
     old = c.get("/device/snapshot", headers=old_headers)

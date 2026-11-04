@@ -10,6 +10,9 @@ export interface GridRect {
   h: number;
 }
 export type Theme = "mica_light" | "mica_dark";
+export type BoardFont = "sans" | "serif" | "kai";
+export type ImageFit = "cover" | "contain";
+export type ImagePosition = "center" | "top" | "bottom" | "left" | "right";
 export interface Layout {
   editor?: "grid" | "canvas";
   canvas?: CanvasWidget[];
@@ -19,6 +22,9 @@ export interface Layout {
   backgroundColor?: string;
   backgroundImage?: string;
   surfaceOpacity?: number;
+  panelImage?: string;
+  panelImageFit?: ImageFit;
+  panelImagePosition?: ImagePosition;
   font: "small" | "medium" | "large";
   iconMargin: "left" | "right" | "none";
   interval: 15 | 20 | 30;
@@ -28,9 +34,28 @@ export interface Layout {
   grid: Record<GridKey, GridRect>;
 }
 export type WidgetKind = ModuleKey | "text" | "image" | "shape";
+export type ShapeKind =
+  | "rectangle"
+  | "ellipse"
+  | "pill"
+  | "triangle"
+  | "diamond"
+  | "hexagon"
+  | "star"
+  | "custom";
+export interface ShapePoint {
+  x: number;
+  y: number;
+}
 export interface CanvasWidget {
   id: string;
   kind: WidgetKind;
+  groupId?: string | null;
+  dynamicText?: boolean;
+  subjectFilter?: string;
+  showTitle?: boolean;
+  shape?: ShapeKind;
+  vertices?: ShapePoint[];
   x: number;
   y: number;
   w: number;
@@ -41,12 +66,19 @@ export interface CanvasWidget {
   visible: boolean;
   locked: boolean;
   fontSize: number;
+  fontFamily?: BoardFont;
+  fontWeight?: 400 | 500 | 600 | 700;
+  lineHeight?: number;
+  titleSize?: number;
+  backgroundImage?: string;
+  backgroundFit?: ImageFit;
+  backgroundPosition?: ImagePosition;
   textColor: string;
   fillColor: string;
   surface: "glass" | "solid" | "none";
   opacity: number;
   radius: number;
-  align: "left" | "center";
+  align: "left" | "center" | "right";
 }
 export interface Classroom {
   premiumActive?: boolean;

@@ -4,6 +4,7 @@ import type { Classroom, Content, GridKey, Layout } from "../domain";
 import { dateKey, timeLabel } from "../domain";
 import { paginate } from "../pagination";
 import CanvasBoard from "./CanvasBoard.vue";
+import { panelImageStyle } from "../boardAppearance";
 
 const props = withDefaults(
   defineProps<{
@@ -163,7 +164,11 @@ watch(
       }"
       :class="[`margin-${layout.iconMargin}`, { reverse: layout.reverse }]"
     >
-      <div class="board-shell board-surface" aria-label="班级展示大卡片">
+      <div
+        class="board-shell board-surface"
+        :style="panelImageStyle(layout)"
+        aria-label="班级展示大卡片"
+      >
         <header class="board-header">
           <div>
             <h2>{{ classroom.name }}</h2>

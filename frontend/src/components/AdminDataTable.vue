@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { School, Monitor, ArrowUpRight, ScrollText } from "@lucide/vue";
 import { accountRole, accountStatus, adminDate, auditNames } from "../admin";
+import { session } from "../api";
 defineProps<{ kind: string; rows: any[] }>();
 const emit = defineEmits<{
   edit: [string, any];
@@ -111,6 +112,16 @@ const emit = defineEmits<{
               ><button v-if="!item.systemAdmin" @click="emit('license', item)">
                 许可</button
               ><button @click="emit('edit', 'password', item)">重置密码</button>
+              <button
+                v-if="
+                  item.active && item.activated && item.id !== session.userId
+                "
+                @click="emit('edit', 'security', item)"
+              >
+                {{
+                  item.frozenUntil > item.serverTime ? "解除冻结" : "安全冻结"
+                }}
+              </button>
             </td>
           </template>
           <template v-else-if="kind === 'classes'">

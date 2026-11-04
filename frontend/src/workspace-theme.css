@@ -1,0 +1,437 @@
+/* 教师工作台延续下载页的留白、灰白表面与蓝色操作色。看板内容使用独立样式。 */
+.app-shell:not(.admin-mode) {
+  background: #fbfbfd;
+  color: #1d1d1f;
+}
+.app-shell:not(.admin-mode) .sidebar {
+  background: #fff;
+  border-color: #e7e7eb;
+  padding-top: 28px;
+}
+.app-shell:not(.admin-mode) .brand {
+  color: #1d1d1f;
+  letter-spacing: -0.4px;
+}
+.app-shell:not(.admin-mode) .brand small {
+  color: #86868b;
+  letter-spacing: 0.7px;
+}
+.app-shell:not(.admin-mode) .workspace-label {
+  color: #86868b;
+  letter-spacing: 0.4px;
+}
+.app-shell:not(.admin-mode) .sidebar nav button {
+  color: #6e6e73;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.app-shell:not(.admin-mode) .sidebar nav button:hover {
+  background: #f5f5f7;
+}
+.app-shell:not(.admin-mode) .sidebar nav button.active {
+  color: #0071e3;
+  background: #edf5ff;
+  font-weight: 500;
+}
+.app-shell:not(.admin-mode) .nav-count {
+  background: #e1edfa;
+}
+.app-shell:not(.admin-mode) .topbar {
+  background: #fbfbfdf5;
+  border-color: #e7e7eb;
+}
+.app-shell:not(.admin-mode) .class-selector {
+  color: #42424a;
+}
+.app-shell:not(.admin-mode) .topbar > .text-button {
+  border-color: #e7e7eb;
+  color: #0071e3;
+}
+.app-shell:not(.admin-mode) .role-label,
+.app-shell:not(.admin-mode) .user-control small,
+.app-shell:not(.admin-mode) .user-control > svg {
+  color: #86868b;
+}
+.app-shell:not(.admin-mode) .avatar {
+  background: #eef1f6;
+  color: #626b7c;
+}
+.app-shell:not(.admin-mode) .page-heading h1 {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.8px;
+}
+.app-shell:not(.admin-mode) .main-content {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.app-shell:not(.admin-mode) .panel {
+  border-color: #e7e7eb;
+  border-radius: 20px;
+  box-shadow: 0 4px 18px #1d1d1f03;
+}
+.app-shell:not(.admin-mode) .button,
+.auth-shell .button,
+.modal .button,
+.editor-dialog .button {
+  border-radius: 14px;
+}
+.app-shell:not(.admin-mode) .icon-button:hover {
+  background: #f0f1f4;
+}
+.app-shell:not(.admin-mode) .workspace-footer {
+  color: #86868b;
+}
+.app-shell:not(.admin-mode) .license-nav {
+  color: #6e6e73;
+  border-color: #e7e7eb;
+  background: #f5f5f7;
+}
+.app-shell:not(.admin-mode) .license-nav.active {
+  color: #0071e3;
+  background: #edf5ff;
+}
+.app-shell:not(.admin-mode) .notice.subtle,
+.app-shell:not(.admin-mode) .neutral {
+  background: #f1f2f5;
+  color: #6e6e73;
+}
+.app-shell:not(.admin-mode) .subject-tag {
+  background: #edf5ff;
+  color: #0067cf;
+}
+.app-shell:not(.admin-mode) .record-meta,
+.app-shell:not(.admin-mode) .member-row small,
+.app-shell:not(.admin-mode) .device-facts dt,
+.app-shell:not(.admin-mode) .command-row p,
+.app-shell:not(.admin-mode) .command-row small {
+  color: #6e6e73;
+}
+.app-shell:not(.admin-mode) .segmented {
+  background: #f1f2f5;
+  border-radius: 12px;
+  padding: 4px;
+}
+.app-shell:not(.admin-mode) .segmented button {
+  color: #6e6e73;
+}
+.app-shell:not(.admin-mode) .segmented button.selected {
+  background: #fff;
+  color: #1d1d1f;
+  box-shadow: 0 1px 5px #00000009;
+}
+
+/* 常用入口与内容卡片保留一致轮廓，正文滚动不改变卡片高度。 */
+.app-shell:not(.admin-mode) .teaching-actions {
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.app-shell:not(.admin-mode) .teaching-action {
+  background: #f1f2f5;
+  color: #1d1d1f;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  min-height: 100px;
+}
+.app-shell:not(.admin-mode) .teaching-action strong {
+  font-weight: 500;
+}
+.app-shell:not(.admin-mode) .teaching-action:hover {
+  background: #ebeef3;
+  border-color: #dcdfe5;
+  box-shadow: none;
+}
+.app-shell:not(.admin-mode) .teaching-action > svg {
+  color: #86868b;
+}
+.app-shell:not(.admin-mode) .teaching-action .action-symbol {
+  color: #0071e3;
+  background: #e5edf8;
+  border-radius: 12px;
+}
+.app-shell:not(.admin-mode) .teaching-action.main-action {
+  background: #0071e3;
+  color: #fff;
+}
+.app-shell:not(.admin-mode) .teaching-action.main-action:hover {
+  background: #0077ed;
+}
+.app-shell:not(.admin-mode) .main-action .action-symbol {
+  color: #fff;
+  background: #ffffff20;
+}
+.app-shell:not(.admin-mode) .main-action > svg {
+  color: #ffffffb5;
+}
+.app-shell:not(.admin-mode) .class-connection,
+.app-shell:not(.admin-mode) .resume-draft {
+  background: transparent;
+  border: 0;
+  color: #6e6e73;
+  padding: 5px 2px 17px;
+}
+.app-shell:not(.admin-mode) .class-connection button,
+.app-shell:not(.admin-mode) .resume-draft button {
+  color: #0071e3;
+}
+.app-shell:not(.admin-mode) .teaching-grid {
+  gap: 24px;
+}
+.app-shell:not(.admin-mode) .teaching-card {
+  border: 1px solid #e7e7eb;
+  border-radius: 22px;
+  height: 460px;
+}
+.app-shell:not(.admin-mode) .teaching-card h2 {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+}
+.app-shell:not(.admin-mode) .post-tabs button {
+  color: #6e6e73;
+  border-radius: 16px;
+}
+.app-shell:not(.admin-mode) .post-tabs button[aria-selected="true"] {
+  background: #edf5ff;
+  color: #0071e3;
+  font-weight: 500;
+}
+.app-shell:not(.admin-mode) .post-subject {
+  color: #42424a;
+  background: #f1f2f5;
+}
+.app-shell:not(.admin-mode) .teaching-post p {
+  color: #42424a;
+  line-height: 1.9;
+}
+.app-shell:not(.admin-mode) .teaching-post,
+.app-shell:not(.admin-mode) .today-lessons li {
+  border-color: #eeeef2;
+}
+.app-shell:not(.admin-mode) .teaching-post > div > span,
+.app-shell:not(.admin-mode) .teaching-post small,
+.app-shell:not(.admin-mode) .today-lessons li > span,
+.app-shell:not(.admin-mode) .next-lesson {
+  color: #86868b;
+}
+.app-shell:not(.admin-mode) .today-lessons .lesson-current {
+  color: #0071e3;
+  background: #edf5ff;
+}
+.app-shell:not(.admin-mode) .teaching-empty {
+  color: #b4b7bf;
+}
+.app-shell:not(.admin-mode) .teaching-empty strong {
+  color: #6e6e73;
+}
+.app-shell:not(.admin-mode) .mobile-nav {
+  background: #ffffffed;
+  border-color: #e7e7eb;
+}
+.app-shell:not(.admin-mode) .mobile-nav button {
+  color: #86868b;
+}
+.app-shell:not(.admin-mode) .mobile-nav button.active {
+  color: #0071e3;
+}
+
+.auth-shell.access-shell {
+  background: #fbfbfd;
+}
+.auth-shell .auth-card {
+  border-color: #e7e7eb;
+  border-radius: 24px;
+  box-shadow: 0 16px 64px #1d1d1f06;
+}
+.auth-shell .brand {
+  color: #1d1d1f;
+  letter-spacing: -0.5px;
+}
+.auth-shell .access-help {
+  color: #86868b;
+}
+.compose-targets,
+.compose-schedule {
+  border-color: #e7e7eb;
+}
+.compose-targets[open] summary,
+.compose-schedule[open] summary {
+  border-color: #e7e7eb;
+}
+.sheet-footer {
+  background: #fbfbfd;
+}
+.toast {
+  background: #1d1d1f;
+  color: #fff;
+  border-color: #42424a;
+}
+
+/* 编辑器只在选中对象后展开排版设置，几何参数默认收起。 */
+.canvas-studio {
+  color: #1d1d1f;
+  --green: #0071e3;
+  --muted: #6e6e73;
+  --border: #e7e7eb;
+  border-color: #e7e7eb;
+}
+.canvas-studio .studio-heading > span {
+  color: #0071e3;
+  border: 0;
+  background: #edf5ff;
+  border-radius: 12px;
+}
+.canvas-studio .studio-heading small,
+.canvas-studio .studio-help,
+.canvas-studio .studio-selected-heading small,
+.canvas-studio .studio-color-row label,
+.canvas-studio .studio-section-title span,
+.canvas-studio .studio-page-controls,
+.canvas-studio .studio-canvas-hint,
+.canvas-studio .studio-no-selection,
+.canvas-studio .studio-no-selection h3 {
+  color: #86868b;
+}
+.canvas-studio .studio-toolbar,
+.canvas-studio .studio-inspector,
+.canvas-studio .studio-library,
+.canvas-studio .studio-inspector-tabs,
+.canvas-studio .studio-selected-heading,
+.canvas-studio .studio-template,
+.canvas-studio .studio-layers {
+  border-color: #e7e7eb;
+}
+.canvas-studio .studio-library {
+  background: #fbfbfd;
+}
+.canvas-studio .studio-canvas-column {
+  background: #f1f2f5;
+}
+.canvas-studio .studio-canvas-toolbar {
+  color: #86868b;
+  background: #f8f8fa;
+  border-color: #e7e7eb;
+}
+.canvas-studio .studio-viewport {
+  background-image: radial-gradient(#bfc3cc60 0.7px, transparent 0.7px);
+}
+.canvas-studio .studio-palette button {
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #42424a;
+  font-size: 12px;
+}
+.canvas-studio .studio-palette button > svg:first-child {
+  color: #6e6e73;
+}
+.canvas-studio .studio-palette button:hover {
+  background: #edf5ff;
+  color: #0071e3;
+}
+.canvas-studio .studio-layers article.active {
+  background: #edf5ff;
+  border-color: #dbeafd;
+}
+.canvas-studio .layer-name {
+  color: #6e6e73;
+}
+.canvas-studio .layer-icon {
+  color: #86868b;
+}
+.canvas-studio .studio-inspector-tabs button {
+  color: #6e6e73;
+  font-size: 12px;
+}
+.canvas-studio .studio-inspector-tabs button.active {
+  color: #0071e3;
+  border-color: #0071e3;
+}
+.canvas-studio .studio-property-body :is(input, select, textarea) {
+  border-radius: 10px;
+}
+.studio-property-group {
+  border-top: 1px solid #e7e7eb;
+  padding: 14px 0;
+}
+.studio-property-group summary {
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.studio-property-group[open] summary {
+  margin-bottom: 12px;
+}
+.studio-type-presets {
+  display: flex;
+  gap: 6px;
+}
+.studio-type-presets button {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 9px;
+  background: #f1f2f5;
+  font-size: 12px;
+}
+.studio-type-presets button:hover {
+  background: #edf5ff;
+  color: #0071e3;
+}
+.studio-font-sample {
+  background: #f5f5f7;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 20px;
+  line-height: 1.6;
+  max-height: 88px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.canvas-studio .studio-align button {
+  background: #f5f5f7;
+  color: #6e6e73;
+  border-color: #e7e7eb;
+  border-radius: 8px;
+}
+.canvas-studio .studio-upload {
+  background: #fbfbfd;
+  color: #6e6e73;
+  border-color: #c8ced6;
+}
+.canvas-studio .studio-mobile-panels button {
+  background: #f5f5f7;
+  color: #6e6e73;
+}
+.canvas-studio .studio-mobile-panels button[aria-pressed="true"] {
+  background: #edf5ff;
+  color: #0071e3;
+}
+@media (min-width: 1001px) {
+  .canvas-studio .studio-body {
+    grid-template-columns: 172px minmax(0, 1fr) 270px;
+  }
+}
+@media (max-width: 700px) {
+  .app-shell:not(.admin-mode) .teaching-actions {
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .app-shell:not(.admin-mode) .teaching-action {
+    min-height: 86px;
+    padding: 16px;
+    border-radius: 18px;
+  }
+  .app-shell:not(.admin-mode) .teaching-card {
+    height: 380px;
+    border-radius: 20px;
+  }
+  .app-shell:not(.admin-mode) .teaching-grid {
+    gap: 18px;
+  }
+  .app-shell:not(.admin-mode) .page-heading h1 {
+    font-size: 26px;
+  }
+  .canvas-studio .studio-property-body :is(input, select, textarea) {
+    font-size: 16px;
+  }
+}

@@ -98,9 +98,20 @@ def grid_default():
     }
 
 
+class ShapePoint(Input):
+    x: int = Field(ge=0, le=100)
+    y: int = Field(ge=0, le=100)
+
+
 class CanvasWidget(Input):
     id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,80}$")
     kind: Literal["homework", "todo", "timetable", "datetime", "countdown", "message", "text", "image", "shape"]
+    groupId: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,80}$")
+    dynamicText: bool = False
+    subjectFilter: str = Field(default="", max_length=20)
+    showTitle: bool = True
+    shape: Literal["rectangle", "ellipse", "pill", "triangle", "diamond", "hexagon", "star", "custom"] = "rectangle"
+    vertices: list[ShapePoint] = Field(default_factory=list, max_length=24)
     x: int = Field(ge=0, le=1552)
     y: int = Field(ge=0, le=852)
     w: int = Field(ge=48, le=1600)
@@ -110,32 +121,46 @@ class CanvasWidget(Input):
     image: str = Field(default="", max_length=524311)
     visible: bool = True
     locked: bool = False
-    fontSize: int = Field(default=32, ge=16, le=56)
+    fontSize: int = Field(default=32, ge=16, le=96)
+    fontFamily: Literal["sans", "serif", "kai"] = "sans"
+    fontWeight: Literal[400, 500, 600, 700] = 400
+    lineHeight: float = Field(default=1.5, ge=1.2, le=2)
+    titleSize: int = Field(default=28, ge=16, le=64)
+    backgroundImage: str = Field(default="", max_length=524311)
+    backgroundFit: Literal["cover", "contain"] = "cover"
+    backgroundPosition: Literal["center", "top", "bottom", "left", "right"] = "center"
     textColor: str = Field(default="", pattern=r"^(#[0-9a-fA-F]{6})?$")
     fillColor: str = Field(default="#FFFFFF", pattern=r"^#[0-9a-fA-F]{6}$")
     surface: Literal["glass", "solid", "none"] = "glass"
     opacity: int = Field(default=45, ge=0, le=100)
     radius: int = Field(default=24, ge=0, le=80)
-    align: Literal["left", "center"] = "left"
+    align: Literal["left", "center", "right"] = "left"
 
-    @field_validator("image")
+    @field_validator("image", "backgroundImage")
     @classmethod
     def valid_image(cls, value):
         return LayoutInput.raster_background(value)
 
     @model_validator(mode="after")
     def usable_size(self):
+        if self.kind == "shape" and self.shape == "custom" and len({(point.x, point.y) for point in self.vertices}) < 3:
+            raise ValueError("自由轮廓至少需要三个不同的顶点")
         if self.x + self.w > 1600 or self.y + self.h > 900:
             raise ValueError("组件不能超出画布")
         # 数据组件保留至少一行正文空间；超出的内容分页，不缩字或悄悄截断。
-        if self.kind in ("homework", "todo", "timetable", "datetime", "countdown", "message") and (
-            self.w < 280 or self.h < 180
-        ):
-            raise ValueError("数据组件至少为 280 × 180，以保证文字可读")
+        if self.kind in ("homework", "todo", "timetable", "datetime", "countdown", "message"):
+            minimum_height = 100 if not self.showTitle and self.kind not in ("datetime", "countdown") else 180
+            if self.w < 280 or self.h < minimum_height:
+                raise ValueError(f"当前数据组件至少为 280 × {minimum_height}，以保证文字可读")
         if self.kind == "text" and (self.w < 120 or self.h < 100):
             raise ValueError("文字组件至少为 120 × 100")
-        if self.kind == "text" and self.h < self.fontSize * 1.5 + 32:
+        if self.kind == "text" and self.w < self.fontSize + 32:
+            raise ValueError("文字组件宽度不足，请加宽组件或调小字号")
+        if self.kind == "text" and self.h < self.fontSize * self.lineHeight + 32:
             raise ValueError("文字组件高度不足以显示一行当前字号的文字")
+        title_inset = 46 + self.titleSize * 1.5 if self.showTitle else 32
+        if self.kind in ("homework", "todo", "timetable", "message") and self.h < title_inset + self.fontSize * self.lineHeight:
+            raise ValueError("卡片高度不足以显示标题和一行正文，请增高卡片或调小字号")
         if self.kind in ("datetime", "countdown") and self.h < 105 + (self.fontSize + 24) * 1.2:
             raise ValueError("时钟或倒计时高度不足，请增高组件或调小字号")
         if self.kind == "image" and self.visible and not self.image:
@@ -151,7 +176,10 @@ class LayoutInput(Input):
     backgroundMode: Literal["mica", "color", "image"] = "mica"
     backgroundColor: str = Field(default="#E7E8EB", pattern=r"^#[0-9a-fA-F]{6}$")
     backgroundImage: str = Field(default="", max_length=524311)
-    surfaceOpacity: int = Field(default=38, ge=20, le=95)
+    surfaceOpacity: int = Field(default=38, ge=0, le=95)
+    panelImage: str = Field(default="", max_length=524311)
+    panelImageFit: Literal["cover", "contain"] = "cover"
+    panelImagePosition: Literal["center", "top", "bottom", "left", "right"] = "center"
     font: Literal["small", "medium", "large"] = "medium"
     iconMargin: Literal["left", "right", "none"] = "left"
     interval: Literal[15, 20, 30] = 20
@@ -162,7 +190,7 @@ class LayoutInput(Input):
     reverse: bool = False
     revision: int = Field(ge=1)
 
-    @field_validator("backgroundImage")
+    @field_validator("backgroundImage", "panelImage")
     @classmethod
     def raster_background(cls, value):
         if not value:

@@ -21,8 +21,16 @@ export function wrapText(
     let line = "";
     for (const char of Array.from(paragraph)) {
       if (line && measure(line + char) > width) {
-        lines.push(line);
-        line = char;
+        const glyphs = Array.from(line),
+          last = glyphs.at(-1)!;
+        // 在卡片边界前移一个字，避免句号独占行首或左括号停在行末。
+        const carry =
+          glyphs.length > 1 &&
+          ("，。！？；：、）】》”’,.!?;:)]}".includes(char) ||
+            "（【《“‘([{".includes(last)) &&
+          measure(last + char) <= width;
+        lines.push(carry ? glyphs.slice(0, -1).join("") : line);
+        line = carry ? last + char : char;
       } else line += char;
     }
     lines.push(line);
@@ -34,6 +42,7 @@ export function paginate(
   lineBudget: number,
   width: number,
   measure: (s: string) => number,
+  keepWhole = false,
 ): Slice[][] {
   if (lineBudget < 1 || width <= 0)
     throw new Error("当前模块太小，请增大尺寸或减少字号。");
@@ -41,6 +50,16 @@ export function paginate(
   let used = 0;
   for (const item of items) {
     const lines = wrapText(item.body, width, measure);
+    // 一页能放下的作业直接移到下一页，长作业继续按行拆分。
+    if (
+      keepWhole &&
+      used &&
+      lines.length <= lineBudget &&
+      used + 0.45 + lines.length > lineBudget
+    ) {
+      pages.push([]);
+      used = 0;
+    }
     let offset = 0;
     while (offset < lines.length) {
       // 条目间留出 0.45 行间距，正文按完整行拆分，避免小模块陷入无法推进的循环。

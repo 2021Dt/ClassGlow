@@ -14,6 +14,7 @@ from .db import (
     History,
     Invitation,
     Membership,
+    PasswordRecovery,
     Token,
     Transfer,
     User,
@@ -36,6 +37,8 @@ def change_password(body: PasswordInput, user: User = Depends(actor), db: Sessio
     if not passwords.verify(body.oldPassword, user.password):
         fail(403, "password_invalid", "原口令不正确。")
     user.password = passwords.hash(body.newPassword)
+    user.security_reviewed_at = now()
+    db.execute(delete(PasswordRecovery).where(PasswordRecovery.user_id == user.id))
     # 改密撤销所有会话，避免遗失设备仍维持管理权限。
     for token in db.scalars(select(Token).where(Token.user_id == user.id)):
         db.delete(token)

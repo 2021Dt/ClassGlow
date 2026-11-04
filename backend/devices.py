@@ -171,6 +171,7 @@ def valid_commands(db, d):
             command.binding != d.binding
             or command.epoch != d.epoch
             or not account_available(author)
+            or author.frozen_until > now()
             or not has_premium(author)
             or not (author.system_admin or membership and membership.role != "teacher")
         ):

@@ -18,6 +18,7 @@ import {
   School,
   ArrowRight,
   CircleHelp,
+  Check,
 } from "@lucide/vue";
 import TeacherHome from "./components/TeacherHome.vue";
 import FirstUseGuide from "./components/FirstUseGuide.vue";
@@ -29,6 +30,7 @@ import DeviceConsole from "./components/DeviceConsole.vue";
 import AccessGate from "./components/AccessGate.vue";
 import AccountLicense from "./components/AccountLicense.vue";
 import SystemAdmin from "./components/SystemAdmin.vue";
+import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import { model, replaceModel, clone } from "./store";
 import {
   api,
@@ -522,6 +524,17 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <AnnouncementPopup
+    v-if="
+      siteReady &&
+      site.initialized &&
+      session.token &&
+      session.userId &&
+      !loading
+    "
+    :key="session.userId"
+    :paused="guideOpen"
+  />
   <main v-if="!siteReady" class="empty-state">
     <h2>正在连接看板服务</h2>
     <p v-if="error" class="field-error">{{ error }}</p>

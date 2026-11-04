@@ -31,11 +31,33 @@ export function premiumAvailable(time = Date.now()) {
   );
 }
 const localDraftRevision = ref(0);
+export const authNotice = ref<{
+  message: string;
+  code: string;
+  frozenUntil?: number;
+  serverTime?: number;
+} | null>(null);
+
+export function browserIdentity() {
+  // 随机标识只用于异常登录判断，不读取硬件信息，也不是登录凭证。
+  const key = "classglow-login-browser";
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
     public code: string,
+    public details?: { frozenUntil?: number; serverTime?: number },
   ) {
     super(message);
   }
@@ -48,13 +70,14 @@ export async function api<T = any>(
 ): Promise<T> {
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), 15000);
+  const requestToken = session.token;
   try {
     const response = await fetch(`/api${path}`, {
       method,
       signal: abort.signal,
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}),
+        ...(requestToken ? { Authorization: `Bearer ${requestToken}` } : {}),
         ...(key ? { "Idempotency-Key": key } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -66,13 +89,33 @@ export async function api<T = any>(
         /^Value error, /,
         "",
       );
-      throw new ApiError(
+      const failure = new ApiError(
         typeof detail === "string"
           ? detail
           : (fieldMessage ?? detail?.message ?? "请求未完成，请稍后重试。"),
         response.status,
         detail?.code ?? "request_failed",
+        detail,
       );
+      if (
+        requestToken &&
+        requestToken === session.token &&
+        [
+          "account_frozen",
+          "session_replaced",
+          "session_expired",
+          "account_expired",
+        ].includes(failure.code)
+      ) {
+        authNotice.value = {
+          message: failure.message,
+          code: failure.code,
+          ...detail,
+        };
+        session.token = "";
+        sessionStorage.removeItem("kanban-session");
+      }
+      throw failure;
     }
     return result as T;
   } catch (error) {

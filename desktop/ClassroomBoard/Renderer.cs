@@ -14,6 +14,7 @@ using ColorConverter = System.Windows.Media.ColorConverter;
 using Brushes = System.Windows.Media.Brushes;
 using SystemColors = System.Windows.SystemColors;
 using Pen = System.Windows.Media.Pen;
+using FontFamily = System.Windows.Media.FontFamily;
 
 namespace ClassroomBoard;
 
@@ -32,8 +33,32 @@ public sealed partial class Renderer(string directory)
 {
     private static readonly Typeface Font = new("Microsoft YaHei");
     private readonly Dictionary<string, DrawingGroup> backgrounds = new();
+    private readonly Dictionary<string, BitmapSource> pictures = new();
     private static Brush BrushOf(string hex) => new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-    private static FormattedText Text(string text, double size, Brush brush) => new(text, CultureInfo.GetCultureInfo("zh-CN"), FlowDirection.LeftToRight, Font, size, brush, 1);
+    private static FormattedText Text(string text, double size, Brush brush, Typeface? typeface = null) => new(text, CultureInfo.GetCultureInfo("zh-CN"), FlowDirection.LeftToRight, typeface ?? Font, size, brush, 1);
+    private static Typeface WidgetFont(JsonNode widget)
+    {
+        string family = widget.Str("fontFamily", "sans") switch {
+            "serif" => "SimSun, Microsoft YaHei", "kai" => "KaiTi, Microsoft YaHei", _ => "Microsoft YaHei UI, Microsoft YaHei"
+        };
+        return new(new FontFamily(family), FontStyles.Normal, FontWeight.FromOpenTypeWeight(widget.Int("fontWeight", 400)), FontStretches.Normal);
+    }
+    private ImageBrush PictureBrush(string data, string fit, string position)
+    {
+        if (!pictures.TryGetValue(data, out var picture)) {
+            using var stream = new MemoryStream(Convert.FromBase64String(data.Split(',', 2)[1]));
+            var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze(); picture = bitmap;
+            // 仅缓存少量解码结果，不把每次换图永久积累在客户端内存中。
+            if (pictures.Count >= 8) pictures.Clear();
+            pictures[data] = picture;
+        }
+        return new ImageBrush(picture) {
+            Stretch = fit == "contain" ? Stretch.Uniform : Stretch.UniformToFill,
+            AlignmentX = position == "left" ? AlignmentX.Left : position == "right" ? AlignmentX.Right : AlignmentX.Center,
+            AlignmentY = position == "top" ? AlignmentY.Top : position == "bottom" ? AlignmentY.Bottom : AlignmentY.Center
+        };
+    }
     private static void DrawText(DrawingContext dc, string text, double x, double y, double size, Brush brush, double width = 1800)
     {
         var formatted = Text(text, size, brush); formatted.MaxTextWidth = Math.Max(1, width);
@@ -41,26 +66,38 @@ public sealed partial class Renderer(string directory)
         formatted.MaxLineCount = 1; formatted.Trimming = TextTrimming.CharacterEllipsis;
         dc.DrawText(formatted, new Point(x, y));
     }
-    public static List<string> Wrap(string text, double size, double width)
+    public static List<string> Wrap(string text, double size, double width, Typeface? typeface = null)
     {
         var result = new List<string>();
         foreach (string paragraph in text.Split('\n')) {
             string line = "";
             foreach (var rune in paragraph.EnumerateRunes()) {
                 string next = line + rune;
-                if (line.Length > 0 && Text(next, size, Brushes.Black).WidthIncludingTrailingWhitespace > width) { result.Add(line); line = rune.ToString(); }
+                if (line.Length > 0 && Text(next, size, Brushes.Black, typeface).WidthIncludingTrailingWhitespace > width) {
+                    var glyphs = line.EnumerateRunes().ToArray();
+                    string last = glyphs[^1].ToString(), current = rune.ToString();
+                    // 与网页预览一致：优先避免中文标点悬在行首，且不突破实际字宽。
+                    bool carry = glyphs.Length > 1 && ("，。！？；：、）】》”’,.!?;:)]}".Contains(current) || "（【《“‘([{".Contains(last)) && Text(last + current, size, Brushes.Black, typeface).WidthIncludingTrailingWhitespace <= width;
+                    result.Add(carry ? line[..^last.Length] : line);
+                    line = carry ? last + current : current;
+                }
                 else line = next;
             }
             result.Add(line);
         }
         return result;
     }
-    public static List<List<TextSlice>> Paginate(IEnumerable<JsonNode> contents, double size, double width, double budget)
+    public static List<List<TextSlice>> Paginate(IEnumerable<JsonNode> contents, double size, double width, double budget, Typeface? typeface = null, bool keepWhole = false)
     {
         if (budget < 1 || width <= 0) throw new InvalidDataException("当前布局没有足够空间，请调整模块或字号。");
         var pages = new List<List<TextSlice>> { new() }; double used = 0;
         foreach (var item in contents) {
-            var lines = Wrap(item.Str("body"), size, width); int offset = 0;
+            var lines = Wrap(item.Str("body"), size, width, typeface); int offset = 0;
+            // 短作业整条换页，只有一页装不下的作业才拆成续页。
+            if (keepWhole && used > 0 && lines.Count <= budget && used + .45 + lines.Count > budget) {
+                pages.Add(new());
+                used = 0;
+            }
             while (offset < lines.Count) {
                 double gap = pages[^1].Count > 0 ? .45 : 0;
                 if (budget - used - gap < 1) { pages.Add(new()); used = 0; gap = 0; }
@@ -235,6 +272,16 @@ public sealed partial class Renderer(string directory)
                 void Panel(double x, double y, double w, double h, bool inner = false) {
                     var bounds = new Rect(x, y, w, h);
                     double radius = inner ? 32 : 40;
+                    if (!inner && !highContrast && layout.Str("panelImage").Length > 0) {
+                        // 底板图片有自己的铺放方式，不改变底板外的桌面背景。
+                        bg.PushClip(new RectangleGeometry(bounds, radius, radius));
+                        bg.DrawRectangle(surface, null, bounds);
+                        bg.DrawRectangle(PictureBrush(layout.Str("panelImage"), layout.Str("panelImageFit", "cover"), layout.Str("panelImagePosition", "center")), null, bounds);
+                        bg.DrawRectangle(new SolidColorBrush(Color.FromArgb((byte)Math.Round(opacity * 255), (byte)(dark ? 38 : 249), (byte)(dark ? 41 : 250), (byte)(dark ? 46 : 252))), null, bounds);
+                        bg.Pop();
+                        bg.DrawRoundedRectangle(null, new Pen(BrushOf("#80FFFFFF"), 1), bounds, radius, radius);
+                        return;
+                    }
                     if (material != "subtle" || highContrast) {
                         bg.DrawRoundedRectangle(surface, new Pen(accent, .5), bounds, radius, radius);
                         return;

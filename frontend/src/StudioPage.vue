@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import AccessGate from "./components/AccessGate.vue";
 import BoardDesigner from "./components/BoardDesigner.vue";
+import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import { api, ApiError, premiumAvailable, refreshModel, session } from "./api";
 import { clone, model, replaceModel } from "./store";
 import { classroomForDisplay } from "./classroomView";
@@ -20,6 +21,7 @@ const current = computed(() =>
 const now = ref(Date.now());
 const draft = ref<Layout>();
 const confirmation = ref<HTMLDialogElement>();
+const publishSummary = ref("");
 const canEdit = computed(
   () =>
     !!current.value &&
@@ -90,10 +92,11 @@ watch(
   },
   { deep: true, flush: "sync" },
 );
-function confirmPublish() {
+function confirmPublish(summary: string) {
   if (!draft.value || !canEdit.value || busy.value) return;
   error.value = layoutIssue(draft.value);
   if (error.value) return;
+  publishSummary.value = summary;
   confirmation.value?.showModal();
 }
 async function publish() {
@@ -143,6 +146,10 @@ onMounted(async () => {
 onUnmounted(() => clearInterval(ticker));
 </script>
 <template>
+  <AnnouncementPopup
+    v-if="ready && draft && !loading && session.token"
+    :key="session.userId"
+  />
   <main v-if="!ready || loading" class="studio-loading">
     <p>正在打开画布…</p>
   </main>
@@ -177,7 +184,8 @@ onUnmounted(() => clearInterval(ticker));
     @cancel="busy && $event.preventDefault()"
   >
     <h2>发布到 {{ current?.name }}？</h2>
-    <p>教室看板将使用当前设计。未联网的电脑会在联网后同步。</p>
+    <p>当前预览 · {{ publishSummary }}</p>
+    <p>在线教室电脑会自动同步，实际页数以设备画面为准。</p>
     <div class="modal-actions">
       <button
         class="button secondary"

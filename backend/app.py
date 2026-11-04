@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from . import schemas as S
+from .account_security import LoginInput, record_login, revoke_sessions
 from .config import settings
 from .db import (
     Audit,
@@ -38,7 +39,7 @@ from .db import (
 )
 from .entitlements import class_entitlement, profile, require_premium
 from .middleware import BodyLimitMiddleware, body_limit
-from .security import actor, bearer, digest, fail, limit, member, passwords, secret
+from .security import actor, bearer, check_frozen, digest, fail, frozen_detail, limit, member, passwords, secret
 from .system_service import system_config
 
 
@@ -171,6 +172,8 @@ def idempotent(db: Session, user: User, key: str | None, scope: str, payload: di
 
 
 def session_result(db, user):
+    check_frozen(user)
+    revoke_sessions(db, user, "session_replaced")
     token = secret()
     db.add(
         Token(
@@ -204,18 +207,22 @@ def register(body: S.Credentials, request: Request, db: Session = Depends(get_db
 
 
 @app.post("/auth/login")
-def login(body: S.Credentials, request: Request, db: Session = Depends(get_db)):
+def login(body: LoginInput, request: Request, db: Session = Depends(get_db)):
     if not system_config(db).initialized:
         fail(409, "setup_required", "学校尚未开通，请联系管理员。")
     limit(f"login-ip:{request.client.host}", 30, 300)
     limit(f"login:{request.client.host}:{body.login.casefold()}", 10, 300)
-    user = db.scalar(select(User).where(User.login == body.login.casefold()))
+    user = db.scalar(select(User).where(User.login == body.login.casefold()).with_for_update())
     if not user or not user.activated or not passwords.verify(body.password, user.password):
         fail(401, "invalid_credentials", "账号或口令不正确。")
     if not user.active:
         fail(403, "account_disabled", "账号已停用，请联系系统管理员。")
     if user.expires_at and user.expires_at <= now():
         fail(403, "account_expired", "账号使用期限已到，请联系系统管理员续期。数据会保留。")
+    check_frozen(user)
+    if record_login(db, user, request, body.clientId):
+        # 拒绝登录时仍提交冻结和审计，不能用异常触发事务回滚。
+        return JSONResponse({"detail": frozen_detail(user)}, 403)
     return session_result(db, user)
 
 
@@ -663,6 +670,8 @@ def override(class_id: str, body: S.OverrideInput, user: User = Depends(actor), 
     return {"revision": c.revision}
 
 
+from .account_security import router as security_router
+from .announcements import router as announcement_router
 from .devices import router as device_router
 from .licenses import router as license_router
 from .lifecycle import router as lifecycle_router
@@ -678,3 +687,5 @@ app.include_router(query_router)
 app.include_router(system_router)
 app.include_router(onboarding_router)
 app.include_router(license_router)
+app.include_router(security_router)
+app.include_router(announcement_router)

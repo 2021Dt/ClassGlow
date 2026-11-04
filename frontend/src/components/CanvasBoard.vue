@@ -3,7 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { Classroom, Content, Layout, CanvasWidget } from "../domain";
 import { dateKey, timeLabel } from "../domain";
 import { widgetLabels } from "../canvas";
-import { widgetPages } from "../canvasPresentation";
+import { canvasPageCount, canvasPages } from "../canvasPresentation";
+import { boardFonts, panelImageStyle, shapeStyle } from "../boardAppearance";
 const props = withDefaults(
   defineProps<{
     classroom: Classroom;
@@ -12,6 +13,7 @@ const props = withDefaults(
     now: number;
     page?: number;
     demo?: boolean;
+    pageMap?: ReturnType<typeof canvasPages>;
   }>(),
   { page: 1, demo: false },
 );
@@ -24,29 +26,18 @@ const measureContext = document.createElement("canvas").getContext("2d")!;
 const items = computed(
   () => props.layout.canvas?.filter((i) => i.visible) ?? [],
 );
-const areaWidth = computed(() =>
-  props.layout.iconMargin === "none" ? 1776 : 1560,
+const pageMap = computed(
+  () =>
+    props.pageMap ??
+    canvasPages(
+      props.layout,
+      props.classroom,
+      props.contents,
+      measureContext,
+      props.now,
+    ),
 );
-const pageMap = computed(() =>
-  Object.fromEntries(
-    items.value.map((item) => {
-      measureContext.font = `${item.fontSize}px "Microsoft YaHei", sans-serif`;
-      return [
-        item.id,
-        widgetPages(
-          item,
-          props.classroom,
-          props.contents,
-          (item.w / 1600) * areaWidth.value,
-          (s) => measureContext.measureText(s).width,
-        ),
-      ];
-    }),
-  ),
-);
-const count = computed(() =>
-  Math.max(1, ...Object.values(pageMap.value).map((p) => p.length)),
-);
+const count = computed(() => canvasPageCount(pageMap.value));
 const pageIndex = computed(() =>
   Math.max(0, Math.min(props.page, count.value) - 1),
 );
@@ -88,26 +79,51 @@ const background = computed(() => {
   };
 });
 function style(item: CanvasWidget) {
+  const fill =
+    item.surface === "none"
+      ? "transparent"
+      : `color-mix(in srgb, ${item.fillColor} ${item.opacity}%,transparent)`;
   return {
     left: `${item.x / 16}%`,
     top: `${item.y}px`,
     width: `${item.w / 16}%`,
     height: `${item.h}px`,
     fontSize: `${item.fontSize}px`,
+    fontFamily: boardFonts[item.fontFamily ?? "sans"],
+    fontWeight: item.fontWeight ?? 400,
     color: item.textColor || "var(--board-text)",
     borderRadius: `${item.radius}px`,
+    ...(item.kind === "shape"
+      ? shapeStyle(
+          item.shape ?? "rectangle",
+          item.radius,
+          item.vertices?.length ? item.vertices : undefined,
+        )
+      : {}),
     textAlign: item.align,
-    background:
-      item.surface === "none"
-        ? "transparent"
-        : `color-mix(in srgb, ${item.fillColor} ${item.opacity}%,transparent)`,
-    "--widget-line": `${item.fontSize * 1.5}px`,
+    backgroundColor: item.backgroundImage ? item.fillColor : fill,
+    backgroundImage: item.backgroundImage
+      ? `linear-gradient(${fill},${fill}),url("${item.backgroundImage}")`
+      : "none",
+    backgroundSize: `100% 100%,${item.backgroundFit ?? "cover"}`,
+    backgroundPosition: `center,${item.backgroundPosition ?? "center"}`,
+    backgroundRepeat: "no-repeat",
+    "--widget-line": `${item.fontSize * (item.lineHeight ?? 1.5)}px`,
+    "--widget-title-size": `${item.titleSize ?? 28}px`,
+    "--widget-title-line": `${(item.titleSize ?? 28) * 1.5}px`,
+    "--widget-body-top": `${26 + (item.titleSize ?? 28) * 1.5}px`,
     "--widget-display-size": `${item.fontSize + 24}px`,
   };
 }
 function entries(item: CanvasWidget) {
   const pages = pageMap.value[item.id]!;
   return pages[pageIndex.value % pages.length] ?? [];
+}
+function heading(item: CanvasWidget) {
+  const first = entries(item)[0];
+  return item.kind === "homework" && first?.continued
+    ? `续 · ${first.subject || "作业"}`
+    : item.title || widgetLabels[item.kind];
 }
 onMounted(() => {
   observer = new ResizeObserver((entries) => {
@@ -140,7 +156,7 @@ onUnmounted(() => {
       :class="`margin-${layout.iconMargin}`"
       :style="{ ...background, transform: `scale(${scale})` }"
     >
-      <div class="board-shell board-surface">
+      <div class="board-shell board-surface" :style="panelImageStyle(layout)">
         <div class="canvas-board-content">
           <section
             v-for="item in items"
@@ -189,12 +205,14 @@ onUnmounted(() => {
               </div></template
             >
             <template v-else-if="item.kind !== 'shape'"
-              ><h3 v-if="item.kind !== 'text'">
-                {{ item.title || widgetLabels[item.kind] }}
+              ><h3 v-if="item.kind !== 'text' && item.showTitle !== false">
+                {{ heading(item) }}
               </h3>
               <div
                 class="canvas-widget-body"
-                :class="{ 'free-text': item.kind === 'text' }"
+                :class="{
+                  'free-text': item.kind === 'text' || item.showTitle === false,
+                }"
               >
                 <p
                   v-for="entry in entries(item)"
@@ -211,7 +229,9 @@ onUnmounted(() => {
                 <p v-if="!entries(item).length" class="canvas-widget-empty">
                   {{
                     item.kind === "homework"
-                      ? "今日暂无作业"
+                      ? item.subjectFilter
+                        ? `暂无${item.subjectFilter}作业`
+                        : "今日暂无作业"
                       : item.kind === "todo"
                         ? "暂无提醒"
                         : item.kind === "timetable"

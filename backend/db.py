@@ -43,6 +43,10 @@ class User(Base):
     can_create_classes: Mapped[bool] = mapped_column(Boolean, default=True)
     expires_at: Mapped[float] = mapped_column(Float, default=0)
     premium_until: Mapped[float] = mapped_column(Float, default=0)
+    # 安全冻结独立于停用、账号期限和许可；时间到期后也不会恢复旧会话。
+    frozen_until: Mapped[float] = mapped_column(Float, default=0)
+    freeze_reason: Mapped[str] = mapped_column(String(200), default="")
+    security_reviewed_at: Mapped[float] = mapped_column(Float, default=0)
 
 
 class AccountActivation(Base):
@@ -74,6 +78,27 @@ class Token(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     expires: Mapped[float] = mapped_column(Float)
     epoch: Mapped[str] = mapped_column(String(36))
+    revoked_reason: Mapped[str] = mapped_column(String(40), default="")
+
+
+class LoginRecord(Base):
+    """只记录成功验证密码的登录环境，供短期风险判断，不保存密码或会话明文。"""
+
+    __tablename__ = "login_records"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    at: Mapped[float] = mapped_column(Float, default=now, index=True)
+    client_hash: Mapped[str] = mapped_column(String(64))
+    ip: Mapped[str] = mapped_column(String(64))
+
+
+class PasswordRecovery(Base):
+    __tablename__ = "password_recoveries"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    epoch: Mapped[str] = mapped_column(String(36))
+    expires: Mapped[float] = mapped_column(Float)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Classroom(Base):
@@ -239,6 +264,31 @@ class SystemAudit(Base):
     target: Mapped[str] = mapped_column(String(200), default="")
     data: Mapped[dict] = mapped_column(JSON, default=dict)
     at: Mapped[float] = mapped_column(Float, default=now)
+
+
+class Announcement(Base):
+    __tablename__ = "announcements"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    title: Mapped[str] = mapped_column(String(120))
+    markdown: Mapped[str] = mapped_column(String(16000))
+    scope: Mapped[str] = mapped_column(String(10))
+    published_at: Mapped[float] = mapped_column(Float, default=now, index=True)
+    withdrawn_at: Mapped[float | None] = mapped_column(Float, default=None)
+
+
+class AnnouncementTarget(Base):
+    __tablename__ = "announcement_targets"
+    announcement_id: Mapped[str] = mapped_column(ForeignKey("announcements.id"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class AnnouncementReceipt(Base):
+    __tablename__ = "announcement_receipts"
+    __table_args__ = (UniqueConstraint("user_id", "claim_key", name="uq_announcement_receipt_claim"),)
+    announcement_id: Mapped[str] = mapped_column(ForeignKey("announcements.id"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    shown_at: Mapped[float] = mapped_column(Float, default=now)
+    claim_key: Mapped[str | None] = mapped_column(String(36))
 
 
 class Audit(Base):

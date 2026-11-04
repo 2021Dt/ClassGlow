@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import DatePicker from "./DatePicker.vue";
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { X, Search, ArrowUpRight, Database, Monitor } from "@lucide/vue";
 import { api, session } from "../api";
-import { accountRole } from "../admin";
+import { accountRole, adminDate } from "../admin";
 const emit = defineEmits<{
   changed: [string];
   restored: [string];
@@ -19,15 +19,23 @@ const userForm = reactive({
   identity: "teacher",
   active: true,
   expiry: "",
-  password: "",
 });
 const classForm = reactive({ name: "", ownerId: "", archived: false }),
   ownerQuery = ref(""),
   owners = ref<any[]>([]);
 const restoreForm = reactive({ password: "", confirmation: "" });
+const securityForm = reactive({
+  minutes: 30,
+  reason: "异常登录，需要确认账号安全",
+});
+const recoveryResult = ref<{ code: string; expiresAt: number }>();
+const isFrozen = computed(
+  () => target.value?.frozenUntil > (Date.now() + session.clockOffset) / 1000,
+);
 const titles: Record<string, string> = {
   edit: "编辑账号",
   password: "重置密码",
+  security: "账号安全",
   class: "管理班级",
   revoke: "解绑教室设备",
   restore: "恢复数据备份",
@@ -36,6 +44,11 @@ function open(kind: string, item: any) {
   mode.value = kind;
   target.value = item;
   error.value = "";
+  recoveryResult.value = undefined;
+  Object.assign(securityForm, {
+    minutes: 30,
+    reason: "异常登录，需要确认账号安全",
+  });
   Object.assign(userForm, {
     name: item.name ?? "",
     identity: item.systemAdmin
@@ -44,7 +57,6 @@ function open(kind: string, item: any) {
         ? "headteacher"
         : "teacher",
     active: item.active ?? true,
-    password: "",
     expiry: item.expiresAt
       ? new Date(item.expiresAt * 1000 + 8 * 3600000).toISOString().slice(0, 10)
       : "",
@@ -100,14 +112,25 @@ async function save() {
           : 0,
       });
     else if (mode.value === "password") {
-      await api(`/system/users/${target.value.id}/reset-password`, "POST", {
-        password: userForm.password,
-      });
-      if (target.value.id === session.userId) {
+      if (recoveryResult.value) {
         dialog.value?.close();
-        emit("restored", "密码已重置，请重新登录。");
         return;
       }
+      recoveryResult.value = await api(
+        `/system/users/${target.value.id}/recovery-code`,
+        "POST",
+      );
+      emit("changed", "重置码已生成，请单独交给账号本人。");
+      return;
+    } else if (mode.value === "security") {
+      if (isFrozen.value)
+        await api(`/system/users/${target.value.id}/unfreeze`, "POST");
+      else
+        await api(
+          `/system/users/${target.value.id}/freeze`,
+          "POST",
+          securityForm,
+        );
     } else if (mode.value === "class")
       await api(`/system/classes/${target.value.id}`, "PUT", classForm);
     else if (mode.value === "revoke")
@@ -123,11 +146,12 @@ async function save() {
       return;
     }
     dialog.value?.close();
-    userForm.password = "";
     emit(
       "changed",
-      mode.value === "password"
-        ? "密码已重置，请将新密码交给本人。"
+      mode.value === "security"
+        ? isFrozen.value
+          ? "安全冻结已解除，老师需重新登录。"
+          : "账号已临时冻结。"
         : "修改已保存。",
     );
   } catch (e) {
@@ -161,7 +185,7 @@ defineExpose({ open });
     <form @submit.prevent="save">
       <div class="admin-drawer-body">
         <div
-          v-if="mode === 'edit' || mode === 'password'"
+          v-if="['edit', 'password', 'security'].includes(mode)"
           class="drawer-person"
         >
           <span class="admin-avatar">{{ target?.name.slice(0, 1) }}</span>
@@ -236,22 +260,64 @@ defineExpose({ open });
           ></template>
           <template v-else-if="mode === 'password'"
             ><p class="admin-tip-text">
-              新密码生效后，该账号在其他设备上的登录会退出。
+              核实本人身份后生成一次性重置码，由老师在登录页设置新密码。
             </p>
-            <label class="field"
-              >新密码<input
-                type="password"
-                v-model="userForm.password"
-                required
-                minlength="10"
-                maxlength="128"
-                autocomplete="new-password"
-                placeholder="至少 10 个字符"
-            /></label>
+            <template v-if="recoveryResult">
+              <label class="field"
+                >一次性重置码<input
+                  class="recovery-code"
+                  readonly
+                  :value="recoveryResult.code"
+              /></label>
+              <p class="admin-field-help">
+                {{ adminDate(recoveryResult.expiresAt, true) }}
+                前有效，仅可使用一次。
+              </p>
+            </template>
             <p class="admin-field-help">
-              请将新密码单独交给本人。系统不会展示或找回旧密码。
+              老师完成改密后，旧登录全部退出，安全冻结解除。生成重置码本身不会解冻账号。
             </p></template
           >
+          <template v-else-if="mode === 'security'">
+            <template v-if="isFrozen">
+              <h3 class="admin-form-section">安全冻结中</h3>
+              <p class="admin-tip-text">{{ target.freezeReason }}</p>
+              <p class="admin-field-help">
+                {{ adminDate(target.frozenUntil, true) }} 后可重新登录。
+              </p>
+              <p class="admin-tip-text">
+                确认本人操作后可提前解除冻结，旧登录不会恢复。
+              </p>
+              <button
+                type="button"
+                class="button secondary"
+                @click="mode = 'password'"
+              >
+                生成重置码并协助改密
+              </button>
+            </template>
+            <template v-else>
+              <label class="field"
+                >冻结时间<select v-model.number="securityForm.minutes">
+                  <option :value="30">30 分钟</option>
+                  <option :value="120">2 小时</option>
+                  <option :value="1440">24 小时</option>
+                </select></label
+              >
+              <label class="field"
+                >冻结原因<textarea
+                  v-model.trim="securityForm.reason"
+                  required
+                  minlength="2"
+                  maxlength="200"
+                  rows="3"
+                />
+              </label>
+              <p class="admin-field-help">
+                暂时停止该账号登录、发布和控制；保留班级数据与教室当前展示，到期后可重新登录。
+              </p>
+            </template>
+          </template>
           <template v-else-if="mode === 'class'"
             ><label class="field"
               >班级名称<input
@@ -332,7 +398,9 @@ defineExpose({ open });
           :class="
             ['restore', 'revoke'].includes(mode) ? 'danger-button' : 'primary'
           "
-          :disabled="busy"
+          :disabled="
+            busy || (mode === 'security' && target?.id === session.userId)
+          "
         >
           {{
             busy
@@ -342,8 +410,14 @@ defineExpose({ open });
                 : mode === "revoke"
                   ? "确认解绑"
                   : mode === "password"
-                    ? "重置密码"
-                    : "保存修改"
+                    ? recoveryResult
+                      ? "完成"
+                      : "生成重置码"
+                    : mode === "security"
+                      ? isFrozen
+                        ? "解除冻结"
+                        : "确认临时冻结"
+                      : "保存修改"
           }}
         </button>
       </footer>

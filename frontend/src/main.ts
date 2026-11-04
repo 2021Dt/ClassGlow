@@ -4,6 +4,7 @@ import "./board.css";
 import "./teacher.css";
 import "./canvas.css";
 import "./admin.css";
+import "./workspace-theme.css";
 
 // 下载页无需登录，也不触发工作台的数据读取。
 const entry = /^\/download\/?$/.test(location.pathname)
