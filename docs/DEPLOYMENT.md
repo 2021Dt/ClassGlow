@@ -12,7 +12,7 @@
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | 0.4.11，玻璃外阴影修复、Wallpaper Engine 提示与覆盖更新清理；准确提交通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.4.12，即时同步、设备改名、学科与画布操作、醒目提醒；准确提交通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
@@ -20,7 +20,7 @@
 | Git 网络 | 仅本仓库 `.git/config` 的 `http.proxy` 使用服务器现有 `http://127.0.0.1:7890`；直连 GitHub 超时，现有代理可正常读取 main |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.4.11 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+| Windows 发布 | 0.4.12 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
 
@@ -349,4 +349,13 @@ Windows x64 0.4.11 当前用户安装包提供[公网下载](https://teacher.dgp
 
 会话默认 `KANBAN_SESSION_HOURS=720`（30 天），若自行配置较短值须同步调整；现存短期会话不会被自动延长，教师重新登录取得新有效期。请将 API、Web 和 Windows 一并升级，旧 Windows 仍可按原频率同步，但没有醒目提醒能力。停止提醒和手动同步不被高级许可到期阻挡，其他权限检查保留。
 
-安装包：`ClassGlow-0.4.12-win-x64-setup.exe`，53,725,254 字节，SHA-256：`8af991dc4b22a8650c21898305f0c400ac5168ce99d5e479f81760dfb016187e`。上传至本项目暂存目录，核对尺寸和哈希后移入 `.deploy/downloads`；先准备安装包及下载地址，再推 main，避免自动更新定时器提前切换下载版本。正式部署以本文后续追加的服务器核验记录为准。
+安装包：`ClassGlow-0.4.12-win-x64-setup.exe`，53,725,254 字节，SHA-256：`8af991dc4b22a8650c21898305f0c400ac5168ce99d5e479f81760dfb016187e`。上传至本项目暂存目录，核对尺寸和哈希后移入 `.deploy/downloads`；先准备安装包及下载地址，再推 main，避免自动更新定时器提前切换下载版本。服务器核验记录如下。
+
+
+### 2026-11-04 22:12 线上核验
+
+功能提交 `e9d5ae80b7481e06df43ae8be423f412811e58a0` 已通过本机 SSH 推送 GitHub main，经 Netcatty 在 106 执行 `sudo classglow update`，退出码 0。更新前一致性备份：`backup-before-deploy-20261104T141025Z-52de8fa1.db`，位于原数据卷 `/app/data/backups`。后续文档提交与自动更新可能产生新的备份，以管理后台列表为准。
+
+API healthy、Web 正常、`nginx -t` 通过；`.deploy/deployed-commit` 指向上述功能提交。配置权限仍为 root 0600，安装包为 root 0644，专用上传暂存目录已移除。更新前后均为 2 个账号、1 个班级、5 台设备、3 条教学内容，未重置数据或绑定；原迁移号 `a913c07b5e2f` 保持不变。运行中的 API 确认会话时长为 720 小时，本站 Nginx 已启用 `proxy_buffering off`。
+
+公网健康正常，客户端版本接口返回 0.4.12 及对应 EXE；下载页返回 200，加载的新资源包含 0.4.12 更新日志。安装包 Range 返回 `206 bytes 0-1023/53725254`，首 1024 字节与本地包一致，服务器全文件哈希与上文一致。未登录访问新增设备事件接口返回 401。通知的有效凭据推送延迟已在隔离环境验证；未伪造生产账号或生产设备来测试长连接。
