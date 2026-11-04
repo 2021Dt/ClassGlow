@@ -282,3 +282,23 @@ Windows x64 0.4.6 当前用户安装包提供[公网下载](https://teacher.dgpl
 `frontend/e2e/mobile.pw.ts` 是旧版公开注册流程的历史用例，不适用于当前管理员开户、老师直接登录的入口。本次使用隔离账号验收新的身份导航和 390px 页面；后端关键权限与期限检查见 `backend/tests/test_access_licenses.py`，不要对生产账号运行测试。
 
 分享安装包时推荐使用固定下载页 `https://teacher.dgplus.vip/download`。无需登录，下载按钮通过 `/api/client/version` 获取当前发布地址；登录页、教师工作台和管理员后台均有入口。页面展示版本、三步安装说明、手机使用、更新及卸载方法。后续更新先上传并校验新安装包，再修改本项目 `deploy/.env` 中的 `KANBAN_CLIENT_DOWNLOAD_URL`，最后运行 `sudo classglow update`。旧版安装包保留用于回退，不清理其他目录。
+
+### 下载页更新日志与流量限制
+
+下载页的“更新日志”默认展开当前可下载版本，旧版可展开查看；列表最高 560px，长内容在内部滚动。发布说明维护在 `frontend/src/releases.ts`，按新到旧排列，包含版本、日期和实际交付内容。发布新客户端时同时更新该文件和服务端版本信息；只调整下载页面不必重新打包 Windows。
+
+106 的共享 Nginx 模式默认对本域名全部 `/downloads/` 安装包启用以下限制。旧版本直链、增加查询参数以及断点续传同样计数，登录、教学 API、备份下载和其他站点不使用这些下载限制。
+
+| 设置项（`deploy/.env`） | 默认值 | 含义 |
+| --- | --- | --- |
+| `KANBAN_DOWNLOAD_RATE_KIB` | `1024` | 每个下载请求约 1 MiB/s，从开始就限速 |
+| `KANBAN_DOWNLOAD_CONNECTIONS_PER_IP` | `2` | 同一来源 IP 最多同时下载 2 个文件 |
+| `KANBAN_DOWNLOAD_CONNECTIONS_TOTAL` | `8` | 本站最多同时下载 8 个文件 |
+| `KANBAN_DOWNLOAD_REQUESTS_PER_MINUTE` | `6` | 同一 IP 平均每分钟 6 次请求，短时最多连续 4 次 |
+| `KANBAN_DOWNLOAD_REQUESTS_TOTAL_PER_MINUTE` | `20` | 本站平均每分钟 20 次请求，短时最多连续 9 次 |
+
+请求频率采用 Nginx 漏桶算法，不是整分钟重置。超限返回 **HTTP 429**、`Retry-After: 60` 和中文重试页面，不把错误页作为 EXE 附件下载。支持单段 Range 断点续传；多段 Range 返回 416，建议使用浏览器直接下载。学校共用出口 IP 时会共享额度，可错峰下载或由管理员按实际人数调整；配置项只接受正整数。
+
+修改 `deploy/.env` 后执行 `sudo classglow update`，脚本会渲染配置、通过 `nginx -t` 后重载。共享内存中的计数跨 Nginx worker 生效；配置校验失败会恢复原站点文件。原理见 Nginx 官方[请求频率限制](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html)、[并发限制](https://nginx.org/en/docs/http/ngx_http_limit_conn_module.html)及[传输限速](https://nginx.org/en/docs/http/ngx_http_core_module.html#limit_rate)。
+
+这些限制减少重复下载与并发刷流量，**不是每日流量配额或 DDoS 防护**。持续分布式访问仍可能产生流量；严格控制月度账单需要在云厂商配置带宽/流量预算或接入带防护的 CDN。当前按直接连接 Nginx 的来源 IP 计数，不信任客户端自报的 `X-Forwarded-For`；未来接 CDN 时，先在网关仅信任该 CDN 的官方地址段并限制源站直连，再调整真实 IP 配置。外部存储下载链接、独立 Caddy 模式需要在相应下载网关另行配置，不能仅靠本项保护。

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { releaseHistory } from "../releases";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -14,6 +15,13 @@ const loading = ref(true);
 const error = ref("");
 const copied = ref(false);
 const shareError = ref("");
+const visibleReleases = computed(() => {
+  // 回滚安装包时不把尚未上线的较新版本展示为可用版本。
+  const current = releaseHistory.findIndex(
+    (entry) => entry.version === release.value?.latestVersion,
+  );
+  return releaseHistory.slice(Math.max(0, current));
+});
 
 async function loadRelease() {
   loading.value = true;
@@ -89,7 +97,6 @@ onMounted(() => {
               v-if="release"
               class="download-primary"
               :href="release.downloadUrl"
-              download
             >
               <ArrowDownToLine :size="19" />下载 Windows 版
             </a>
@@ -110,9 +117,14 @@ onMounted(() => {
               >Windows 64 位<span>·</span>内置运行环境
             </p>
           </div>
-          <a class="install-anchor" href="#install"
-            >如何安装<ChevronDown :size="15"
-          /></a>
+          <div class="download-anchors">
+            <a class="install-anchor" href="#install"
+              >如何安装<ChevronDown :size="15"
+            /></a>
+            <a class="install-anchor" href="#releases"
+              >更新日志<ChevronDown :size="15"
+            /></a>
+          </div>
         </div>
         <div class="download-visual">
           <div class="download-halo" aria-hidden="true"></div>
@@ -161,7 +173,53 @@ onMounted(() => {
         </ol>
       </section>
 
+      <section
+        id="releases"
+        class="release-section"
+        aria-labelledby="release-title"
+      >
+        <div class="install-heading">
+          <h2 id="release-title">更新日志</h2>
+          <span>Windows 与教师工作台</span>
+        </div>
+        <div class="release-list">
+          <details
+            v-for="(entry, index) in visibleReleases"
+            :key="entry.version"
+            :open="index === 0"
+            class="release-entry"
+          >
+            <summary>
+              <div class="release-meta">
+                <strong>v{{ entry.version }}</strong>
+                <span
+                  v-if="entry.version === release?.latestVersion"
+                  class="release-badge"
+                  >当前版本</span
+                >
+                <time :datetime="entry.date">{{
+                  entry.date.replaceAll("-", ".")
+                }}</time>
+              </div>
+              <span class="release-title">{{ entry.title }}</span>
+              <ChevronDown :size="18" class="release-chevron" />
+            </summary>
+            <ul>
+              <li v-for="change in entry.changes" :key="change">
+                {{ change }}
+              </li>
+            </ul>
+          </details>
+        </div>
+      </section>
+
       <section class="download-help" aria-label="常见问题">
+        <details>
+          <summary>下载提示稍后重试？<ChevronDown :size="17" /></summary>
+          <p>
+            请稍等一分钟后再试。如果已经开始下载，请勿重复点击。学校共用同一网络时，可以错开下载时间；建议使用浏览器直接下载。
+          </p>
+        </details>
         <details>
           <summary>手机上怎么使用？<ChevronDown :size="17" /></summary>
           <p>
@@ -347,6 +405,10 @@ onMounted(() => {
   font-size: 13px;
   margin-top: 22px;
 }
+.download-anchors {
+  display: flex;
+  gap: 24px;
+}
 .download-visual {
   position: relative;
   isolation: isolate;
@@ -427,6 +489,79 @@ onMounted(() => {
   font-size: 13px;
   line-height: 1.9;
 }
+.release-section {
+  margin-top: 56px;
+  scroll-margin-top: 32px;
+}
+.release-list {
+  overflow: auto;
+  max-height: 560px;
+  scrollbar-width: thin;
+  border: 1px solid #e4e4e8;
+  border-radius: 20px;
+  background: #fff;
+}
+.release-entry + .release-entry {
+  border-top: 1px solid #ececf0;
+}
+.release-entry summary {
+  display: grid;
+  grid-template-columns: minmax(225px, 0.8fr) minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 28px;
+  cursor: pointer;
+  list-style: none;
+}
+.release-entry summary::-webkit-details-marker {
+  display: none;
+}
+.release-entry summary:focus-visible {
+  outline-offset: -4px;
+  border-radius: 14px;
+}
+.release-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.release-meta strong {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.release-meta time {
+  color: #787880;
+  font-size: 12px;
+}
+.release-badge {
+  color: #0063c5;
+  background: #eaf3ff;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.release-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+.release-chevron {
+  color: #86868b;
+}
+.release-entry[open] .release-chevron {
+  transform: rotate(180deg);
+}
+.release-entry ul {
+  margin: 0;
+  padding: 0 50px 26px;
+  color: #6e6e73;
+  font-size: 13px;
+  line-height: 1.9;
+}
+.release-entry li + li {
+  margin-top: 7px;
+}
 .download-help {
   max-width: 780px;
   margin: 52px auto 0;
@@ -501,6 +636,9 @@ onMounted(() => {
   .download-intro {
     text-align: center;
   }
+  .download-anchors {
+    justify-content: center;
+  }
   .download-icon {
     margin: auto;
     width: 88px;
@@ -549,6 +687,28 @@ onMounted(() => {
   }
   .download-help {
     margin-top: 28px;
+  }
+  .release-section {
+    margin-top: 38px;
+  }
+  .release-entry summary {
+    grid-template-columns: minmax(0, 1fr) 18px;
+    gap: 12px;
+    padding: 22px;
+  }
+  .release-meta {
+    gap: 8px;
+  }
+  .release-title {
+    grid-column: 1;
+    font-size: 14px;
+  }
+  .release-chevron {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+  .release-entry ul {
+    padding: 0 26px 22px 40px;
   }
   .download-footer {
     margin: 0 24px;
