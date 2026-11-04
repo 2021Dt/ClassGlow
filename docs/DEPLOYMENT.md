@@ -17,6 +17,7 @@
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
 | 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
+| Git 网络 | 仅本仓库 `.git/config` 的 `http.proxy` 使用服务器现有 `http://127.0.0.1:7890`；直连 GitHub 超时，现有代理可正常读取 main |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
 | Windows 发布 | 0.4.10 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
@@ -36,6 +37,8 @@
 客户端设置窗口保持软件绘制，第一帧显示后才应用系统支持的云母；高对比、远程桌面或减少效果时回退普通背景。隐私修订为 `2026-11-04.2`，升级需要手动打开并重新同意。服务器更新不会自动替换教室电脑上的程序。
 
 打包前在 `frontend` 执行 `npm ci`，再运行 `python scripts/package_windows.py`；脚本自动构建离线材质入口、复制资源和第三方许可并生成逐文件卸载清单。发布时先上传并校验新包，再修改 `KANBAN_CLIENT_DOWNLOAD_URL` 后运行 `sudo classglow update`。版本接口由项目默认版本 `0.4.10` 提供，本机上报版本来自程序集。
+
+本机现有 Mihomo 代理只用于仓库 Git 网络，没有新增代理服务，也不改变教师客户端或系统全局代理。若以后停用该代理，先确认服务器能直连 GitHub，再在 `/opt/classglow` 执行 `sudo git config --local --unset http.proxy`；直接移走代理会使定时拉取失败。
 
 ### 0.4.9 更新（历史）
 
