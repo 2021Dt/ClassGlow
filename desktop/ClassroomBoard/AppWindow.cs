@@ -23,6 +23,9 @@ public class AppWindow : FluentWindow
 
     public static void InitializeTheme()
     {
+        // 控制窗口主要是静态表单；在第一扇窗口创建前选择软件绘制，规避部分显卡/远程显示驱动整窗白屏。
+        // 仅作用于本进程，不修改 Windows 的全局 WPF 加速开关或其他程序设置。
+        RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
         System.Windows.Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary {
             Source = new Uri("/ClassroomBoard;component/ClientTheme.xaml", UriKind.Relative)
         });
@@ -57,21 +60,22 @@ public class AppWindow : FluentWindow
         ResizeMode = resizable ? ResizeMode.CanResize : ResizeMode.CanMinimize;
         ExtendsContentIntoTitleBar = true;
         WindowCornerPreference = WindowCornerPreference.Round;
-        WindowBackdropType = SystemParameters.HighContrast ? WindowBackdropType.None : WindowBackdropType.Mica;
+        // 启动页使用普通合成背景，避免首次 ShowDialog 依赖云母的 DWM 背景替换。
+        WindowBackdropType = WindowBackdropType.None;
         FontFamily = new FontFamily("Microsoft YaHei UI"); FontSize = 14;
         TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
         UseLayoutRounding = true; SnapsToDevicePixels = true;
         SetResourceReference(ForegroundProperty, "GlowText");
-        // WPF UI 在不支持云母的系统上保留底色，不使用易出现黑底的透明分层窗口。
+        // 圆角和自绘标题栏继续使用；不透明底色不依赖显卡生成半透明窗口表面。
         Background = SystemParameters.HighContrast ? SystemColors.WindowBrush
-            : new SolidColorBrush(Color.FromArgb(OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) ? (byte)208 : (byte)255, 247, 248, 251));
+            : new SolidColorBrush(Color.FromRgb(247, 248, 251));
         Icon = BrandIcon();
         var titleBar = new TitleBar { Title = title.Contains("外观预览") ? "ClassGlow · 外观预览" : "ClassGlow", Height = 40, FontFamily = FontFamily, FontSize = 12, ShowMaximize = resizable, ShowMinimize = true,
             Icon = new ImageIcon { Source = Icon } };
         void CaptionNames()
         {
             foreach (var (name, label) in new[] { ("PART_MinimizeButton", "最小化"), ("PART_MaximizeButton", WindowState == WindowState.Maximized ? "还原窗口" : "最大化"), ("PART_CloseButton", "关闭") })
-                if (titleBar.Template.FindName(name, titleBar) is FrameworkElement element) { AutomationProperties.SetName(element, label); element.ToolTip = label; }
+                if (titleBar.Template?.FindName(name, titleBar) is FrameworkElement element) { AutomationProperties.SetName(element, label); element.ToolTip = label; }
         }
         titleBar.Loaded += (_, _) => CaptionNames(); StateChanged += (_, _) => CaptionNames();
         DockPanel.SetDock(titleBar, Dock.Top); root.Children.Add(titleBar);

@@ -27,6 +27,16 @@ public static class Program
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
         if (args.Contains("--control-preview")) return ControlPreview.Run(args);
         if (args.Contains("--ui-preview")) return UiPreview.Run(args);
+        try { return Run(args); }
+        catch (Exception error) {
+            // 主题、资源和窗口构造失败也须给出诊断，不能只剩一个空壳窗口。
+            StartupDiagnostics.Report(error, "startup", args.Contains("--startup"));
+            return 1;
+        }
+    }
+
+    private static int Run(string[] args)
+    {
         using var showRequest = new EventWaitHandle(false, EventResetMode.AutoReset, AppPaths.ShowEventName);
         using var singleton = new Mutex(true, AppPaths.MutexName, out bool first);
         if (!first) {
@@ -35,11 +45,20 @@ public static class Program
             return 0;
         }
         var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        Action? stopAfterUiFailure = null;
+        bool uiFailed = false;
+        app.DispatcherUnhandledException += (_, e) => {
+            uiFailed = true;
+            e.Handled = true;
+            StartupDiagnostics.Report(e.Exception, "ui", args.Contains("--startup") && !app.Windows.Cast<Window>().Any(window => window.IsVisible));
+            if (stopAfterUiFailure is not null) stopAfterUiFailure();
+            else app.Shutdown(1);
+        };
         AppWindow.InitializeTheme();
         try {
             if (!PrivacyNotice.Accepted()) {
                 // 升级后首次告知留到用户手动打开；开机不弹窗，也不继续联网或展示。
-                if (args.Contains("--startup") || !PrivacyNotice.Show(requireConsent: true)) return 0;
+                if (args.Contains("--startup") || !PrivacyNotice.Show(requireConsent: true)) return uiFailed ? 1 : 0;
             }
         } catch (Exception e) when (e is IOException or UnauthorizedAccessException) {
             if (!args.Contains("--startup")) MessageBox.Show("无法读取或保存本机同意记录，请检查当前用户目录权限。", "班级看板");
@@ -55,16 +74,10 @@ public static class Program
         }
         using var trayIcon = AppWindow.TrayIcon();
         using var tray = new Forms.NotifyIcon { Icon = trayIcon, Text = "班级看板", Visible = true };
-        app.DispatcherUnhandledException += (_, e) => {
-            // 运行异常只留在托盘状态，不让默认异常对话框打断课件；不记录正文或凭证。
-            engine.State.Error="本机运行异常，请在托盘检查状态";
-            AppPaths.QuietLog("runtime.log",e.Exception.GetType().Name);
-            e.Handled=true;
-        };
         using var menu = new Forms.ContextMenuStrip();
         using var statusWindow = new TrayWindowHost(() => StatusWindow(engine));
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        bool exiting = false;
+        bool exiting = false, exitingWithError = false;
         async void Quit(bool forUninstall)
         {
             if (exiting) return;
@@ -75,8 +88,9 @@ public static class Program
                 try { engine.RestoreWallpaper(); }
                 catch (Exception e) when (e is IOException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException) { AppPaths.QuietLog("runtime.log", e.GetType().Name); }
             }
-            tray.Visible = false; statusWindow.Dispose(); app.Shutdown();
+            tray.Visible = false; statusWindow.Dispose(); app.Shutdown(exitingWithError ? 1 : 0);
         }
+        stopAfterUiFailure = () => { exitingWithError = true; Quit(false); };
         using var stopRequest = new EventWaitHandle(false, EventResetMode.AutoReset, AppPaths.StopEventName);
         var stopListener = ThreadPool.RegisterWaitForSingleObject(stopRequest, (_, _) => app.Dispatcher.BeginInvoke(() => Quit(true)), null, Timeout.Infinite, false);
         var showListener = ThreadPool.RegisterWaitForSingleObject(showRequest, (_, _) => app.Dispatcher.BeginInvoke(statusWindow.Open), null, Timeout.Infinite, false);
@@ -109,14 +123,14 @@ public static class Program
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += preferenceChanged;
         // 手动打开可查看状态；开机启动不弹窗打断教学。
         if (!args.Contains("--startup")) statusWindow.Open();
-        app.Run(); timer.Stop();
+        int exitCode = app.Run(); timer.Stop();
         stopListener.Unregister(null);
         showListener.Unregister(null);
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= networkChanged;
         Microsoft.Win32.SystemEvents.PowerModeChanged -= powerChanged;
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= displayChanged;
         Microsoft.Win32.SystemEvents.UserPreferenceChanged -= preferenceChanged;
-        engine.Dispose(); return 0;
+        engine.Dispose(); return exitCode;
     }
     private static Window StatusWindow(Engine engine)
     {

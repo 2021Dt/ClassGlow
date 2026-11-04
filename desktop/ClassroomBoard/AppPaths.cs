@@ -4,7 +4,7 @@ namespace ClassroomBoard;
 
 public static class AppPaths
 {
-    public const string Version = "0.4.6";
+    public const string Version = "0.4.7";
 #if LIFECYCLE_QA
     // 验证包使用独立目录、启动项和进程锁，绝不触碰正在使用的正式客户端。
     public const string ProductId = "ClassroomBoard.QA";
@@ -21,14 +21,14 @@ public static class AppPaths
     public static string ShowEventName => "Local\\" + ProductId + ".ShowRequested";
     public const string StartupKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    public static void QuietLog(string name, string exceptionType)
+    public static void QuietLog(string name, string diagnostic)
     {
         try {
             Directory.CreateDirectory(DataDirectory);
             string file = Path.Combine(DataDirectory, name);
-            // 只保留异常类型与时间；两份日志各自不超过约 128 KiB，不记录正文、网址或凭证。
+            // 调用方只传入不含用户数据的诊断字段；日志轮转，不记录正文、网址或凭证。
             if (File.Exists(file) && new FileInfo(file).Length >= 128 * 1024) File.Move(file, file + ".old", true);
-            File.AppendAllText(file, $"{DateTimeOffset.Now:O} {exceptionType}\n");
+            File.AppendAllText(file, $"{DateTimeOffset.Now:O} {diagnostic}\n");
         } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }

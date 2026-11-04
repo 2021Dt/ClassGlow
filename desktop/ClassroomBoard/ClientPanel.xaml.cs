@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace ClassroomBoard;
@@ -47,9 +46,8 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         if (target == "display" && (!setup || !preferencesLoaded)) { LoadPreferences(); preferencesLoaded = true; }
         RefreshState();
         PageScroll.ScrollToTop();
-        // 页面切换只做短淡入，遵从系统关闭动画的设置，不动画化教学内容。
-        if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
-            PageBody.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
+        // 正文直接可见，首次绘制和分页不依赖从零透明度开始的动画时钟。
+        PageBody.Opacity = 1;
     }
 
     private void LoadPreferences()

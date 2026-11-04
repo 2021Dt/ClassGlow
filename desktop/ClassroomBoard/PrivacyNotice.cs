@@ -10,7 +10,7 @@ namespace ClassroomBoard;
 
 public static class PrivacyNotice
 {
-    public const string Revision = "2026-11-03.2";
+    public const string Revision = "2026-11-04.1";
     public static string Text => $"""
         班级看板 · Windows 客户端隐私与本机变更说明
         版本：{Revision}
@@ -25,6 +25,7 @@ public static class PrivacyNotice
         三、本机保存的位置
         数据目录：{AppPaths.DataDirectory}
         设备凭证和班级快照保存在 state.bin，使用当前 Windows 用户的 DPAPI 加密。渲染后的桌面 PNG 是明文图片，可能包含教学内容，无法宣称为加密文件。临时渲染图、同意记录和有大小上限的异常日志均放在同一目录。
+        即使首次界面未能正常打开，程序也可能在本机记录启动诊断，包含时间、应用/系统/运行时版本、绘制方式、异常类型和应用方法名，不包含异常正文、本机文件路径、账号或凭证；不会自动上传。
         运行包安装在您选择的专用目录，默认位置为当前用户的 LocalAppData\Programs\{AppPaths.InstallFolder}。安装器登记当前用户的卸载入口和开始菜单快捷方式，可选创建桌面快捷方式，不安装驱动、系统服务或计划任务，不修改防火墙。
 
         四、需要您主动开启的功能
