@@ -341,3 +341,12 @@ Windows x64 0.4.11 当前用户安装包提供[公网下载](https://teacher.dgp
 修改 `deploy/.env` 后执行 `sudo classglow update`，脚本会渲染配置、通过 `nginx -t` 后重载。共享内存中的计数跨 Nginx worker 生效；配置校验失败会恢复原站点文件。原理见 Nginx 官方[请求频率限制](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html)、[并发限制](https://nginx.org/en/docs/http/ngx_http_limit_conn_module.html)及[传输限速](https://nginx.org/en/docs/http/ngx_http_core_module.html#limit_rate)。
 
 这些限制减少重复下载与并发刷流量，**不是每日流量配额或 DDoS 防护**。持续分布式访问仍可能产生流量；严格控制月度账单需要在云厂商配置带宽/流量预算或接入带防护的 CDN。当前按直接连接 Nginx 的来源 IP 计数，不信任客户端自报的 `X-Forwarded-For`；未来接 CDN 时，先在网关仅信任该 CDN 的官方地址段并限制源站直连，再调整真实 IP 配置。外部存储下载链接、独立 Caddy 模式需要在相应下载网关另行配置，不能仅靠本项保护。
+
+
+## 0.4.12 更新准备与运行约束
+
+本版无数据库结构变化，继续使用迁移 `a913c07b5e2f` 和原 SQLite 数据卷。新增鉴权 SSE：`/api/device/events`、`/api/classes/{class_id}/device-events`，不在 URL 中传凭证；20 秒保活，长连接不占用数据库写锁。现有 Caddy 转发事件流，本站 Nginx `location /` 关闭响应缓冲，沿用 60 秒读超时。标准部署仍为单 API worker；将来改多 worker/多实例须接共享通知总线，不能直接扩容内存通知器。断线继续每 10 秒同步。
+
+会话默认 `KANBAN_SESSION_HOURS=720`（30 天），若自行配置较短值须同步调整；现存短期会话不会被自动延长，教师重新登录取得新有效期。请将 API、Web 和 Windows 一并升级，旧 Windows 仍可按原频率同步，但没有醒目提醒能力。停止提醒和手动同步不被高级许可到期阻挡，其他权限检查保留。
+
+安装包：`ClassGlow-0.4.12-win-x64-setup.exe`，53,725,254 字节，SHA-256：`8af991dc4b22a8650c21898305f0c400ac5168ce99d5e479f81760dfb016187e`。上传至本项目暂存目录，核对尺寸和哈希后移入 `.deploy/downloads`；先准备安装包及下载地址，再推 main，避免自动更新定时器提前切换下载版本。正式部署以本文后续追加的服务器核验记录为准。

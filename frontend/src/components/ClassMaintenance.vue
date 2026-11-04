@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { Check, Copy, Plus, ShieldCheck, Users, X } from "@lucide/vue";
 import { api } from "../api";
+import SubjectPicker from "./SubjectPicker.vue";
 import { isAdmin, roleLabel, timeLabel, type Classroom } from "../domain";
 
 const props = defineProps<{ classroom: Classroom }>();
@@ -15,7 +16,12 @@ const error = ref(""),
   members = ref<any[]>([]),
   invitations = ref<any[]>([]),
   outgoing = ref<any>(null);
-const config = reactive({ name: "", stage: "小学", subjects: "", revision: 1 });
+const config = reactive({
+  name: "",
+  stage: "小学",
+  subjects: [] as string[],
+  revision: 1,
+});
 const inviteSubjects = ref<string[]>([]),
   inviteUrl = ref(""),
   recipient = ref("");
@@ -27,7 +33,7 @@ let operation: (() => Promise<void>) | undefined;
 function syncConfig() {
   config.name = props.classroom.name;
   config.stage = props.classroom.stage;
-  config.subjects = props.classroom.subjects.join("、");
+  config.subjects = [...props.classroom.subjects];
   config.revision = props.classroom.revision ?? 1;
   inviteSubjects.value = props.classroom.subjects.slice(0, 1);
 }
@@ -67,10 +73,7 @@ async function saveConfig() {
   await run(async () => {
     const result = await api(`/classes/${props.classroom.id}/settings`, "PUT", {
       ...config,
-      subjects: config.subjects
-        .split(/[、,，\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      subjects: config.subjects,
     });
     config.revision = result.revision;
     emit("refresh");
@@ -184,14 +187,8 @@ async function cancelTransfer() {
               <option>初中</option>
               <option>高中</option>
             </AppSelect></label
-          ><label class="field"
-            >学科<textarea
-              v-model="config.subjects"
-              rows="3"
-              required
-              placeholder="用顿号分隔，例如语文、数学、英语"
-            />
-          </label>
+          >
+          <SubjectPicker v-model="config.subjects" :stage="config.stage" />
           <p class="muted small">
             移除学科会撤销成员的对应发布授权，历史内容保留。
           </p>

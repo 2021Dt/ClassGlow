@@ -3,7 +3,14 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import AccessGate from "./components/AccessGate.vue";
 import BoardDesigner from "./components/BoardDesigner.vue";
 import AnnouncementPopup from "./components/AnnouncementPopup.vue";
-import { api, ApiError, premiumAvailable, refreshModel, session } from "./api";
+import {
+  api,
+  ApiError,
+  premiumAvailable,
+  refreshModel,
+  session,
+  setSession,
+} from "./api";
 import { clone, model, replaceModel } from "./store";
 import { classroomForDisplay } from "./classroomView";
 import { isAdmin, layoutIssue, visible, type Layout } from "./domain";
@@ -66,8 +73,7 @@ async function load() {
   } catch (e) {
     error.value = (e as Error).message;
     if (e instanceof ApiError && e.status === 401) {
-      session.token = "";
-      sessionStorage.removeItem("kanban-session");
+      setSession("");
     }
   } finally {
     restoring = false;
@@ -75,8 +81,8 @@ async function load() {
   }
 }
 async function signedIn(token: string) {
-  session.token = token;
-  sessionStorage.setItem("kanban-session", token);
+  setSession(token);
+
   await load();
 }
 watch(

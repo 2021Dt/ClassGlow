@@ -15,15 +15,19 @@ public sealed class Engine : IDisposable
 {
     public ClientState State { get; }
     public bool HasWallpaperConflict(bool refresh = false) => wallpaper.HasConflict(refresh);
-    public string Status => State.EnableWallpaper && !State.LocalPaused && !State.RemotePaused && HasWallpaperConflict() ? "请先退出 Wallpaper Engine" : State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => "等待返回桌面后安静应用", _ => "等待同步或启用展示" };
+    public string Status => State.EnableWallpaper && !State.LocalPaused && !State.RemotePaused && HasWallpaperConflict() ? "请先退出 Wallpaper Engine" : State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => "等待全屏课件结束后应用", _ => "等待同步或启用展示" };
     private const string ConflictMessage = "其他壁纸软件正在运行，请在教室电脑退出后恢复展示";
     private readonly StateStore store;
     private readonly Renderer renderer;
     private readonly GlassMaterial glass;
     private readonly IWallpaper wallpaper;
+    private readonly IScreenNotice screenNotice;
+    private string reportedNotice = "";
+    private DeviceSignals? signals;
     // 教室客户端直连所配置的服务，不继承个人代理软件遗留的本机端口；不修改系统代理设置。
     private readonly HttpClient http = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(8) };
     private double nextPoll, nextHeartbeat, nextRender;
+    private long syncRequestSeq;
     private double nextCleanup;
     private int failures;
     private bool busy;
@@ -37,12 +41,14 @@ public sealed class Engine : IDisposable
     private static double Utc => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
     private DateTimeOffset Clock => DateTimeOffset.UtcNow.AddSeconds(State.ClockOffset).ToOffset(TimeSpan.FromHours(8));
 
-    public Engine(StateStore stateStore, ClientState? initial = null, IWallpaper? desktop = null) { store = stateStore; wallpaper = desktop ?? new Wallpaper(); State = initial ?? store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); glass = new(store.DirectoryPath); }
+    public Engine(StateStore stateStore, ClientState? initial = null, IWallpaper? desktop = null, IScreenNotice? notices = null) { store = stateStore; wallpaper = desktop ?? new Wallpaper(); screenNotice = notices ?? new ScreenNotice(); State = initial ?? store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); glass = new(store.DirectoryPath); }
     public static bool IsTimeUncertain(double current, double lastContact) => current<1577836800 || current>4102444800 || lastContact>0 && current<lastContact-120;
     public void Save() { if (!stopping) store.Save(State); }
     public async Task StopAsync()
     {
         stopping = true; shutdown.Cancel();
+        screenNotice.Dismiss();
+        if (signals is not null) { signals.Dispose(); await signals.Completion; signals = null; }
         // 卸载先取消并等待在途请求，避免清理后异步续写 state.bin。
         while (busy || pendingRequests > 0) await Task.Delay(25);
         try { GlassMaterial.CleanupProfile(store.DirectoryPath); }
@@ -90,7 +96,7 @@ public sealed class Engine : IDisposable
         State.SetupCompleted = false;
         State.Error = "等待手机登录、核对并确认绑定"; Save(); nextPoll = 0;
     }
-    public void RequestSync() { nextPoll = 0; changed = true; requireFullSnapshot=true; }
+    public void RequestSync() { syncRequestSeq++; nextPoll = 0; changed = true; requireFullSnapshot=true; }
     public async Task<string> CheckVersion()
     {
         var result = (await Request("/client/version", authenticated: false)).Body!;
@@ -98,6 +104,7 @@ public sealed class Engine : IDisposable
     }
     public void LocalPause(bool paused)
     {
+        if (paused) screenNotice.Dismiss();
         State.LocalControlEpoch++; State.LocalPaused = paused;
         State.ManualUntil=0; State.AutoPageStartedAt=Clock.ToUnixTimeSeconds();
         if (!paused) State.RemotePaused = false;
@@ -109,12 +116,21 @@ public sealed class Engine : IDisposable
         if (busy || stopping) return;
         busy = true;
         try {
+            if (!State.EnableWallpaper || State.LocalPaused || State.RemotePaused) screenNotice.Dismiss();
+            if (reportedNotice != screenNotice.ActiveId) { reportedNotice = screenNotice.ActiveId; nextHeartbeat = 0; }
+            if (signals is null && State.BindingId.Length > 0 && State.Credential.Length > 0) {
+                string binding = State.BindingId;
+                signals = new DeviceSignals(new Uri(ValidateServer(State.Server), "device/events"), State.Credential, () => {
+                    if (!stopping && State.BindingId == binding) { syncRequestSeq++; nextPoll = 0; }
+                });
+            }
             if (State.PendingRestore && State.EnableWallpaper && wallpaper.SafeToApply()) {
                 try { RestoreWallpaper(); State.PendingRestore=false; Save(); }
                 catch (Exception e) when (e is IOException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException) { State.Error="原壁纸恢复失败，等待人工检查桌面策略"; }
             }
             if(Utc>=nextCleanup) { PruneFrames(); nextCleanup=Utc+60; }
             if (Utc >= nextPoll && State.Credential.Length > 0) {
+                long startedRequest = syncRequestSeq;
                 try {
                     if (State.BindingId.Length == 0) {
                         var result = (await Request($"/device-pairings/{State.PairId}")).Body!;
@@ -125,7 +141,8 @@ public sealed class Engine : IDisposable
                         }
                     }
                     if (State.BindingId.Length > 0) await PollSnapshot();
-                    failures = 0; nextPoll = Utc + 10;
+                    // 拉取期间也可能发布新内容，不能用下一次轮询时间覆盖刚收到的唤醒通知。
+                    failures = 0; nextPoll = syncRequestSeq == startedRequest ? Utc + (State.BindingId.Length > 0 ? 10 : 2) : 0;
                 } catch (DeviceAuthorizationException) { Unbind(); }
                 catch (Exception e) when (e is HttpRequestException or OperationCanceledException or InvalidDataException or System.Text.Json.JsonException or InvalidOperationException) {
                     failures++; nextPoll = Utc + Math.Min(20, 5 * Math.Pow(2, Math.Min(failures - 1, 2))); State.Error = "同步未完成，保留最近完整缓存"; Save();
@@ -187,7 +204,10 @@ public sealed class Engine : IDisposable
         catch { State.Snapshot = previousSnapshot; State.CachedVersion = previousVersion; State.ETag = previousEtag; State.LastContentSync = previousSync; throw; }
         changed |= newer || previousEtag != etag;
         requireFullSnapshot=false;
+        State.DeviceName = snapshot.Str("deviceName");
         pendingDisplayRequest = snapshot.Str("displayRequest");
+        // 先确认已接收，再生成较耗时的新材质；网页能区分传输延迟与画面准备。
+        if (newer) await Request("/device/ack", "POST", Report());
         foreach (var cmd in (snapshot["commands"] as JsonArray ?? new()).OfType<JsonObject>()) await Execute(cmd);
     }
     private async Task UploadDisplay()
@@ -220,7 +240,8 @@ public sealed class Engine : IDisposable
         report["availability"] = availability; report["imageBase64"] = image;
         await Request("/device/display", "POST", report);
     }
-    private string Group(string action) => action == "sync" ? "sync" : action is "pause" or "resume" ? "pause" : "page";
+    public void DismissNotice() { screenNotice.Dismiss(); State.LocalControlEpoch++; nextHeartbeat = 0; Save(); }
+    private string Group(string action) => action == "sync" ? "sync" : action is "pause" or "resume" ? "pause" : action is "notice" or "stop_notice" ? "notice" : "page";
     private async Task Execute(JsonObject command)
     {
         string id = command.Str("id"), action = command.Str("action"), group = Group(action); int sequence = command.Int("seq");
@@ -228,10 +249,12 @@ public sealed class Engine : IDisposable
         if (command.Str("bindingId") != State.BindingId || command.Str("syncEpoch") != State.SyncEpoch || command.Num("expiresAt") <= Clock.ToUnixTimeSeconds()) return;
         JsonObject result = Report(); result["commandId"] = id;
         void Reject(string message) { result["result"] = "rejected"; result["error"] = message; }
-        if (action is not ("sync" or "pause" or "resume" or "set_page" or "auto_page")) Reject("不支持该控制类型，请管理员安排更新");
+        if (action is not ("sync" or "pause" or "resume" or "set_page" or "auto_page" or "notice" or "stop_notice")) Reject("不支持该控制类型，请管理员安排更新");
         else if (sequence <= State.GroupSeq.GetValueOrDefault(group)) Reject("旧命令序号已处理");
         else if (group != "sync" && command.Num("localControlEpoch") != State.LocalControlEpoch) Reject("现场操作已改变");
         else if (action == "resume" && State.LocalPaused) Reject("本机暂停需现场恢复");
+        else if (action == "notice" && (!State.EnableWallpaper || State.LocalPaused || State.RemotePaused)) Reject("请在教室电脑启用并恢复展示后再发提醒");
+        else if (action == "notice" && (command["notice"] is not JsonObject notice || notice.Num("endsAt") <= Clock.ToUnixTimeMilliseconds() / 1000d)) Reject("提醒已到期，不再补播");
         else if (group == "page" && (State.LocalPaused || State.RemotePaused)) Reject("暂停期间不能翻页");
         else if (group == "page" && command.Str("pageSetId") != State.PageSetId) Reject("页集合已改变");
         else if (action is "resume" or "set_page" or "auto_page" && HasWallpaperConflict(refresh: true)) {
@@ -240,14 +263,16 @@ public sealed class Engine : IDisposable
             result["result"] = "deferred"; result["error"] = ConflictMessage;
             await Request("/device/command-acks", "POST", result); return;
         }
-        else if (action != "sync" && (!State.EnableWallpaper || !wallpaper.SafeToApply())) {
-            result["result"] = "deferred"; result["error"] = "前台保护，等待返回桌面后安静应用";
+        else if (action is not ("sync" or "stop_notice") && !(action == "notice" && command["notice"]?["overFullscreen"]?.GetValue<bool>() == true) && (!State.EnableWallpaper || !wallpaper.SafeToApply())) {
+            result["result"] = "deferred"; result["error"] = "等待全屏课件结束后展示";
             await Request("/device/command-acks", "POST", result); return;
         } else {
             double started = Clock.ToUnixTimeMilliseconds() / 1000d;
             try {
                 // 写入执行意图后再产生物理效果；崩溃后不重复开始同一命令。
                 State.GroupSeq[group] = sequence; Save();
+                if (action == "notice") screenNotice.Show(command, wallpaper.Read(State.MonitorIndex).Rect, Clock);
+                else if (action == "stop_notice" || action == "pause") screenNotice.Dismiss();
                 if (action == "pause") { bool previous = State.RemotePaused; State.RemotePaused = true; try { RestoreWallpaper(); } catch { State.RemotePaused = previous; throw; } State.ApplyState = "paused"; State.ManualUntil=0; }
                 else if (action == "resume") {
                     bool oldRemotePause = State.RemotePaused;
@@ -336,7 +361,8 @@ public sealed class Engine : IDisposable
             ["cachedVersion"] = State.CachedVersion, ["appliedVersion"] = State.AppliedVersion, ["applyState"] = State.ApplyState,
             ["pageSetId"] = State.PageSetId, ["page"] = State.Page, ["pageCount"] = State.PageCount, ["manualUntil"] = State.ManualUntil,
             ["effectiveTheme"] = State.EffectiveTheme, ["effectiveMaterial"] = State.EffectiveMaterial, ["materialReason"] = State.MaterialReason,
-            ["renderedAt"] = State.RenderedAt, ["error"] = State.Error };
+            ["renderedAt"] = State.RenderedAt, ["error"] = State.Error,
+            ["activeNoticeId"] = screenNotice.ActiveId, ["noticeEndsAt"] = screenNotice.EndsAt };
     }
     public void RestoreWallpaper()
     {
@@ -349,6 +375,8 @@ public sealed class Engine : IDisposable
     }
     public void Unbind()
     {
+        screenNotice.Dismiss();
+        signals?.Dispose(); signals = null;
         pendingDisplayRequest = "";
         State.PendingRestore = State.EnableWallpaper && State.OriginalCaptured;
         string restoreError = "";
@@ -361,5 +389,5 @@ public sealed class Engine : IDisposable
         State.Page = State.PageCount = 1; State.ManualUntil = 0; State.StateReportSeq = 0; State.LocalControlEpoch = 0;
         State.LocalPaused = State.RemotePaused = false; State.Results.Clear(); State.GroupSeq.Clear(); State.Error = restoreError.Length>0 ? restoreError : "设备未绑定，请重新取得绑定码"; Save();
     }
-    public void Dispose() { shutdown.Cancel(); http.Dispose(); shutdown.Dispose(); }
+    public void Dispose() { shutdown.Cancel(); signals?.Dispose(); screenNotice.Dispose(); http.Dispose(); shutdown.Dispose(); }
 }

@@ -184,6 +184,7 @@ onUnmounted(() => {
             v-for="item in items"
             :key="item.id"
             class="canvas-widget"
+            :data-widget-id="item.id"
             :class="[`widget-${item.kind}`, `widget-surface-${item.surface}`]"
             :style="style(item)"
             :aria-label="item.title || widgetLabels[item.kind]"

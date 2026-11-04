@@ -43,7 +43,9 @@ const supported = computed(() => {
 });
 const waiting = computed(
   () =>
-    data.value?.pending && data.value.requestedAt * 1000 > now.value - 90000,
+    props.device.online &&
+    data.value?.pending &&
+    data.value.requestedAt * 1000 > now.value - 90000,
 );
 const stateLabel = computed(() => {
   if (!props.device.online) return "电脑离线 · 保留最近回传";
@@ -55,6 +57,8 @@ const stateLabel = computed(() => {
     return "暂未收到回传，请稍后刷新";
   if (props.device.localPaused || props.device.remotePaused)
     return "教室看板已暂停";
+  if (props.device.error) return props.device.error;
+  if (props.device.deferred) return "已接收更新，等待全屏展示结束";
   if (data.value?.report.availability === "disabled")
     return "教室电脑尚未启用展示";
   if (data.value?.report.availability === "replaced")
@@ -81,12 +85,10 @@ async function refresh() {
   busy.value = true;
   error.value = "";
   try {
-    // 同时取回其他老师已发布的内容；不会发布或覆盖画布草稿。
-    await props.reload();
-    if (serial !== generation) return;
     if (props.device.online && supported.value) {
       await api(`/devices/${props.device.id}/display-request`, "POST");
     }
+    if (serial !== generation) return;
     await read(serial);
   } catch (e) {
     if (serial === generation) error.value = (e as Error).message;
@@ -126,7 +128,7 @@ const timer = window.setInterval(async () => {
     reading = false;
     checking.value = false;
   }
-}, 3000);
+}, 1000);
 onUnmounted(() => {
   ++generation;
   clearInterval(timer);
@@ -141,7 +143,7 @@ onUnmounted(() => {
     <header>
       <div>
         <span class="display-eyebrow">教室电脑回传</span>
-        <h2 id="classroom-display-title">当前班级看板</h2>
+        <h2 id="classroom-display-title">{{ device.name }}的画面</h2>
       </div>
       <button
         class="button primary"
@@ -175,7 +177,7 @@ onUnmounted(() => {
       <div v-else class="display-placeholder">
         <Monitor :size="38" /><strong>{{ stateLabel }}</strong
         ><span v-if="!supported">需要 Windows 0.4.6 或更新版本</span
-        ><span v-else-if="waiting">通常在 10–20 秒内更新</span
+        ><span v-else-if="waiting">正在读取这台电脑已显示的看板</span
         ><span v-else>在教室电脑启用展示后，点击刷新画面。</span
         ><a v-if="!supported" href="/download" target="_blank" rel="noopener"
           >下载新版客户端</a

@@ -10,6 +10,7 @@ import {
   CalendarDays,
   FilePenLine,
   CheckCircle2,
+  CircleHelp,
 } from "@lucide/vue";
 import {
   timeLabel,
@@ -19,6 +20,7 @@ import {
   type Draft,
   type Kind,
 } from "../domain";
+import { deviceStatus } from "../deviceStatus";
 const props = defineProps<{
   classroom: Classroom;
   contents: Content[];
@@ -33,8 +35,9 @@ const emit = defineEmits<{
   records: [];
   drafts: [];
   timetable: [];
-  devices: [];
+  devices: [id?: string];
   design: [];
+  guide: [];
 }>();
 const kind = ref<Kind>("homework");
 const shown = computed(() =>
@@ -50,6 +53,15 @@ const myDrafts = computed(() =>
 
 <template>
   <div class="teaching-home">
+    <div class="teacher-guide-entry">
+      <div>
+        <strong>从发布到教室展示</strong
+        ><span>选班级 → 发作业 → 查看教室电脑</span>
+      </div>
+      <button class="button secondary" @click="emit('guide')">
+        <CircleHelp :size="17" />跟着做一次
+      </button>
+    </div>
     <div
       class="teaching-actions"
       :class="{ 'three-actions': !canManage }"
@@ -122,6 +134,20 @@ const myDrafts = computed(() =>
               ? "连接电脑"
               : "查看连接状态"
         }}<ArrowRight :size="14" />
+      </button>
+    </div>
+    <div
+      v-if="devices.length"
+      class="home-device-status"
+      aria-label="各电脑展示状态"
+    >
+      <button
+        v-for="device in devices"
+        :key="device.id"
+        @click="emit('devices', device.id)"
+      >
+        <Monitor :size="17" /><strong>{{ device.name }}</strong
+        ><span>{{ deviceStatus(device, classroom.version) }}</span>
       </button>
     </div>
     <div v-if="myDrafts.length" class="resume-draft">

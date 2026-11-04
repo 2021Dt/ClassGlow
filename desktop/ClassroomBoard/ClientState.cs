@@ -18,6 +18,7 @@ public sealed class ClientState
     public string BindingId { get; set; } = "";
     public string SyncEpoch { get; set; } = "";
     public string DeviceId { get; set; } = "";
+    public string DeviceName { get; set; } = "";
     public string ClassId { get; set; } = "";
     public string ETag { get; set; } = "";
     public JsonObject? Snapshot { get; set; }

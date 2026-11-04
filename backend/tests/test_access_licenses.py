@@ -192,7 +192,7 @@ def test_expiry_preserves_free_features_and_downgrades_display(client):
             headers={**head, "Idempotency-Key": str(uuid4())},
             json={"action": "sync", "expectedControlRevision": 1},
         ).status_code
-        == 403
+        == 202
     )
     with Session(engine) as db:
         db.get(User, hid).expires_at = now() - 1

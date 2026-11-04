@@ -2,8 +2,15 @@ import { reactive, ref } from "vue";
 import type { Draft, Model } from "./domain";
 import { defaultLayout, emptyModel, restoreLocalDraft } from "./domain";
 
+// 兼容旧标签页的一次性迁移。有效期由服务端校验，不在浏览器存密码。
+const savedToken =
+  localStorage.getItem("kanban-session") ??
+  sessionStorage.getItem("kanban-session") ??
+  "";
+if (savedToken) localStorage.setItem("kanban-session", savedToken);
+sessionStorage.removeItem("kanban-session");
 export const session = reactive({
-  token: sessionStorage.getItem("kanban-session") ?? "",
+  token: savedToken,
   userId: "",
   name: "",
   login: "",
@@ -12,6 +19,19 @@ export const session = reactive({
   expiresAt: 0,
   premiumUntil: 0,
   clockOffset: 0,
+});
+export function setSession(token: string) {
+  session.token = token;
+  if (token) localStorage.setItem("kanban-session", token);
+  else localStorage.removeItem("kanban-session");
+  sessionStorage.removeItem("kanban-session");
+}
+window.addEventListener("storage", (event) => {
+  if (
+    event.key === "kanban-session" &&
+    (event.newValue ?? "") !== session.token
+  )
+    location.reload();
 });
 export function updateProfile(value: any) {
   session.userId = value.id;
@@ -112,8 +132,7 @@ export async function api<T = any>(
           code: failure.code,
           ...detail,
         };
-        session.token = "";
-        sessionStorage.removeItem("kanban-session");
+        setSession("");
       }
       throw failure;
     }

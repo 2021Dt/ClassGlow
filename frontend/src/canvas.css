@@ -615,6 +615,142 @@ body:has(.studio-focused) {
   color: #789080;
   flex-wrap: wrap;
 }
+
+/* 手势期间只改变几何，停止复杂材质绘制；松手后恢复真实材质。 */
+.studio-gesturing .liquid-glass-layer {
+  visibility: hidden;
+}
+.studio-gesturing .canvas-widget {
+  backdrop-filter: none !important;
+}
+.studio-gesturing [data-dragging] {
+  left: var(--drag-left) !important;
+  top: var(--drag-top) !important;
+  width: var(--drag-width) !important;
+  height: var(--drag-height) !important;
+}
+.studio-gesture-hint {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 8px 0;
+}
+.studio-resize-handle {
+  position: absolute;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 2;
+}
+.studio-resize-handle::after {
+  content: "";
+  position: absolute;
+  border: 1.5px solid #4c83d8;
+  background: #fff;
+  border-radius: 4px;
+  inset: calc(50% - 4px);
+}
+.handle-n,
+.handle-s {
+  left: 12px;
+  right: 12px;
+  height: 24px;
+  cursor: ns-resize;
+}
+.handle-n {
+  top: -12px;
+}
+.handle-s {
+  bottom: -12px;
+}
+.handle-e,
+.handle-w {
+  top: 12px;
+  bottom: 12px;
+  width: 24px;
+  cursor: ew-resize;
+}
+.handle-e {
+  right: -12px;
+}
+.handle-w {
+  left: -12px;
+}
+.handle-nw,
+.handle-ne,
+.handle-sw,
+.handle-se {
+  width: 28px;
+  height: 28px;
+  z-index: 3;
+}
+.handle-nw {
+  left: -14px;
+  top: -14px;
+  cursor: nwse-resize;
+}
+.handle-ne {
+  right: -14px;
+  top: -14px;
+  cursor: nesw-resize;
+}
+.handle-sw {
+  left: -14px;
+  bottom: -14px;
+  cursor: nesw-resize;
+}
+.handle-se {
+  right: -14px;
+  bottom: -14px;
+  cursor: nwse-resize;
+}
+@media (pointer: coarse) {
+  .handle-n,
+  .handle-s {
+    height: 32px;
+  }
+  .handle-n {
+    top: -16px;
+  }
+  .handle-s {
+    bottom: -16px;
+  }
+  .handle-e,
+  .handle-w {
+    width: 32px;
+  }
+  .handle-e {
+    right: -16px;
+  }
+  .handle-w {
+    left: -16px;
+  }
+  .handle-nw,
+  .handle-ne,
+  .handle-sw,
+  .handle-se {
+    width: 36px;
+    height: 36px;
+  }
+  .handle-nw,
+  .handle-sw {
+    left: -18px;
+  }
+  .handle-ne,
+  .handle-se {
+    right: -18px;
+  }
+  .handle-nw,
+  .handle-ne {
+    top: -18px;
+  }
+  .handle-sw,
+  .handle-se {
+    bottom: -18px;
+  }
+}
 .studio-page-controls small {
   width: 100%;
   text-align: center;

@@ -34,7 +34,15 @@ from .entitlements import account_available, class_entitlement, has_premium, req
 from .security import actor, bearer, device_actor, digest, fail, limit, member, secret
 
 router = APIRouter()
-GROUPS = {"sync": "sync", "pause": "pause", "resume": "pause", "set_page": "page", "auto_page": "page"}
+GROUPS = {
+    "sync": "sync",
+    "pause": "pause",
+    "resume": "pause",
+    "set_page": "page",
+    "auto_page": "page",
+    "notice": "notice",
+    "stop_notice": "notice",
+}
 
 
 def device_view(d):
@@ -64,6 +72,8 @@ def device_view(d):
         "error": s.get("error", ""),
         "revision": d.control_revision,
         "localControlEpoch": s.get("localControlEpoch", 0),
+        "activeNoticeId": s.get("activeNoticeId", ""),
+        "noticeEndsAt": s.get("noticeEndsAt", 0),
     }
 
 
@@ -81,7 +91,7 @@ def command_view(c):
         "syncEpoch": c.epoch,
         "expiresAt": c.expires,
         "issuedAt": c.issued,
-        **{k: v for k, v in c.data.items() if k in ("page", "pageSetId", "localControlEpoch")},
+        **{k: v for k, v in c.data.items() if k in ("page", "pageSetId", "localControlEpoch", "notice")},
     }
 
 
@@ -115,7 +125,8 @@ def pair_confirm(body: S.PairConfirm, request: Request, user: User = Depends(act
     p = db.scalar(select(Pairing).where(Pairing.code_hash == digest(body.code)).with_for_update())
     if not p or p.consumed or p.expires <= now():
         fail(422, "pairing_invalid", "绑定码无效、已使用或已过期，请在教室端重新生成。")
-    device = Device(class_id=c.id, name=p.name, credential_hash=p.secret_hash, epoch=sync_epoch(db), state={})
+    name = S.DeviceName(name=body.name or p.name).name
+    device = Device(class_id=c.id, name=name, credential_hash=p.secret_hash, epoch=sync_epoch(db), state={})
     db.add(device)
     db.flush()
     p.consumed = True
@@ -172,7 +183,8 @@ def valid_commands(db, d):
             or command.epoch != d.epoch
             or not account_available(author)
             or author.frozen_until > now()
-            or not has_premium(author)
+            or command.action not in ("sync", "stop_notice")
+            and not has_premium(author)
             or not (author.system_admin or membership and membership.role != "teacher")
         ):
             command.state = "rejected"
@@ -203,7 +215,7 @@ def snapshot(
     )
     canvas_supported = bool(version and tuple(map(int, version.groups())) >= (0, 4, 0))
     # 许可状态进入 ETag；到期必须返回新快照，不能被内容版本未变的 304 遮住。
-    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}:{int(canvas_supported)}"'
+    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}:{int(canvas_supported)}:{digest(d.name)[:12]}"'
     # 即使内容未变，只要有待确认命令也必须返回 200，不能让 304 吞掉控制。
     display = db.get(DeviceDisplay, d.id)
     display_request = pending_display(display)
@@ -224,6 +236,7 @@ def snapshot(
             {
                 "schema": 1,
                 "deviceId": d.id,
+                "deviceName": d.name,
                 "bindingId": d.binding,
                 "syncEpoch": d.epoch,
                 "classVersion": c.version,
@@ -390,6 +403,39 @@ def control_state(device_id: str, user: User = Depends(actor), db: Session = Dep
     }
 
 
+@router.get("/classes/{class_id}/devices")
+def class_devices(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+    c, _ = member(db, user, class_id)
+    devices = db.scalars(select(Device).where(Device.class_id == class_id, Device.revoked.is_(False))).all()
+    for d in devices:
+        valid_commands(db, d)
+    commands = db.scalars(
+        select(Command).where(Command.device_id.in_([d.id for d in devices])).order_by(Command.issued.desc()).limit(100)
+    ).all()
+    return {
+        "devices": [device_view(d) for d in devices],
+        "commands": [command_view(cmd) for cmd in commands],
+        "classVersion": c.version,
+    }
+
+
+@router.patch("/devices/{device_id}")
+def rename_device(device_id: str, body: S.DeviceName, user: User = Depends(actor), db: Session = Depends(get_db)):
+    d = display_device(db, user, device_id)
+    member(db, user, d.class_id, admin=True, write=True)
+    previous = d.name
+    d.name = body.name
+    db.add(
+        Audit(
+            class_id=d.class_id,
+            actor=user.id,
+            action="device_renamed",
+            data={"deviceId": d.id, "before": previous, "name": d.name},
+        )
+    )
+    return device_view(d)
+
+
 @router.post("/devices/{device_id}/commands", status_code=202)
 def command(
     device_id: str,
@@ -404,7 +450,8 @@ def command(
     if not d:
         fail(404, "device_not_found", "设备不存在。")
     member(db, user, d.class_id, admin=True, write=True)
-    require_premium(user)
+    if body.action not in ("sync", "stop_notice"):
+        require_premium(user)
     # 锁定后刷新，防止并发请求使用相同控制修订。
     d = db.scalar(
         select(Device).where(Device.id == device_id).with_for_update().execution_options(populate_existing=True)
@@ -417,6 +464,16 @@ def command(
     if body.expectedControlRevision != d.control_revision:
         fail(409, "control_revision_conflict", "其他操作已提交，请刷新设备状态。")
     s = d.state
+    if body.action in ("notice", "stop_notice"):
+        version = (
+            tuple(int(part) for part in s.get("clientVersion", "0").split("."))
+            if re.fullmatch(r"\d+\.\d+\.\d+", s.get("clientVersion", ""))
+            else (0,)
+        )
+        if version < (0, 4, 12):
+            fail(409, "client_update_required", "这台电脑需要更新至 0.4.12 或更高版本才能播放醒目提醒。")
+    if body.action == "notice" and (s.get("localPaused") or s.get("remotePaused")):
+        fail(409, "device_paused", "这台电脑已暂停，请恢复展示后再发送醒目提醒。")
     if body.action == "resume" and s.get("localPaused"):
         fail(409, "local_pause", "本机暂停需现场老师恢复，手机不能解除。")
     if GROUPS[body.action] == "page":
@@ -443,8 +500,8 @@ def command(
         action=body.action,
         group=group,
         expires=min(
-            [now() + (120 if group == "pause" else 60)]
-            + ([user.premium_until] if not user.system_admin else [])
+            [now() + (min(60, body.notice.duration) if body.notice else 120 if group == "pause" else 60)]
+            + ([user.premium_until] if body.action not in ("sync", "stop_notice") and not user.system_admin else [])
             + ([user.expires_at] if user.expires_at else [])
         ),
         data={
@@ -452,6 +509,7 @@ def command(
             "pageSetId": body.pageSetId,
             "localControlEpoch": s.get("localControlEpoch", 0),
             "actorName": user.name,
+            **({"notice": {**body.notice.model_dump(), "endsAt": now() + body.notice.duration}} if body.notice else {}),
         },
     )
     db.add(cmd)

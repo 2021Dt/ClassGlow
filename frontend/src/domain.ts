@@ -199,6 +199,8 @@ export interface Content {
   priority?: boolean;
 }
 export interface Device {
+  activeNoticeId?: string;
+  noticeEndsAt?: number;
   clientVersion?: string;
   id: string;
   classId: string;
@@ -226,7 +228,14 @@ export interface Command {
   actor?: string;
   id: string;
   deviceId: string;
-  action: "sync" | "pause" | "resume" | "set_page" | "auto_page";
+  action:
+    | "sync"
+    | "pause"
+    | "resume"
+    | "set_page"
+    | "auto_page"
+    | "notice"
+    | "stop_notice";
   state:
     | "accepted"
     | "executed"

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import ClassroomDisplay from "./ClassroomDisplay.vue";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import ScreenNoticeControls, {
+  type ScreenNoticeInput,
+} from "./ScreenNoticeControls.vue";
+import { computed, ref, watch } from "vue";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,7 +14,10 @@ import {
   Plus,
   RefreshCw,
   X,
+  Pencil,
+  CircleHelp,
 } from "@lucide/vue";
+import { deviceStatus } from "../deviceStatus";
 import { api, ApiError, premiumAvailable, session } from "../api";
 import { model } from "../store";
 import {
@@ -28,6 +34,7 @@ const props = defineProps<{
   devices: Device[];
   now: number;
   reload: () => Promise<void>;
+  focusDeviceId?: string;
 }>();
 const emit = defineEmits<{ refresh: []; bind: []; design: [] }>();
 const selected = ref(""),
@@ -35,6 +42,50 @@ const selected = ref(""),
     () =>
       props.devices.find((d) => d.id === selected.value) ?? props.devices[0],
   );
+const deviceView = ref("screen");
+const selectionKey = () =>
+  `classglow-device-${session.userId}-${props.classroom.id}`;
+function chooseDevice(id: string) {
+  selected.value = id;
+  error.value = "";
+  notice.value = "";
+  try {
+    localStorage.setItem(selectionKey(), id);
+  } catch {
+    /* 当前选择仍可使用。 */
+  }
+}
+const guideOpen = ref(false),
+  renameDialog = ref<HTMLDialogElement>(),
+  renameName = ref(""),
+  renameTarget = ref("");
+function closeGuide() {
+  guideOpen.value = false;
+  try {
+    localStorage.setItem(`classglow-device-guide-${session.userId}`, "seen");
+  } catch {
+    /* 可随时重看。 */
+  }
+}
+function rename() {
+  if (!device.value) return;
+  renameTarget.value = device.value.id;
+  renameName.value = device.value.name;
+  renameDialog.value?.showModal();
+}
+async function saveName() {
+  await run(async () => {
+    const updated = await api<Device>(
+      `/devices/${renameTarget.value}`,
+      "PATCH",
+      { name: renameName.value.trim() },
+    );
+    const index = model.devices.findIndex((d) => d.id === updated.id);
+    if (index >= 0) model.devices[index] = updated;
+    renameDialog.value?.close();
+    notice.value = `已改名为「${updated.name}」`;
+  });
+}
 const allowed = computed(
   () => isAdmin(props.classroom) && !props.classroom.archived,
 );
@@ -50,6 +101,7 @@ type Pending = {
     expectedControlRevision: number;
     pageSetId: string;
     page: number;
+    notice?: ScreenNoticeInput;
   };
 };
 const pending = ref<Pending | null>(null),
@@ -63,6 +115,8 @@ const actions: Record<string, string> = {
   resume: "恢复看板",
   set_page: "临时翻页",
   auto_page: "恢复自动翻页",
+  notice: "播放醒目提醒",
+  stop_notice: "停止醒目提醒",
 };
 const states: Record<string, string> = {
   accepted: "等待执行",
@@ -77,6 +131,17 @@ const history = computed(() =>
     .filter((c) => c.deviceId === device.value?.id)
     .sort((a, b) => b.time.localeCompare(a.time)),
 );
+const receiptId = ref("");
+const receipt = computed(() =>
+  model.commands.find(
+    (c) => c.id === receiptId.value && c.deviceId === device.value?.id,
+  ),
+);
+const receiptText = computed(() =>
+  receipt.value
+    ? `${actions[receipt.value.action]}：${receipt.value.state === "executed" && receipt.value.action === "notice" ? "已开始播放" : states[receipt.value.state]}。${receipt.value.state === "deferred" || receipt.value.state === "rejected" ? receipt.value.detail : ""}`
+    : notice.value,
+);
 const frozen = computed(
   () =>
     !allowed.value ||
@@ -84,6 +149,10 @@ const frozen = computed(
     !device.value?.online ||
     !!pending.value ||
     busy.value,
+);
+const syncDisabled = computed(
+  () =>
+    !allowed.value || !device.value?.online || !!pending.value || busy.value,
 );
 const paused = computed(
   () => !!device.value?.localPaused || !!device.value?.remotePaused,
@@ -108,6 +177,7 @@ function restorePending() {
 async function run(action: () => Promise<void>) {
   error.value = "";
   notice.value = "";
+  receiptId.value = "";
   busy.value = true;
   try {
     await action();
@@ -128,6 +198,7 @@ async function status() {
   ];
 }
 function acceptReceipt(command: Command) {
+  receiptId.value = command.id;
   model.commands = [
     command,
     ...model.commands.filter((c) => c.id !== command.id),
@@ -181,8 +252,18 @@ async function confirmed() {
     confirmation.value?.close();
   });
 }
-async function control(action: string, page = 1) {
-  if (!device.value || frozen.value) return;
+async function control(
+  action: string,
+  page = 1,
+  screenNotice?: ScreenNoticeInput,
+) {
+  if (
+    !device.value ||
+    (["sync", "stop_notice"].includes(action)
+      ? syncDisabled.value
+      : frozen.value)
+  )
+    return;
   const d = device.value;
   const request: Pending = {
     key: uid(),
@@ -192,6 +273,7 @@ async function control(action: string, page = 1) {
       expectedControlRevision: d.revision,
       pageSetId: d.pageSetId ?? "",
       page,
+      ...(screenNotice ? { notice: screenNotice } : {}),
     },
   };
   const execute = async () => {
@@ -233,41 +315,112 @@ const summary = computed(() => {
   if (!d.online) return "设备暂时不可达";
   if (d.localPaused) return d.deferred ? "暂停待生效" : "本机已暂停";
   if (d.remotePaused) return "远程已暂停";
-  if (d.deferred) return "已同步，等待返回桌面";
+  if (d.deferred && !d.error) return "已接收，等待全屏展示结束";
   if (d.error) return "设备需要检查";
   if (needsCanvasUpdate.value) return "基础看板运行中，等待客户端升级";
-  return d.applied ? "看板运行中" : "等待首次展示";
+  return deviceStatus(d, props.classroom.version);
 });
-let poll: ReturnType<typeof setInterval>;
-let polling = false;
+const needsSyncUpdate = computed(() => {
+  const version = device.value?.clientVersion?.split(".").map(Number);
+  return (
+    version?.length === 3 &&
+    version[0] === 0 &&
+    (version[1]! < 4 || (version[1] === 4 && version[2]! < 12))
+  );
+});
 watch(
-  () => props.classroom.id,
+  [() => props.classroom.id, () => props.focusDeviceId],
   () => {
-    selected.value = "";
+    selected.value = props.devices.some((d) => d.id === props.focusDeviceId)
+      ? props.focusDeviceId!
+      : "";
+    try {
+      if (!selected.value)
+        selected.value = localStorage.getItem(selectionKey()) ?? "";
+      guideOpen.value = !localStorage.getItem(
+        `classglow-device-guide-${session.userId}`,
+      );
+    } catch {
+      guideOpen.value = true;
+    }
+    renameDialog.value?.close();
     restorePending();
   },
+  { immediate: true },
 );
-onMounted(() => {
-  restorePending();
-  poll = setInterval(async () => {
-    if (polling || busy.value || confirmation.value?.open) return;
-    polling = true;
-    try {
-      await status();
-    } catch {
-      /* 联系失败保留上次实际状态，不改报为成功。 */
-    } finally {
-      polling = false;
-    }
-  }, 5000);
-});
-onUnmounted(() => clearInterval(poll));
+watch(
+  () => device.value?.id,
+  () => {
+    error.value = "";
+    notice.value = "";
+    void status().catch(() => {});
+  },
+);
 </script>
 
 <template>
   <section class="device-console">
+    <div class="section-heading device-page-heading">
+      <div>
+        <h2>{{ classroom.name }}的电脑</h2>
+        <p class="muted">
+          已绑定 {{ devices.length }} 台 · 选择一台查看画面或操作
+        </p>
+      </div>
+      <div class="device-heading-actions">
+        <button class="button secondary" @click="guideOpen = !guideOpen">
+          <CircleHelp :size="17" />操作指引
+        </button>
+        <button class="button primary" v-if="allowed" @click="emit('bind')">
+          <Plus :size="17" />绑定电脑
+        </button>
+      </div>
+    </div>
+    <section
+      v-if="guideOpen"
+      class="panel device-guide"
+      aria-label="教室电脑操作指引"
+    >
+      <header>
+        <h3>第一次连接，按这三步来</h3>
+        <button class="text-button" @click="closeGuide">收起指引</button>
+      </header>
+      <ol>
+        <li>
+          <span>1</span>
+          <div>
+            <strong>在教室电脑生成绑定码</strong>
+            <p>
+              下载客户端，打开后生成 6 位绑定码。手机和办公电脑使用网页即可。
+            </p>
+            <a href="/download" target="_blank" rel="noopener">下载客户端</a>
+          </div>
+        </li>
+        <li>
+          <span>2</span>
+          <div>
+            <strong>在这里绑定并给电脑命名</strong>
+            <p>班主任输入绑定码，命名为“讲台电脑”等。每台教室电脑分别绑定。</p>
+            <button v-if="allowed" class="text-button" @click="emit('bind')">
+              输入绑定码
+            </button>
+          </div>
+        </li>
+        <li>
+          <span>3</span>
+          <div>
+            <strong>回到教室电脑启用展示</strong>
+            <p>
+              勾选“启用桌面展示”。以后网页发布作业会自动同步，客户端收进托盘后继续运行。
+            </p>
+          </div>
+        </li>
+      </ol>
+    </section>
     <div v-if="error" class="notice danger" role="alert">{{ error }}</div>
-    <div v-if="notice" class="notice subtle" role="status">{{ notice }}</div>
+    <div v-if="receiptText" class="notice subtle" role="status">
+      {{ receiptText }}
+    </div>
     <div v-if="pending" class="notice warning control-pending">
       <span>上次操作结果待确认</span
       ><button class="text-button" :disabled="busy" @click="run(queryPending)">
@@ -279,22 +432,81 @@ onUnmounted(() => clearInterval(poll));
     <p v-if="allowed && !premiumAvailable(now)" class="notice subtle">
       远程控制需高级许可。
     </p>
-    <div class="section-heading">
-      <div class="segmented">
-        <button
-          v-for="d in devices"
-          :key="d.id"
-          :class="{ selected: device?.id === d.id }"
-          @click="selected = d.id"
+    <div class="device-picker" aria-label="选择教室电脑">
+      <button
+        v-for="d in devices"
+        :key="d.id"
+        :class="{ selected: device?.id === d.id }"
+        :aria-pressed="device?.id === d.id"
+        @click="chooseDevice(d.id)"
+      >
+        <span class="device-picker-title"
+          ><Laptop :size="18" /><strong>{{ d.name }}</strong
+          ><span class="status-dot" :class="{ amber: !d.online }"></span
+        ></span>
+        <span class="device-picker-state">{{
+          deviceStatus(d, classroom.version)
+        }}</span>
+        <span class="device-picker-meta"
+          >{{ d.online ? "在线" : "离线" }} · 编号 {{ d.id.slice(0, 6)
+          }}<b v-if="device?.id === d.id">当前选择</b></span
         >
-          <Laptop :size="16" />{{ d.name }}
-        </button>
-      </div>
-      <button class="button secondary" v-if="allowed" @click="emit('bind')">
-        <Plus :size="17" />绑定教室电脑
       </button>
     </div>
-    <ClassroomDisplay v-if="device" :device="device" :reload="reload" />
+    <div v-if="device" class="device-target">
+      <div>
+        <span>当前电脑</span><strong>{{ device.name }}</strong
+        ><button v-if="allowed" class="text-button" @click="rename">
+          <Pencil :size="15" />改名
+        </button>
+      </div>
+      <p>发布内容会同步到本班全部电脑；下方查看画面、暂停和翻页只针对这台。</p>
+    </div>
+    <p v-if="needsSyncUpdate" class="notice subtle">
+      这台电脑仍使用旧版定时同步。<a
+        href="/download"
+        target="_blank"
+        rel="noopener"
+        >升级到 0.4.12</a
+      >
+      后可及时接收更新，覆盖安装保留绑定。
+    </p>
+    <nav v-if="device" class="device-view-tabs" aria-label="电脑操作分类">
+      <button
+        v-for="tab in [
+          { id: 'screen', name: '当前画面' },
+          ...(allowed
+            ? [
+                { id: 'notice', name: '醒目提醒' },
+                { id: 'history', name: '操作记录' },
+              ]
+            : []),
+        ]"
+        :key="tab.id"
+        :aria-pressed="deviceView === tab.id"
+        @click="deviceView = tab.id"
+      >
+        {{ tab.name }}
+      </button>
+    </nav>
+    <ClassroomDisplay
+      v-if="device && deviceView === 'screen'"
+      :key="device.id"
+      :device="device"
+      :reload="reload"
+    />
+    <ScreenNoticeControls
+      v-if="device && allowed && deviceView === 'notice'"
+      :key="device.id + '-notice'"
+      :device="device"
+      :now="now"
+      :disabled="
+        frozen || needsSyncUpdate || device.localPaused || device.remotePaused
+      "
+      :stop-disabled="syncDisabled || needsSyncUpdate"
+      @send="control('notice', 1, $event)"
+      @stop="control('stop_notice')"
+    />
     <section v-if="!device" class="panel empty-state">
       <Monitor :size="36" />
       <h2>尚未绑定教室电脑</h2>
@@ -328,8 +540,11 @@ onUnmounted(() => clearInterval(poll));
         输入绑定码
       </button>
     </section>
-    <div v-else-if="allowed" class="device-grid">
-      <section class="panel">
+    <div
+      v-if="device && allowed && deviceView !== 'notice'"
+      class="device-grid device-view-panel"
+    >
+      <section v-if="deviceView === 'screen'" class="panel">
         <div class="section-heading">
           <h2><Monitor :size="20" />{{ device.name }}</h2>
           <span class="badge" :class="device.online ? '' : 'amber-badge'">{{
@@ -348,7 +563,7 @@ onUnmounted(() => clearInterval(poll));
                 device.localPaused
                   ? "需现场老师在托盘恢复，手机不能解除。"
                   : device.online
-                    ? "电脑回到桌面时显示看板。"
+                    ? "普通窗口下自动更新；全屏课件结束后再应用。"
                     : "内容和布局仍可发布，设备恢复联网后同步。"
               }}
             </p>
@@ -408,10 +623,10 @@ onUnmounted(() => clearInterval(poll));
         <div class="device-controls">
           <button
             class="button primary"
-            :disabled="frozen"
+            :disabled="syncDisabled"
             @click="control('sync')"
           >
-            <RefreshCw :size="17" />请求同步</button
+            <RefreshCw :size="17" />立即同步这台电脑</button
           ><button
             class="button secondary"
             :disabled="frozen || device.localPaused"
@@ -469,7 +684,10 @@ onUnmounted(() => clearInterval(poll));
           </button>
         </div>
       </section>
-      <section class="panel">
+      <section
+        v-if="deviceView === 'history'"
+        class="panel device-operation-history"
+      >
         <div class="section-heading">
           <h2>最近操作</h2>
           <button
@@ -499,6 +717,39 @@ onUnmounted(() => clearInterval(poll));
       </section>
     </div>
   </section>
+  <dialog
+    ref="renameDialog"
+    class="modal"
+    aria-labelledby="device-rename-title"
+  >
+    <header class="section-heading">
+      <h2 id="device-rename-title">给电脑改名</h2>
+      <button
+        class="icon-button"
+        aria-label="关闭改名"
+        @click="renameDialog?.close()"
+      >
+        <X :size="20" />
+      </button>
+    </header>
+    <form @submit.prevent="saveName">
+      <label class="field"
+        >电脑名称<input
+          v-model="renameName"
+          required
+          maxlength="60"
+          placeholder="例如：六年级1班 · 讲台电脑"
+          autofocus
+      /></label>
+      <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+      <button
+        class="button primary full"
+        :disabled="busy || !renameName.trim()"
+      >
+        {{ busy ? "正在保存…" : "保存名称" }}
+      </button>
+    </form>
+  </dialog>
   <dialog ref="confirmation" class="modal">
     <header class="section-heading">
       <h2>确认设备操作</h2>

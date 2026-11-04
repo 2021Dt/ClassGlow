@@ -1,5 +1,11 @@
 # 106 服务器停用与清理
 
+## 0.4.12 增量范围
+
+本次增加 `.deploy/downloads/ClassGlow-0.4.12-win-x64-setup.exe`，上传校验后移除专用暂存目录 `.deploy/incoming-0412`。更新通知只在现有 API 内存中持有连接，不新增 Redis、端口、服务、计划任务或数据库表；API 停止即释放连接。醒目提醒的命令、回执和最近播放状态使用现有数据库记录，按原备份/卸载范围管理。
+
+浏览器登录凭据改为本站 localStorage 保存，默认服务端 30 天有效；退出登录立即清除本站登录凭据。服务器卸载不会跨设备清空浏览器存储，教师可退出或在浏览器删除该站点数据。Windows 提醒只在播放期间创建窗口/计时器，退出或卸载随进程关闭，无新增文件目录。
+
 当前服务：`teacher.dgplus.vip`，项目目录 `/opt/classglow`，沿用服务器原有 Docker、Nginx 和 Certbot。本文是管理员执行清理时的操作说明；开发部署不会自动执行这些清理步骤。
 
 本仓库的 Git 代理配置保存在 `/opt/classglow/.git/config`，使用服务器既有的本机代理。随项目目录删除即可；卸载本项目不停止或删除 Mihomo。仅取消 Git 代理可在项目目录执行 `sudo git config --local --unset http.proxy`，前提是服务器能直连 GitHub。

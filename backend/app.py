@@ -39,6 +39,7 @@ from .db import (
 )
 from .entitlements import class_entitlement, profile, require_premium
 from .middleware import BodyLimitMiddleware, body_limit
+from .realtime import router as realtime_router
 from .security import actor, bearer, check_frozen, digest, fail, frozen_detail, limit, member, passwords, secret
 from .system_service import system_config
 
@@ -85,6 +86,7 @@ async def lifespan(_):
 
 
 app = FastAPI(title="班级看板服务", version="0.1.0", lifespan=lifespan)
+app.include_router(realtime_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

@@ -26,6 +26,63 @@ class ClassInput(Input):
         default=["语文", "数学", "英语", "科学", "体育", "美术", "班会"], min_length=1, max_length=20
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def stage_subjects(cls, value):
+        # 未指定时按学段补全；已有班级和显式填写的自定义学科保持原样。
+        if isinstance(value, dict) and "subjects" not in value:
+            presets = {
+                "小学": [
+                    "语文",
+                    "数学",
+                    "英语",
+                    "科学",
+                    "道德与法治",
+                    "体育",
+                    "音乐",
+                    "美术",
+                    "信息科技",
+                    "劳动",
+                    "班会",
+                ],
+                "初中": [
+                    "语文",
+                    "数学",
+                    "英语",
+                    "物理",
+                    "化学",
+                    "生物",
+                    "历史",
+                    "地理",
+                    "道德与法治",
+                    "体育",
+                    "音乐",
+                    "美术",
+                    "信息科技",
+                    "劳动",
+                    "班会",
+                ],
+                "高中": [
+                    "语文",
+                    "数学",
+                    "英语",
+                    "物理",
+                    "化学",
+                    "生物",
+                    "政治",
+                    "历史",
+                    "地理",
+                    "体育",
+                    "音乐",
+                    "美术",
+                    "信息技术",
+                    "通用技术",
+                    "班会",
+                ],
+            }
+            value = {**value, "subjects": presets.get(value.get("stage", "小学"), presets["小学"])}
+        return value
+
     @field_validator("name", "subjects")
     @classmethod
     def meaningful(cls, value):
@@ -33,7 +90,8 @@ class ClassInput(Input):
             if not value.strip():
                 raise ValueError("名称不能全为空白")
             return value.strip()
-        if len(set(value)) != len(value) or any(not s.strip() or len(s) > 20 for s in value):
+        value = [s.strip() for s in value]
+        if len(set(value)) != len(value) or any(not s or len(s) > 20 for s in value):
             raise ValueError("科目不能为空、重复或超过 20 字")
         return value
 
@@ -164,7 +222,10 @@ class CanvasWidget(Input):
         if self.kind == "text" and self.h < self.fontSize * self.lineHeight + 32:
             raise ValueError("文字组件高度不足以显示一行当前字号的文字")
         title_inset = 46 + self.titleSize * 1.5 if self.showTitle else 32
-        if self.kind in ("homework", "todo", "timetable", "message") and self.h < title_inset + self.fontSize * self.lineHeight:
+        if (
+            self.kind in ("homework", "todo", "timetable", "message")
+            and self.h < title_inset + self.fontSize * self.lineHeight
+        ):
             raise ValueError("卡片高度不足以显示标题和一行正文，请增高卡片或调小字号")
         if self.kind in ("datetime", "countdown") and self.h < 105 + (self.fontSize + 24) * 1.2:
             raise ValueError("时钟或倒计时高度不足，请增高组件或调小字号")
@@ -292,13 +353,53 @@ class PairInput(Input):
 class PairConfirm(Input):
     code: str = Field(pattern=r"^\d{6}$")
     classId: str = Field(min_length=1, max_length=36)
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value):
+        return DeviceName(name=value).name if value is not None else None
+
+
+class DeviceName(Input):
+    name: str = Field(min_length=1, max_length=60)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value):
+        value = value.strip()
+        if not value or any(ord(char) < 32 for char in value):
+            raise ValueError("请输入可识别的电脑名称")
+        return value
+
+
+class ScreenNotice(Input):
+    mode: Literal["marquee", "barrage", "popup", "countdown"]
+    message: str = Field(min_length=1, max_length=160)
+    duration: int = Field(default=30, ge=5, le=3600)
+    tone: Literal["blue", "amber", "red"] = "blue"
+    overFullscreen: bool = False
+
+    @field_validator("message")
+    @classmethod
+    def meaningful_message(cls, value):
+        if not value.strip():
+            raise ValueError("请填写提醒内容")
+        return value.strip()
 
 
 class ControlInput(Input):
-    action: Literal["sync", "pause", "resume", "set_page", "auto_page"]
+    action: Literal["sync", "pause", "resume", "set_page", "auto_page", "notice", "stop_notice"]
     expectedControlRevision: int = Field(ge=0)
     pageSetId: str = Field(default="", max_length=100)
     page: int = Field(default=1, ge=1, le=10000)
+    notice: ScreenNotice | None = None
+
+    @model_validator(mode="after")
+    def notice_required(self):
+        if (self.action == "notice") != (self.notice is not None):
+            raise ValueError("发布醒目提醒时须填写提醒内容")
+        return self
 
 
 class ReportInput(Input):
@@ -321,6 +422,8 @@ class ReportInput(Input):
     materialReason: str = Field(default="", max_length=200)
     renderedAt: float = Field(default=0, ge=0)
     error: str = Field(default="", max_length=200)
+    activeNoticeId: str = Field(default="", max_length=36)
+    noticeEndsAt: float = Field(default=0, ge=0)
 
 
 class DeviceDisplayInput(ReportInput):

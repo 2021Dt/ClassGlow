@@ -181,6 +181,30 @@ export function clampWidget(item: CanvasWidget): CanvasWidget {
   };
 }
 
+export type ResizeEdge = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
+/** 从任意边或角拉伸，固定相对的边，并保留至少一行内容所需的尺寸。 */
+export function resizeCanvasItem(
+  item: CanvasWidget,
+  edge: ResizeEdge,
+  dx: number,
+  dy: number,
+) {
+  const minimum = clampWidget({ ...item, w: 0, h: 0 });
+  let left = item.x,
+    top = item.y,
+    right = item.x + item.w,
+    bottom = item.y + item.h;
+  if (edge.includes("w"))
+    left = Math.max(0, Math.min(right - minimum.w, left + dx));
+  if (edge.includes("e"))
+    right = Math.min(1600, Math.max(left + minimum.w, right + dx));
+  if (edge.includes("n"))
+    top = Math.max(0, Math.min(bottom - minimum.h, top + dy));
+  if (edge.includes("s"))
+    bottom = Math.min(900, Math.max(top + minimum.h, bottom + dy));
+  return { ...item, x: left, y: top, w: right - left, h: bottom - top };
+}
+
 /** 用同一个位移移动整组，碰到画布边缘时保持组内相对位置。 */
 export function moveCanvasItems(items: CanvasWidget[], dx: number, dy: number) {
   const left = Math.min(...items.map((item) => item.x));

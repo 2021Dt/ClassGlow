@@ -96,6 +96,7 @@ public static class Program
         var showListener = ThreadPool.RegisterWaitForSingleObject(showRequest, (_, _) => app.Dispatcher.BeginInvoke(statusWindow.Open), null, Timeout.Infinite, false);
         menu.Items.Add("打开班级看板", null, (_, _) => statusWindow.Open());
         menu.Items.Add("立即同步", null, (_, _) => engine.RequestSync());
+        menu.Items.Add("关闭醒目提醒", null, (_, _) => engine.DismissNotice());
         menu.Items.Add("本机暂停展示", null, (_, _) => engine.LocalPause(true));
         menu.Items.Add("本机恢复展示", null, (_, _) => engine.LocalPause(false));
         menu.Items.Add("减少材质效果", null, (_, _) => {

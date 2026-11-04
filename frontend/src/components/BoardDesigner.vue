@@ -59,6 +59,8 @@ import {
   toCanvas,
   homeworkPriorityLayout,
   moveCanvasItems,
+  resizeCanvasItem,
+  type ResizeEdge,
   widgetLabels,
   widgetImage,
   widgetMinimum,
@@ -634,7 +636,7 @@ function updateCardImage(value: {
 }
 let drag: {
   id: string;
-  mode: "move" | "resize";
+  mode: "move" | ResizeEdge;
   x: number;
   y: number;
   item: CanvasWidget;
@@ -642,22 +644,44 @@ let drag: {
   width: number;
   height: number;
   pointer: number;
+  next: CanvasWidget[];
+  elements: {
+    id: string;
+    element: HTMLElement;
+    style: string;
+    preview: boolean;
+  }[];
 } | null = null;
+let gestureFrame = 0;
+const resizeEdges: { edge: ResizeEdge; label: string }[] = [
+  { edge: "n", label: "上边" },
+  { edge: "s", label: "下边" },
+  { edge: "e", label: "右边" },
+  { edge: "w", label: "左边" },
+  { edge: "nw", label: "左上角" },
+  { edge: "ne", label: "右上角" },
+  { edge: "sw", label: "左下角" },
+  { edge: "se", label: "右下角" },
+];
 function start(
   event: PointerEvent,
   item: CanvasWidget,
-  mode: "move" | "resize",
+  mode: "move" | ResizeEdge,
 ) {
   if (
     event.button !== 0 ||
+    drag ||
     (mode === "move" && (multiSelect.value || event.shiftKey))
   )
     return;
   if (!selection.value.includes(item.id)) select(item.id);
   if (!editableSelection.value || !surface.value) return;
   event.preventDefault();
-  checkpoint();
+  playing.value = false;
   const bounds = surface.value.getBoundingClientRect();
+  const ids = new Set(selectedItems.value.map((i) => i.id));
+  const stage = surface.value.parentElement!;
+  stage.classList.add("studio-gesturing");
   drag = {
     id: item.id,
     mode,
@@ -668,6 +692,17 @@ function start(
     width: bounds.width,
     height: bounds.height,
     pointer: event.pointerId,
+    next: selectedItems.value,
+    elements: Array.from(
+      stage.querySelectorAll<HTMLElement>("[data-widget-id]"),
+    )
+      .filter((el) => ids.has(el.dataset.widgetId!))
+      .map((element) => ({
+        id: element.dataset.widgetId!,
+        element,
+        style: element.style.cssText,
+        preview: element.classList.contains("canvas-widget"),
+      })),
   };
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 }
@@ -678,18 +713,59 @@ function move(event: PointerEvent) {
     dy = ((event.clientY - drag.y) * 900) / drag.height,
     round = (v: number) => Math.round(v / step) * step;
   if (drag.mode === "move") {
-    moveSelection(drag.members, round(dx), round(dy), false);
-    return;
+    drag.next = moveCanvasItems(drag.members, round(dx), round(dy));
+  } else
+    drag.next = [resizeCanvasItem(drag.item, drag.mode, round(dx), round(dy))];
+  // 一帧只绘制一次临时几何；分页、玻璃重建和草稿存储都等松手后再执行。
+  if (!gestureFrame) gestureFrame = requestAnimationFrame(paintGesture);
+}
+function paintGesture() {
+  gestureFrame = 0;
+  if (!drag) return;
+  const next = new Map(drag.next.map((item) => [item.id, item]));
+  for (const { id, element, preview } of drag.elements) {
+    const item = next.get(id);
+    if (!item) continue;
+    element.dataset.dragging = "true";
+    element.style.setProperty("--drag-left", `${item.x / 16}%`);
+    element.style.setProperty("--drag-width", `${item.w / 16}%`);
+    element.style.setProperty(
+      "--drag-top",
+      preview ? `${item.y}px` : `${item.y / 9}%`,
+    );
+    element.style.setProperty(
+      "--drag-height",
+      preview ? `${item.h}px` : `${item.h / 9}%`,
+    );
   }
-  patchItem(
-    {
-      // 拉伸固定左上角，碰到画布边界就停止。
-      w: Math.min(1600 - drag.item.x, round(drag.item.w + dx)),
-      h: Math.min(900 - drag.item.y, round(drag.item.h + dy)),
-    },
-    false,
-    drag.id,
-  );
+}
+function finishGesture(event?: PointerEvent, cancel = false) {
+  if (!drag || (event && event.pointerId !== drag.pointer)) return;
+  if (event && !cancel) move(event);
+  cancelAnimationFrame(gestureFrame);
+  gestureFrame = 0;
+  const completed = drag;
+  drag = null;
+  for (const entry of completed.elements) {
+    entry.element.style.cssText = entry.style;
+    delete entry.element.dataset.dragging;
+  }
+  surface.value?.parentElement?.classList.remove("studio-gesturing");
+  if (cancel || props.disabled) return;
+  const next = new Map(completed.next.map((item) => [item.id, item]));
+  if (
+    completed.members.every((item) => {
+      const value = next.get(item.id) ?? item;
+      return ["x", "y", "w", "h"].every(
+        (key) => value[key as "x"] === item[key as "x"],
+      );
+    })
+  )
+    return;
+  change({
+    ...model.value,
+    canvas: items.value.map((item) => next.get(item.id) ?? item),
+  });
 }
 function moveSelection(
   members: CanvasWidget[],
@@ -709,6 +785,10 @@ function moveSelection(
   );
 }
 function keyboard(event: KeyboardEvent) {
+  if (drag) {
+    if (event.key === "Escape") finishGesture(undefined, true);
+    return;
+  }
   if (event.key === "Escape" && !props.standalone) focused.value = false;
   if (
     props.disabled ||
@@ -767,6 +847,7 @@ onMounted(() => {
     emit("update:modelValue", toCanvas(props.modelValue));
 });
 onUnmounted(() => {
+  finishGesture(undefined, true);
   viewportObserver?.disconnect();
   cancelAnimationFrame(resizeFrame);
 });
@@ -1027,6 +1108,7 @@ onUnmounted(() => {
                 v-for="item in items.filter((i) => i.visible)"
                 :key="item.id"
                 class="studio-object"
+                :data-widget-id="item.id"
                 :class="{
                   selected: selection.includes(item.id),
                   locked: item.locked,
@@ -1047,9 +1129,9 @@ onUnmounted(() => {
                   :aria-label="`选择并移动${item.title || widgetLabels[item.kind]}`"
                   @pointerdown="start($event, item, 'move')"
                   @pointermove="move"
-                  @pointerup="drag = null"
-                  @pointercancel="drag = null"
-                  @lostpointercapture="drag = null"
+                  @pointerup="finishGesture($event)"
+                  @pointercancel="finishGesture($event, true)"
+                  @lostpointercapture="finishGesture($event, true)"
                   @click="clickCanvas(item.id, $event)"
                 ></button
                 ><span
@@ -1058,20 +1140,28 @@ onUnmounted(() => {
                   >{{ item.title || widgetLabels[item.kind] }} · {{ item.w }}×{{
                     item.h
                   }}</span
-                ><button
+                ><template
                   v-if="current?.id === item.id && !item.locked && !disabled"
-                  class="studio-object-resize"
-                  :aria-label="`缩放${item.title || widgetLabels[item.kind]}`"
-                  @pointerdown.stop="start($event, item, 'resize')"
-                  @pointermove="move"
-                  @pointerup="drag = null"
-                  @pointercancel="drag = null"
-                  @lostpointercapture="drag = null"
-                ></button>
+                  ><button
+                    v-for="handle in resizeEdges"
+                    :key="handle.edge"
+                    class="studio-resize-handle"
+                    :class="`handle-${handle.edge}`"
+                    :aria-label="`拖动${handle.label}调整${item.title || widgetLabels[item.kind]}`"
+                    @pointerdown.stop="start($event, item, handle.edge)"
+                    @pointermove="move"
+                    @pointerup="finishGesture($event)"
+                    @pointercancel="finishGesture($event, true)"
+                    @lostpointercapture="finishGesture($event, true)"
+                  ></button
+                ></template>
               </div>
             </div>
           </div>
         </div>
+        <p class="studio-gesture-hint">
+          拖动组件移动位置 · 拖动四边或四角调整大小
+        </p>
         <div class="studio-page-controls">
           <button
             class="icon-button"

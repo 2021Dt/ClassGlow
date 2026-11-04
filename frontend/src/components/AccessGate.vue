@@ -225,6 +225,9 @@ async function recover() {
             忘记密码
           </button>
         </div>
+        <p class="recovery-help">
+          默认保持登录 30 天。共用电脑使用后请退出账号。
+        </p>
       </template>
       <details class="login-privacy">
         <summary>登录安全说明</summary>

@@ -63,14 +63,20 @@ public sealed class Wallpaper : IWallpaper
     public bool SafeToApply()
     {
         // 本程序的设置窗口也允许同步壁纸，首次启用后无需手动关闭窗口。
-        // 其他程序在前台时继续延后，设置壁纸本身不切换窗口或抢占焦点。
+        // 设置壁纸本身不切换窗口或抢占焦点，只有全屏课件等场景需要延后。
         IntPtr hwnd = GetForegroundWindow();
         if (hwnd == IntPtr.Zero) return false;
         GetWindowThreadProcessId(hwnd, out uint processId);
         if (processId == (uint)Environment.ProcessId) return true;
         var name = new System.Text.StringBuilder(256);
         if (GetClassName(hwnd, name, name.Capacity) == 0) return false;
-        return name.ToString() is "Progman" or "WorkerW";
+        if (name.ToString() is "Progman" or "WorkerW") return true;
+        // 普通窗口前台时可安静更新背景；仅全屏课件/视频延后，避免开着浏览器就一直不同步。
+        if (!GetWindowRect(hwnd, out var rect)) return false;
+        var screen = System.Windows.Forms.Screen.FromHandle(hwnd).Bounds;
+        bool fullScreen = rect.Left <= screen.Left + 2 && rect.Top <= screen.Top + 2
+            && rect.Right >= screen.Right - 2 && rect.Bottom >= screen.Bottom - 2;
+        return !fullScreen;
     }
     public void Set(string monitor, string path)
     {

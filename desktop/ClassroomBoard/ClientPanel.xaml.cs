@@ -78,6 +78,8 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
     private void RefreshState()
     {
         var state = engine.State;
+        DeviceLabel.Visibility = Bound ? Visibility.Visible : Visibility.Collapsed;
+        DeviceLabel.Text = $"{(state.DeviceName.Length > 0 ? state.DeviceName : Environment.MachineName)} · {state.DeviceId[..Math.Min(6, state.DeviceId.Length)]}";
         bool conflict = Bound && engine.HasWallpaperConflict();
         WallpaperConflictBox.Visibility = conflict && (page == "display" ? WallpaperEnabled.IsChecked == true : state.EnableWallpaper)
             ? Visibility.Visible : Visibility.Collapsed;

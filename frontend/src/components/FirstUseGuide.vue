@@ -16,7 +16,7 @@ const steps = computed(() => [
   {
     target: "publish",
     title: "从这里发作业",
-    text: "选择科目、填写内容，点击发布。展示时间已经填好，需要时再调整。",
+    text: "选择科目、填写内容，再点击发布。内容会同步到这个班级绑定的所有教室电脑，不需要逐台发送。",
   },
   {
     target: "records",
@@ -28,7 +28,7 @@ const steps = computed(() => [
         {
           target: "devices",
           title: "连接教室电脑",
-          text: "先在教室电脑安装客户端，再把客户端生成的绑定码填到这里。",
+          text: "每台教室电脑分别生成绑定码。在这里绑定并命名，再回到那台电脑启用桌面展示。手机或办公电脑只需打开网页。",
         },
         {
           target: "design",

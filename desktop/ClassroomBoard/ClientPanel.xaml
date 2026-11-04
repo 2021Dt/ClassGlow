@@ -10,6 +10,7 @@
    <StackPanel x:Name="PageBody" Margin="16,20,16,24" MaxWidth="480" VerticalAlignment="Center">
     <Image x:Name="PageArt" Source="{StaticResource GlowConnectArt}" Width="119" Height="104" />
     <TextBlock x:Name="PageTitle" Text="连接班级" Style="{StaticResource GlowPageTitle}" />
+    <TextBlock x:Name="DeviceLabel" Style="{StaticResource GlowHint}" TextAlignment="Center" Margin="0,0,0,14" Visibility="Collapsed" />
     <Border x:Name="WallpaperConflictBox" Style="{StaticResource GlowCard}" Visibility="Collapsed" Margin="0,0,0,16">
      <StackPanel>
       <TextBlock Text="请先退出 Wallpaper Engine" Style="{StaticResource GlowLabel}" FontWeight="SemiBold" />

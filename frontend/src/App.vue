@@ -23,8 +23,11 @@ import {
 import TeacherHome from "./components/TeacherHome.vue";
 import FirstUseGuide from "./components/FirstUseGuide.vue";
 import { classroomForDisplay } from "./classroomView";
+import { useDeviceFeed } from "./useDeviceFeed";
 import EditorSheet from "./components/EditorSheet.vue";
 import SettingsPage from "./components/SettingsPage.vue";
+import SubjectPicker from "./components/SubjectPicker.vue";
+import { subjectPresets } from "./subjects";
 import ContentRecords from "./components/ContentRecords.vue";
 import DeviceConsole from "./components/DeviceConsole.vue";
 import AccessGate from "./components/AccessGate.vue";
@@ -39,6 +42,7 @@ import {
   premiumAvailable,
   refreshModel,
   session,
+  setSession,
 } from "./api";
 import {
   emptyModel,
@@ -63,8 +67,8 @@ async function readSite() {
   siteReady.value = true;
 }
 async function initialized(token: string) {
-  session.token = token;
-  sessionStorage.setItem("kanban-session", token);
+  setSession(token);
+
   await run(async () => {
     await readSite();
     await refresh();
@@ -75,9 +79,9 @@ async function initialized(token: string) {
   });
 }
 async function systemSignedOut(message: string) {
-  session.token = "";
+  setSession("");
   session.systemAdmin = false;
-  sessionStorage.removeItem("kanban-session");
+
   replaceModel(emptyModel());
   page.value = "overview";
   await run(readSite);
@@ -198,9 +202,26 @@ const joinDialog = ref<HTMLDialogElement>(),
   joinInfo = ref<any>(null),
   inviteToken = ref("");
 const passwordForm = reactive({ oldPassword: "", newPassword: "" });
-const classForm = reactive({ name: "", stage: "小学" }),
+const classForm = reactive({
+    name: "",
+    stage: "小学",
+    subjects: [...subjectPresets["小学"]!],
+  }),
   pairCode = ref(new URLSearchParams(location.search).get("pair") ?? ""),
-  pairName = ref("");
+  pairName = ref(""),
+  pairAlias = ref(""),
+  focusedDevice = ref("");
+watch(
+  () => classForm.stage,
+  (stage, before) => {
+    const extras = classForm.subjects.filter(
+      (s) => !subjectPresets[before]?.includes(s),
+    );
+    classForm.subjects = [
+      ...new Set([...(subjectPresets[stage] ?? []), ...extras]),
+    ].slice(0, 20);
+  },
+);
 const detailTitle = ref(""),
   details = ref<unknown>(null),
   confirmTitle = ref(""),
@@ -280,14 +301,18 @@ async function run(action: () => Promise<void>) {
 }
 async function refresh() {
   now.value = Date.now();
-  const selected = model.selected;
+  const requestToken = session.token;
   const value = await refreshModel();
+  if (requestToken !== session.token) return;
+  // 后台刷新期间用户仍可切换班级，返回结果不能把选择切回请求发起时的班级。
+  const selected = model.selected;
   if (value.classes.some((c) => c.id === selected)) value.selected = selected;
   if (!value.classes.some((c) => c.id === value.selected))
     value.selected = value.classes[0]?.id ?? "";
   replaceModel(value);
   if (page.value === "contents") await recordsView.value?.reload();
 }
+useDeviceFeed(current, refresh);
 async function handleEntry() {
   const invite = new URLSearchParams(location.search).get("invite");
   if (invite) {
@@ -329,9 +354,9 @@ async function finishLogout() {
   } catch {
     /* 网络中断或会话已失效时仍须允许退出本机。 */
   } finally {
-    session.token = "";
+    setSession("");
     session.systemAdmin = false;
-    sessionStorage.removeItem("kanban-session");
+
     replaceModel(emptyModel());
     page.value = "overview";
     error.value = "";
@@ -348,8 +373,8 @@ async function changePassword() {
   await run(async () => {
     await api("/auth/change-password", "POST", passwordForm);
     passwordForm.oldPassword = passwordForm.newPassword = "";
-    session.token = "";
-    sessionStorage.removeItem("kanban-session");
+    setSession("");
+
     replaceModel(emptyModel());
     accountDialog.value?.close();
     flash("密码已修改，原会话已撤销，请重新登录。");
@@ -491,18 +516,22 @@ async function inspectPair() {
       code: pairCode.value,
     });
     pairName.value = r.name;
+    pairAlias.value = `${current.value?.name ?? "教室"} · 讲台电脑`;
   });
 }
 async function bind() {
   await run(async () => {
-    await api("/device-pairings/confirm", "POST", {
+    const bound = await api("/device-pairings/confirm", "POST", {
       classId: model.selected,
       code: pairCode.value,
+      name: pairAlias.value.trim(),
     });
     await refresh();
+    focusedDevice.value = bound.id;
+    page.value = "devices";
     bindDialog.value?.close();
     pairName.value = "";
-    flash("设备绑定成功，等待首次快照应用。");
+    flash(`已绑定「${bound.name}」。请在这台电脑的客户端勾选“启用桌面展示”。`);
   });
 }
 let ticker: ReturnType<typeof setInterval>;
@@ -517,8 +546,7 @@ onMounted(async () => {
         await handleEntry();
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
-          session.token = "";
-          sessionStorage.removeItem("kanban-session");
+          setSession("");
         }
         throw e;
       }
@@ -788,7 +816,11 @@ onUnmounted(() => {
             @records="page = 'contents'"
             @drafts="page = 'drafts'"
             @timetable="page = 'settings'"
-            @devices="page = 'devices'"
+            @devices="
+              focusedDevice = $event ?? '';
+              page = 'devices';
+            "
+            @guide="startGuide"
             @design="openStudio"
           />
           <ContentRecords
@@ -849,6 +881,7 @@ onUnmounted(() => {
             v-else-if="page === 'devices'"
             :classroom="current"
             :devices="devices"
+            :focus-device-id="focusedDevice"
             :reload="refresh"
             :now="now"
             @refresh="run(refresh)"
@@ -1071,6 +1104,7 @@ onUnmounted(() => {
         </AppSelect></label
       >
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+      <SubjectPicker v-model="classForm.subjects" :stage="classForm.stage" />
       <button class="button primary full">创建班级</button>
     </form>
   </dialog>
@@ -1097,10 +1131,19 @@ onUnmounted(() => {
     <p v-if="pairName" class="notice subtle">
       设备：{{ pairName }}<br />班级：{{ current?.name }}
     </p>
+    <label v-if="pairName" class="field"
+      >给这台电脑起个名字
+      <input
+        v-model="pairAlias"
+        maxlength="60"
+        placeholder="例如：六年级1班 · 讲台电脑"
+      />
+      <small>名称会显示在网页和这台电脑的客户端，之后也能修改。</small>
+    </label>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <button
       class="button primary full"
-      :disabled="pairCode.length !== 6"
+      :disabled="pairCode.length !== 6 || (!!pairName && !pairAlias.trim())"
       @click="pairName ? bind() : inspectPair()"
     >
       {{ pairName ? "确认绑定此设备与班级" : "核对设备" }}

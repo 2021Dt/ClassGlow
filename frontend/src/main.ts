@@ -10,6 +10,7 @@ import "./workspace-theme.css";
 import "./studio-controls.css";
 import "./select.css";
 import "./glass.css";
+import "./device-workspace.css";
 
 // 下载页无需登录，也不触发工作台的数据读取。
 const entry = /^\/download\/?$/.test(location.pathname)
