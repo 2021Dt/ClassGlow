@@ -12,14 +12,14 @@
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | 0.4.8，组合画布、教师界面、账号恢复与公告；准确提交通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.4.9，全屏底板、组件内容设置、发布记录删除与画布外观更新；准确提交通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
 | 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.4.8 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+| Windows 发布 | 0.4.9 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
 
@@ -28,6 +28,16 @@
 部署脚本在迁移前停止本项目 API 与 Web 并保留数据库备份；原有账号、班级和设备绑定不因本次新增表迁移而失效。旧结构备份仍可下载、查看数量或删除；恢复前需要先在隔离副本上迁移到当前结构，不要直接覆盖在线数据库。恢复和数据库迁移会清除当前回传，并维持原有重新登录、重新绑定要求。
 
 停用、日常空间清理和彻底移除的顺序见 [服务器后期清理](SERVER-CLEANUP.md)。两份文档随代码存放在服务器 `/opt/classglow/docs/`，不包含安装密钥、口令或私钥。
+
+### 0.4.9 更新
+
+本次数据库结构继续使用 `a913c07b5e2f`，组件独立寄语和倒计时保存在已有布局 JSON 中。部署仍先保存一致性备份，保留已有账号、班级和设备绑定。底板铺满显示器，内部画布使用完整区域；旧设计的组件坐标保留，显示范围会扩展至完整底板。
+
+教室电脑需退出旧客户端，安装 0.4.9 才能使用新的排版、独立寄语、倒计时与首次同步修复。更新服务器不会自动安装客户端。下载页保留更新日志与下载限流，并展示作者 `by @dp`。
+
+发布列表新增永久删除，按原有班级、角色和内容版本检查；同时移除对应修订历史并推进班级同步版本。旧数据库备份中的内容不会随在线删除而清除，备份管理见清理文档。
+
+网页直接集成 `liquid-glass-react@1.1.1`、Magic UI 官方 BentoGrid / MagicCard 与 `reka-ui@2.11.0`。React 运行时与组件随 Vite 构建打包，不依赖运行时 CDN。依赖锁定在 `package-lock.json`，服务器继续使用 `npm ci`。浏览器折射使用 SVG / backdrop-filter，Safari 与 Firefox 的效果按原库支持情况降级；Windows 静态壁纸渲染仍与网页原库效果不同。
 
 ### 0.4.8 更新
 
@@ -276,7 +286,7 @@ dc run --rm --no-deps \
 
 2026-11-03 已在 106 服务器完成 Linux Docker 镜像构建、SQLite 迁移、现有 Nginx 接入和公网 TLS 签发；`https://teacher.dgplus.vip/`、`/api/health`、`/api/setup/status` 已从服务器和开发电脑访问通过。证书有效期至 2027-02-01，续期由现有 Certbot 定时器负责。生产管理员由使用者在服务器菜单自行创建，没有预置管理员或演示数据。公网登录后的真实学校业务仍待开户后验收；本地隔离验证范围见 [验收记录](VERIFICATION.md)。
 
-Windows x64 0.4.8 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.8-win-x64-setup.exe)，大小 53,255,947 字节，SHA-256 为 `d07e43f49c73b24fa2f0b877bcadd15f05440f9463c95e643046a80ea9bf088f`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
+Windows x64 0.4.9 当前用户安装包提供[公网下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.9-win-x64-setup.exe)，大小 53,288,721 字节，SHA-256 为 `044ebe52d78cf3b4a6206c8bd77703415f9e3f297b251fed498e6cefe54ae21c`。内置运行时，包含首次隐私告知和正式卸载入口，仍为未签名测试版。Windows 清理范围见 [隐私与卸载](WINDOWS-PRIVACY.md)，服务器停用和清理范围见 [服务器清理说明](SERVER-CLEANUP.md)。
 
 0.4.7 在创建首个窗口前启用本进程的软件绘制，启动/设置窗口不再使用 DWM 云母背景，取消正文从零透明度开始的动画。不会修改系统全局图形设置。启动异常通过系统对话框提示，并在原产品数据目录写入有限诊断；未出现异常的静默白屏不保证产生日志。2026-11-04 用户已在原故障 Windows 11 测试机更新到 0.4.7，并确认标题按钮和隐私引导页可以正常显示、操作，首次打开白屏复测通过。无需新的数据库迁移、服务或端口，原下载限流继续生效。
 

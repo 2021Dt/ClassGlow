@@ -248,14 +248,14 @@ function slot(key: GridKey) {
     <p v-if="issue" class="field-error" role="alert">{{ issue }}</p>
     <div class="grid-settings">
       <label class="field"
-        >选中卡片<select v-model="selected">
+        >选中卡片<AppSelect v-model="selected">
           <option v-for="key in keys" :key="key" :value="key">
             {{ labels[key] }}{{ modelValue.modules[key] ? "" : "（隐藏）" }}
           </option>
-        </select></label
+        </AppSelect></label
       >
       <label class="field"
-        >宽度<select
+        >宽度<AppSelect
           :value="rect.w"
           :disabled="disabled"
           @change="
@@ -263,10 +263,10 @@ function slot(key: GridKey) {
           "
         >
           <option v-for="w in 8" :key="w" :value="w + 4">{{ w + 4 }} 格</option>
-        </select></label
+        </AppSelect></label
       >
       <label class="field"
-        >高度<select
+        >高度<AppSelect
           :value="rect.h"
           :disabled="disabled"
           @change="
@@ -280,7 +280,7 @@ function slot(key: GridKey) {
           >
             {{ h + minHeight(selected) - 1 }} 格
           </option>
-        </select></label
+        </AppSelect></label
       >
       <label class="field"
         >左侧留空<input

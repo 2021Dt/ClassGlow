@@ -19,7 +19,7 @@ using FontFamily = System.Windows.Media.FontFamily;
 namespace ClassroomBoard;
 
 public sealed record Frame(string Path, string PageSetId, int Page, int Count, string Theme, string Material, string Reason);
-public sealed record TextSlice(string Subject, List<string> Lines, bool Continued);
+public sealed record TextSlice(string Subject, List<string> Lines, bool Continued, bool ShowSubject = false);
 
 public static class JsonRead
 {
@@ -87,23 +87,24 @@ public sealed partial class Renderer(string directory)
         }
         return result;
     }
-    public static List<List<TextSlice>> Paginate(IEnumerable<JsonNode> contents, double size, double width, double budget, Typeface? typeface = null, bool keepWhole = false)
+    public static List<List<TextSlice>> Paginate(IEnumerable<JsonNode> contents, double size, double width, double budget, Typeface? typeface = null, bool keepWhole = false, bool subjectLabels = false)
     {
         if (budget < 1 || width <= 0) throw new InvalidDataException("当前布局没有足够空间，请调整模块或字号。");
         var pages = new List<List<TextSlice>> { new() }; double used = 0;
         foreach (var item in contents) {
             var lines = Wrap(item.Str("body"), size, width, typeface); int offset = 0;
+            double label = subjectLabels && item.Str("subject").Length > 0 && budget >= 1.9 ? .9 : 0;
             // 短作业整条换页，只有一页装不下的作业才拆成续页。
-            if (keepWhole && used > 0 && lines.Count <= budget && used + .45 + lines.Count > budget) {
+            if (keepWhole && used > 0 && lines.Count + label <= budget && used + .45 + label + lines.Count > budget) {
                 pages.Add(new());
                 used = 0;
             }
             while (offset < lines.Count) {
                 double gap = pages[^1].Count > 0 ? .45 : 0;
-                if (budget - used - gap < 1) { pages.Add(new()); used = 0; gap = 0; }
-                int take = Math.Min(lines.Count - offset, (int)Math.Floor(budget - used - gap));
-                pages[^1].Add(new(item.Str("subject"), lines.GetRange(offset, take), offset > 0));
-                offset += take; used += take + gap;
+                if (budget - used - gap - label < 1) { pages.Add(new()); used = 0; gap = 0; }
+                int take = Math.Min(lines.Count - offset, (int)Math.Floor(budget - used - gap - label + 1e-9));
+                pages[^1].Add(new(item.Str("subject"), lines.GetRange(offset, take), offset > 0, label > 0));
+                offset += take; used += take + gap + label;
                 if (pages.Count > 10000) throw new InvalidDataException("内容分页过多，保留上个完整画面。");
             }
         }
@@ -240,7 +241,6 @@ public sealed partial class Renderer(string directory)
     private DrawingGroup Background(JsonNode layout, string theme, string material, double left, double right, bool highContrast, IEnumerable<Rect> panels)
     {
         bool dark = theme == "mica_dark";
-        double total = 1920 - left - right;
         string backgroundMode = layout.Str("backgroundMode", "mica");
         double opacity = layout.Int("surfaceOpacity", 38) / 100d;
         Brush background = highContrast ? SystemColors.WindowBrush : BrushOf(backgroundMode == "color" ? layout.Str("backgroundColor", "#E7E8EB") : dark ? "#25272C" : "#E7E8EB");
@@ -262,7 +262,7 @@ public sealed partial class Renderer(string directory)
                     picture.StreamSource = stream; picture.DecodePixelWidth = 1920; picture.EndInit(); picture.Freeze();
                     var imageBrush = new ImageBrush(picture) { Stretch = Stretch.UniformToFill };
                     bg.DrawRectangle(imageBrush, null, new Rect(0, 0, 1920, 1080));
-                    if (material == "subtle") {
+                    if (material == "subtle" && layout.Str("editor") != "canvas") {
                         var backdrop = new DrawingVisual { Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 32 } };
                         using (var context = backdrop.RenderOpen()) context.DrawRectangle(imageBrush, null, new Rect(0, 0, 1920, 1080));
                         var bitmapBackground = new RenderTargetBitmap(1920, 1080, 96, 96, PixelFormats.Pbgra32);
@@ -271,9 +271,9 @@ public sealed partial class Renderer(string directory)
                 }
                 void Panel(double x, double y, double w, double h, bool inner = false) {
                     var bounds = new Rect(x, y, w, h);
-                    double radius = inner ? 32 : 40;
+                    double radius = inner ? 32 : 0;
                     if (!inner && !highContrast && layout.Str("panelImage").Length > 0) {
-                        // 底板图片有自己的铺放方式，不改变底板外的桌面背景。
+                        // 底板始终覆盖完整显示区域，图片在底板内按老师选择的方式铺放。
                         bg.PushClip(new RectangleGeometry(bounds, radius, radius));
                         bg.DrawRectangle(surface, null, bounds);
                         bg.DrawRectangle(PictureBrush(layout.Str("panelImage"), layout.Str("panelImageFit", "cover"), layout.Str("panelImagePosition", "center")), null, bounds);
@@ -314,9 +314,9 @@ public sealed partial class Renderer(string directory)
                     edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#10FFFFFF"), .48));
                     edge.GradientStops.Add(new((Color)ColorConverter.ConvertFromString(dark ? "#38FFFFFF" : "#A0FFFFFF"), 1));
                     bg.DrawRoundedRectangle(glass, new Pen(edge, 1.2), bounds, radius, radius);
-                    bg.DrawRoundedRectangle(null, new Pen(BrushOf(dark ? "#30000000" : "#12000000"), .7), new Rect(x + 1.5, y + 1.5, w - 3, h - 3), radius - 1.5, radius - 1.5);
+                    if (inner) bg.DrawRoundedRectangle(null, new Pen(BrushOf(dark ? "#30000000" : "#12000000"), .7), new Rect(x + 1.5, y + 1.5, w - 3, h - 3), radius - 1.5, radius - 1.5);
                 }
-                Panel(left, 48, total, 984);
+                Panel(0, 0, 1920, 1080);
                 foreach (var panel in panels) Panel(panel.X, panel.Y, panel.Width, panel.Height, true);
             }
             layer.Freeze(); if (backgrounds.Count >= 2) backgrounds.Clear(); backgrounds[cacheKey] = layer;

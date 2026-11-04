@@ -59,37 +59,54 @@ export function newWidget(
     ...patch,
   };
 }
-export function canvasTemplate(
-  name: "standard" | "columns" | "notes" | "blank",
-): CanvasWidget[] {
+export type CanvasTemplate =
+  "standard" | "bento" | "columns" | "notes" | "blank";
+export function canvasTemplate(name: CanvasTemplate): CanvasWidget[] {
   if (name === "blank") return [];
   const item = (kind: WidgetKind, x: number, y: number, w: number, h: number) =>
     newWidget(kind, { x, y, w, h });
+  // 参考 Magic UI Bento Grid：主内容占大格，辅助信息按等距小格组合。
+  if (name === "bento")
+    return [
+      item("homework", 40, 32, 856, 828),
+      item("datetime", 920, 32, 640, 210),
+      item("todo", 920, 266, 640, 230),
+      item("timetable", 920, 520, 304, 340),
+      item("countdown", 1248, 520, 312, 184),
+      newWidget("message", {
+        x: 1248,
+        y: 728,
+        w: 312,
+        h: 132,
+        showTitle: false,
+        fontSize: 24,
+      }),
+    ].map((widget) => ({ ...widget, radius: 28, opacity: 22 }));
   if (name === "columns")
     return [
-      item("datetime", 0, 0, 520, 180),
-      item("countdown", 540, 0, 520, 180),
-      item("message", 1080, 0, 520, 180),
-      item("homework", 0, 200, 520, 700),
-      item("todo", 540, 200, 520, 700),
-      item("timetable", 1080, 200, 520, 700),
+      item("datetime", 40, 32, 496, 190),
+      item("countdown", 552, 32, 496, 190),
+      item("message", 1064, 32, 496, 190),
+      item("homework", 40, 246, 496, 614),
+      item("todo", 552, 246, 496, 614),
+      item("timetable", 1064, 246, 496, 614),
     ];
   if (name === "notes")
     return [
-      item("datetime", 0, 0, 500, 200),
-      item("homework", 520, 0, 560, 900),
-      item("todo", 1100, 0, 500, 440),
-      item("timetable", 0, 220, 500, 680),
-      item("message", 1100, 460, 500, 220),
-      item("countdown", 1100, 700, 500, 200),
+      item("datetime", 40, 32, 404, 190),
+      item("homework", 468, 32, 648, 828),
+      item("todo", 1140, 32, 420, 366),
+      item("timetable", 40, 246, 404, 614),
+      item("message", 1140, 422, 420, 224),
+      item("countdown", 1140, 670, 420, 190),
     ];
   return [
-    item("datetime", 0, 0, 680, 180),
-    item("countdown", 700, 0, 420, 180),
-    item("message", 1140, 0, 460, 180),
-    item("homework", 0, 200, 840, 700),
-    item("todo", 860, 200, 740, 260),
-    item("timetable", 860, 480, 740, 420),
+    item("datetime", 40, 32, 680, 190),
+    item("countdown", 744, 32, 388, 190),
+    item("message", 1156, 32, 404, 190),
+    item("homework", 40, 246, 828, 614),
+    item("todo", 892, 246, 668, 252),
+    item("timetable", 892, 522, 668, 338),
   ];
 }
 export function toCanvas(layout: Layout): Layout {

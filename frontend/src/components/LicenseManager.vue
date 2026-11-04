@@ -248,12 +248,12 @@ defineExpose({ reload });
           /><button type="submit">搜索</button>
         </form>
         <div class="admin-filter-selects">
-          <select v-model="status" aria-label="许可码状态" @change="filter">
+          <AppSelect v-model="status" aria-label="许可码状态" @change="filter">
             <option value="">全部状态</option>
             <option value="pending">待兑换</option>
             <option value="used">已兑换</option>
             <option value="revoked">已撤销</option>
-            <option value="expired">已过期</option></select
+            <option value="expired">已过期</option></AppSelect
           ><button
             v-if="status || searchTerm"
             class="text-button"
@@ -408,12 +408,12 @@ defineExpose({ reload });
             /><button type="button" @click="findUsers">查找</button>
           </div>
           <label class="field"
-            >许可接收人<select v-model="form.userId" required>
+            >许可接收人<AppSelect v-model="form.userId" required>
               <option disabled value="">请选择班主任或普通老师</option>
               <option v-for="user in users" :key="user.id" :value="user.id">
                 {{ user.name }} · {{ user.login }}
               </option>
-            </select></label
+            </AppSelect></label
           >
           <p class="admin-field-help">
             只显示可正常登录的教师账号，系统管理员直接享有全部功能。

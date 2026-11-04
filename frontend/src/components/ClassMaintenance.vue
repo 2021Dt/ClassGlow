@@ -179,11 +179,11 @@ async function cancelTransfer() {
               required
               maxlength="60" /></label
           ><label class="field"
-            >学段<select v-model="config.stage">
+            >学段<AppSelect v-model="config.stage">
               <option>小学</option>
               <option>初中</option>
               <option>高中</option>
-            </select></label
+            </AppSelect></label
           ><label class="field"
             >学科<textarea
               v-model="config.subjects"
@@ -310,7 +310,7 @@ async function cancelTransfer() {
       </div>
       <div v-else class="transfer-form">
         <label class="field"
-          >接收成员<select v-model="recipient" :disabled="!editable">
+          >接收成员<AppSelect v-model="recipient" :disabled="!editable">
             <option value="">请选择本班有效成员</option>
             <option
               v-for="m in members.filter((m) => m.role !== 'owner')"
@@ -319,7 +319,7 @@ async function cancelTransfer() {
             >
               {{ m.name }} · {{ roleLabel(m.role) }}
             </option>
-          </select></label
+          </AppSelect></label
         ><button
           class="button secondary"
           :disabled="!editable || !recipient"
@@ -343,13 +343,13 @@ async function cancelTransfer() {
     </header>
     <template v-if="editing"
       ><label class="field"
-        >角色<select
+        >角色<AppSelect
           v-model="editing.role"
           :disabled="classroom.role !== 'owner'"
         >
           <option value="teacher">科任老师</option>
           <option value="admin">管理员</option>
-        </select></label
+        </AppSelect></label
       >
       <div class="subject-checks">
         <label v-for="s in classroom.subjects" :key="s"

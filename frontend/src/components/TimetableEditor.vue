@@ -181,7 +181,7 @@ async function cancelTemplate(template: any) {
         <div class="section-heading">
           <h2>已发布课表</h2>
           <label v-if="classroom.templates?.length" class="field"
-            >模板区间<select v-model="viewingTemplate">
+            >模板区间<AppSelect v-model="viewingTemplate">
               <option value="">当前有效模板</option>
               <option
                 v-for="t in classroom.templates"
@@ -190,7 +190,7 @@ async function cancelTemplate(template: any) {
               >
                 {{ t.effectiveFrom }} — {{ t.effectiveUntil }}
               </option>
-            </select></label
+            </AppSelect></label
           >
         </div>
         <p class="muted small">
@@ -280,11 +280,11 @@ async function cancelTemplate(template: any) {
               ><input v-model="p.end" type="time" required /></label
             ><label
               ><span class="sr-only">第 {{ index + 1 }} 节科目</span
-              ><select v-model="p.subject">
+              ><AppSelect v-model="p.subject">
                 <option v-for="s in classroom.subjects" :key="s">
                   {{ s }}
                 </option>
-              </select></label
+              </AppSelect></label
             ><button
               class="icon-button destructive"
               :aria-label="`移除第 ${index + 1} 节`"
@@ -357,13 +357,13 @@ async function cancelTemplate(template: any) {
           <label class="field"
             >日期<DatePicker type="date" v-model="override.date" /></label
           ><label class="field"
-            >调整方式<select v-model="override.mode">
+            >调整方式<AppSelect v-model="override.mode">
               <option value="closed">当日停课</option>
               <option value="weekday">采用某星期课程</option>
               <option value="custom">逐节配置当日课程</option>
-            </select></label
+            </AppSelect></label
           ><label v-if="override.mode === 'weekday'" class="field"
-            >采用课程<select v-model.number="override.weekday">
+            >采用课程<AppSelect v-model.number="override.weekday">
               <option
                 v-for="(name, index) in weekdayNames"
                 :key="index"
@@ -371,7 +371,7 @@ async function cancelTemplate(template: any) {
               >
                 {{ name }}
               </option>
-            </select></label
+            </AppSelect></label
           ><template v-if="override.mode === 'custom'"
             ><div
               v-for="(p, index) in override.periods"
@@ -383,11 +383,11 @@ async function cancelTemplate(template: any) {
               ><label class="field"
                 >结束<input v-model="p.end" type="time" /></label
               ><label class="field"
-                >科目<select v-model="p.subject">
+                >科目<AppSelect v-model="p.subject">
                   <option v-for="s in classroom.subjects" :key="s">
                     {{ s }}
                   </option>
-                </select></label
+                </AppSelect></label
               ><button
                 class="icon-button destructive"
                 :aria-label="`移除临时课程 ${index + 1}`"

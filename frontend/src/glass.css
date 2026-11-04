@@ -1,0 +1,77 @@
+/* 官方 React 组件的容器适配；折射和高光由原库负责。 */
+.liquid-glass-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: top left;
+  pointer-events: none;
+}
+.canvas-board .board-shell {
+  backdrop-filter: none;
+}
+.canvas-studio .studio-palette .studio-magic-card {
+  border-radius: 16px;
+  border-width: 1px;
+  border-style: solid;
+}
+.canvas-studio .studio-palette .studio-magic-card button {
+  width: 100%;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.canvas-studio .studio-toolbar {
+  background: #ffffffc9;
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow:
+    0 1px 0 #ffffffd9,
+    0 8px 24px #293b5204;
+}
+.canvas-studio .studio-inspector-tabs {
+  background: #e9eef5a8;
+  border: 1px solid #ffffffa6;
+  box-shadow: inset 0 1px 3px #192e4d07;
+}
+.canvas-studio .studio-inspector-tabs button.active {
+  background: linear-gradient(145deg, #fffffff5, #ffffff9c);
+  border-color: #fff;
+  box-shadow:
+    0 2px 7px #30476b12,
+    inset 0 1px 0 #fff;
+}
+.canvas-studio .studio-palette button {
+  box-shadow:
+    0 1px 0 #ffffff,
+    0 4px 12px #26395104;
+  background: linear-gradient(145deg, #fff, #f9fbfd);
+  border-color: #e7ebf2;
+}
+.canvas-studio .studio-surface-swatch.swatch-glass {
+  background:
+    radial-gradient(ellipse at 10% 80%, #b7c6ea, transparent 65%),
+    linear-gradient(120deg, #d4e5ed, #e9e2ef);
+}
+.canvas-studio .swatch-glass > span {
+  background: #ffffff24;
+  box-shadow:
+    inset 1px 1px 1px #fff9,
+    inset -1px -1px 1px #fff6,
+    0 4px 9px #41587612;
+}
+.solid .liquid-glass-layer {
+  display: none;
+}
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  .liquid-glass-layer {
+    display: none;
+  }
+  .app-select-menu {
+    backdrop-filter: none;
+    background: Canvas;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-magic-card .transition-opacity {
+    transition: none;
+  }
+}

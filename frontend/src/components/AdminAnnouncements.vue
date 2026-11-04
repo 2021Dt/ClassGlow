@@ -186,10 +186,10 @@ onMounted(() => void reload());
             </label>
             <label class="field"
               >接收范围
-              <select v-model="form.scope">
+              <AppSelect v-model="form.scope">
                 <option value="all">全体账号</option>
                 <option value="selected">指定账号</option>
-              </select>
+              </AppSelect>
             </label>
             <p v-if="form.scope === 'all'" class="announcement-scope-note muted small">
               公告撤回前，后续开通的账号也会收到。

@@ -252,7 +252,10 @@ onMounted(() => {
     </main>
 
     <footer class="download-footer">
-      <span><Monitor :size="16" />ClassGlow · 班级看板</span>
+      <span
+        ><Monitor :size="16" />ClassGlow · 班级看板
+        <span class="download-author">by @dp</span></span
+      >
       <div>
         <button @click="copyLink">
           <Check v-if="copied" :size="15" /><Copy v-else :size="15" />{{
@@ -611,6 +614,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.download-author {
+  padding-left: 8px;
+  color: #64748b;
+  white-space: nowrap;
 }
 .download-footer button {
   background: transparent;

@@ -51,7 +51,6 @@ export function canvasPages(
   context: CanvasRenderingContext2D,
   now: number,
 ): Record<string, Slice[][]> {
-  const width = layout.iconMargin === "none" ? 1776 : 1560;
   return Object.fromEntries(
     (layout.canvas ?? [])
       .filter((item) => item.visible)
@@ -63,7 +62,7 @@ export function canvasPages(
             item,
             classroom,
             contents,
-            (item.w / 1600) * width,
+            item.w,
             (line) => context.measureText(line).width,
             now,
           ),
@@ -103,11 +102,7 @@ export function widgetPages(
               compare(b.created, a.created) ||
               compare(a.id, b.id)
             : 0),
-      )
-      .map((c) => ({
-        ...c,
-        body: item.kind === "homework" ? `${c.subject} · ${c.body}` : c.body,
-      }));
+      );
   else if (item.kind === "timetable")
     entries = classroom.timetable.map(
       (name, index) =>
@@ -125,7 +120,9 @@ export function widgetPages(
         body:
           item.kind === "text"
             ? resolveText(item, classroom, contents, now)
-            : classroom.message,
+            : item.dataSource === "custom"
+              ? item.text
+              : classroom.message,
       } as Content,
     ];
   const budget = Math.max(
@@ -145,5 +142,6 @@ export function widgetPages(
     ),
     measure,
     item.kind === "homework",
+    item.kind === "homework" && !item.subjectFilter,
   );
 }

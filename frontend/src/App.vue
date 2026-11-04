@@ -438,12 +438,16 @@ async function changeContent(c: Content, action: string) {
     if (!reason.trim()) return;
   }
   ask(
-    action === "withdraw"
-      ? "撤回正式内容"
-      : action === "complete"
-        ? "标记提醒完成"
-        : "恢复提醒",
-    `${current.value?.name} · ${c.subject}。操作将更新正式版本，历史记录保留。`,
+    action === "delete"
+      ? "删除发布记录"
+      : action === "withdraw"
+        ? "撤回正式内容"
+        : action === "complete"
+          ? "标记提醒完成"
+          : "恢复提醒",
+    action === "delete"
+      ? `永久删除「${c.subject}」这条内容及其修改历史，教室同步后移除。删除范围为${current.value?.name}，无法撤销。`
+      : `${current.value?.name} · ${c.subject}。操作将更新正式版本，历史记录保留。`,
     async () => {
       let until: string | undefined;
       if (action === "restore" && new Date(c.until).getTime() <= now.value) {
@@ -453,13 +457,23 @@ async function changeContent(c: Content, action: string) {
         if (!input) return;
         until = new Date(`${input}:00+08:00`).toISOString();
       }
-      await api(`/contents/${c.id}/${action}`, "POST", {
-        revision: c.revision,
-        reason,
-        ...(until ? { until } : {}),
-      });
+      await api(
+        action === "delete"
+          ? `/contents/${c.id}`
+          : `/contents/${c.id}/${action}`,
+        action === "delete" ? "DELETE" : "POST",
+        {
+          revision: c.revision,
+          reason,
+          ...(until ? { until } : {}),
+        },
+      );
       await refresh();
-      flash("正式记录已更新，等待设备应用。");
+      flash(
+        action === "delete"
+          ? "已删除，教室同步后移除。"
+          : "正式记录已更新，等待设备应用。",
+      );
     },
   );
 }
@@ -617,14 +631,14 @@ onUnmounted(() => {
           class="class-selector"
           data-tour="class-switch"
         >
-          <School :size="19" /><select
+          <School :size="19" /><AppSelect
             v-model="model.selected"
             aria-label="切换当前班级"
           >
             <option v-if="!model.classes.length" value="">我的班级</option>
             <option v-for="c in model.classes" :key="c.id" :value="c.id">
               {{ c.name }}{{ c.archived ? "（已归档）" : "" }}
-            </option></select
+            </option></AppSelect
           ><ChevronDown :size="15" />
         </div>
         <button
@@ -1050,11 +1064,11 @@ onUnmounted(() => {
           required
           placeholder="例如五年级二班" /></label
       ><label class="field"
-        >学段<select v-model="classForm.stage">
+        >学段<AppSelect v-model="classForm.stage">
           <option>小学</option>
           <option>初中</option>
           <option>高中</option>
-        </select></label
+        </AppSelect></label
       >
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <button class="button primary full">创建班级</button>

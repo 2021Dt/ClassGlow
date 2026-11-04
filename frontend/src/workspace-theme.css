@@ -344,8 +344,12 @@
   font-size: 12px;
 }
 .canvas-studio .studio-inspector-tabs button.active {
-  color: #0071e3;
-  border-color: #0071e3;
+  color: #202631;
+  background: #fff;
+  border-color: #ffffff;
+  box-shadow:
+    0 1px 4px #16233712,
+    0 0 0 1px #18213306;
 }
 .canvas-studio .studio-property-body :is(input, select, textarea) {
   border-radius: 10px;

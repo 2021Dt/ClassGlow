@@ -1,0 +1,329 @@
+/* 借鉴 Apple 的层次、shadcn 卡片分组与 Radix 分段控件；全部使用项目自己的 Vue/CSS。 */
+.canvas-studio .studio-library {
+  background: #fafbfc;
+  padding: 18px 14px;
+}
+.canvas-studio .studio-palette {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.canvas-studio .studio-palette button {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  min-height: 74px;
+  padding: 10px 4px;
+  border: 1px solid #e9ecf1;
+  border-radius: 13px;
+  background: #fff;
+  color: #424b5a;
+  font-size: 11px;
+  box-shadow: 0 2px 3px #1c273303;
+}
+.canvas-studio .studio-palette button > svg:last-child {
+  display: none;
+}
+.studio-palette-icon {
+  display: grid;
+  place-items: center;
+  color: #5878a1;
+}
+.canvas-studio .studio-palette button:hover {
+  border-color: #bfd5ef;
+  background: #f2f7fd;
+}
+.canvas-studio .studio-layers article {
+  border-radius: 10px;
+  padding: 4px;
+  margin: 5px 0;
+}
+.canvas-studio .layer-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px;
+  font-size: 11px;
+  color: #535d6c;
+}
+.layer-name > svg {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+.layer-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.layer-name small {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  color: #7c8b9c;
+}
+.canvas-studio .studio-inspector-tabs {
+  margin: 14px 14px 0;
+  border: 0;
+  border-radius: 11px;
+  background: #f0f2f5;
+  padding: 4px;
+  gap: 3px;
+}
+.canvas-studio .studio-inspector-tabs button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 4px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.canvas-studio .studio-property-body {
+  padding: 18px;
+}
+.canvas-studio .studio-property-body .field {
+  font-size: 12px;
+  gap: 8px;
+  color: #596474;
+  margin-bottom: 18px;
+}
+.canvas-studio .studio-property-body :is(input, select, textarea) {
+  background-color: #fafbfd;
+  border-color: #e3e7ee;
+  border-radius: 10px;
+  min-height: 38px;
+}
+.canvas-studio
+  .studio-property-body
+  :is(input, select, textarea):focus-visible {
+  outline: 2px solid #b5d2fa;
+  outline-offset: 2px;
+  border-color: #90b8ed;
+}
+.canvas-studio .studio-property-body input[type="checkbox"] {
+  min-height: 14px;
+}
+.canvas-studio .studio-property-body input[type="range"] {
+  min-height: 26px;
+}
+.canvas-studio .studio-property-body fieldset {
+  min-width: 0;
+}
+.canvas-studio .studio-selected-heading {
+  margin-bottom: 20px;
+  padding: 0 0 16px;
+}
+.canvas-studio .studio-selected-heading strong {
+  font-size: 15px;
+  color: #283240;
+}
+.canvas-studio .studio-selected-heading .icon-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.canvas-studio .studio-selected-heading .icon-button:hover {
+  background: #f2f4f7;
+}
+.canvas-studio .studio-composition {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-color: #edf0f4;
+}
+.studio-save-piece summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  color: #788597;
+  font-size: 11px;
+}
+.studio-save-piece summary::after {
+  content: "+";
+  margin-left: auto;
+  font-size: 16px;
+}
+.studio-save-piece[open] summary::after {
+  content: "−";
+}
+.studio-save-piece .studio-piece-form {
+  margin-top: 12px;
+}
+.canvas-studio .studio-property-group {
+  padding: 18px 0;
+  border-color: #e9edf3;
+}
+.canvas-studio .studio-property-group summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475367;
+}
+.studio-source-segments {
+  width: 100%;
+  display: flex;
+  gap: 3px;
+  background: #eef1f6;
+  border-radius: 10px;
+  padding: 4px;
+}
+.studio-source-segments button {
+  flex: 1;
+  padding: 8px 2px;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12px;
+  color: #69778a;
+}
+.studio-source-segments button[aria-pressed="true"] {
+  background: #fff;
+  color: #285a98;
+  box-shadow: 0 1px 4px #1d304315;
+}
+.canvas-studio .studio-content-binding {
+  padding: 14px;
+  border: 1px solid #e7edf5;
+  background: #f8fafd;
+  border-radius: 14px;
+  margin-bottom: 18px;
+}
+.canvas-studio .studio-content-binding > strong {
+  font-size: 12px;
+  color: #4b5c72;
+}
+.canvas-studio .studio-subject-options {
+  gap: 6px;
+}
+.canvas-studio .studio-subject-options button {
+  padding: 6px 10px;
+  border-color: transparent;
+  background: #fff;
+  border-radius: 8px;
+  color: #647389;
+}
+.canvas-studio .studio-subject-options button[aria-pressed="true"] {
+  background: #e4effe;
+  color: #245eab;
+  border-color: #bad3f5;
+}
+.studio-surface-presets {
+  padding: 18px 0;
+  border-top: 1px solid #e9edf3;
+}
+.studio-surface-presets > strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475367;
+}
+.studio-surface-presets > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.studio-surface-presets button {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: center;
+  padding: 6px 4px 8px;
+  border: 1px solid #e7ebf1;
+  border-radius: 11px;
+  background: #fff;
+  color: #69768a;
+  font-size: 10px;
+}
+.studio-surface-presets button[aria-pressed="true"] {
+  border-color: #84b5f7;
+  box-shadow: 0 0 0 2px #eaf3ff;
+  color: #2865b5;
+}
+.studio-surface-swatch {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 60px;
+  border-radius: 7px;
+  background: linear-gradient(130deg, #dae7f7, #f2e8ee);
+}
+.studio-surface-swatch > span {
+  width: 44px;
+  height: 44px;
+  padding: 4px 6px;
+  border: 1px solid #ffffffc9;
+  border-radius: 7px;
+  font-size: 17px;
+  text-align: left;
+  line-height: 1.15;
+  background: #ffffff4d;
+  color: #4c627c;
+}
+.studio-surface-swatch > span > span {
+  display: block;
+  height: 2px;
+  width: 23px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.24;
+}
+.studio-surface-swatch > span > span:last-child {
+  width: 16px;
+}
+.swatch-paper {
+  background: #f1f3f6;
+}
+.swatch-paper > span {
+  background: #fff;
+  border-color: #e3e8ee;
+}
+.swatch-ink {
+  background: #e7eaf0;
+}
+.swatch-ink > span {
+  background: #242936;
+  color: #e9eef7;
+  border-color: #394253;
+}
+.canvas-studio .studio-type-presets button {
+  background: #f2f4f8;
+  color: #566478;
+}
+.canvas-studio .studio-font-sample {
+  background: #f8f9fc;
+  border: 1px solid #edf0f4;
+  color: #384558;
+}
+.canvas-studio .studio-source-value {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8f9fc;
+}
+.canvas-studio .studio-object-label {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #d6e5fa;
+  color: #3266ac;
+  box-shadow: 0 3px 12px #2041720e;
+}
+.canvas-studio button:focus-visible {
+  outline: 2px solid #7aaaf0;
+  outline-offset: 2px;
+}
+@media (min-width: 1001px) {
+  .canvas-studio .studio-body {
+    grid-template-columns: 198px minmax(0, 1fr) 294px;
+  }
+}
+@media (max-width: 650px) {
+  .canvas-studio .studio-palette {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .canvas-studio .studio-inspector-tabs {
+    margin-top: 12px;
+  }
+  .canvas-studio .studio-source-segments button {
+    min-height: 40px;
+  }
+}

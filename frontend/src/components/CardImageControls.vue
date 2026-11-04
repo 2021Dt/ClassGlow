@@ -83,7 +83,7 @@ async function upload(event: Event) {
     </label>
     <template v-if="image">
       <label class="field"
-        >图片铺放<select
+        >图片铺放<AppSelect
           :value="fit"
           @change="
             change({
@@ -93,10 +93,10 @@ async function upload(event: Event) {
         >
           <option value="cover">铺满卡片</option>
           <option value="contain">完整显示</option>
-        </select></label
+        </AppSelect></label
       >
       <label class="field"
-        >图片位置<select
+        >图片位置<AppSelect
           :value="position"
           @change="
             change({
@@ -110,7 +110,7 @@ async function upload(event: Event) {
           <option value="bottom">靠下</option>
           <option value="left">靠左</option>
           <option value="right">靠右</option>
-        </select></label
+        </AppSelect></label
       >
       <button type="button" class="text-button" @click="change({ image: '' })">
         <Trash2 :size="14" />移除图片

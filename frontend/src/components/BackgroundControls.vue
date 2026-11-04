@@ -68,7 +68,7 @@ async function upload(event: Event) {
   <fieldset class="background-controls" :disabled="disabled || busy">
     <legend>桌面背景</legend>
     <label class="field"
-      >背景类型<select
+      >背景类型<AppSelect
         :value="modelValue.backgroundMode ?? 'mica'"
         @change="
           change({
@@ -80,7 +80,7 @@ async function upload(event: Event) {
         <option value="mica">云母 · 跟随主题</option>
         <option value="color">自定义纯色</option>
         <option value="image">自定义图片</option>
-      </select></label
+      </AppSelect></label
     >
     <label v-if="modelValue.backgroundMode === 'color'" class="field"
       >背景底色<input

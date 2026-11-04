@@ -65,9 +65,6 @@ public sealed partial class Renderer
         Brush text = highContrast ? SystemColors.WindowTextBrush : BrushOf(dark ? "#F1F3F7" : "#252A32");
         Brush muted = highContrast ? text : BrushOf(dark ? "#C4CBD5" : "#565F6D");
         Brush accent = highContrast ? text : BrushOf(dark ? "#A6D9BE" : "#316B59");
-        double left = layout.Str("iconMargin") == "left" ? 264 : 48;
-        double right = layout.Str("iconMargin") == "right" ? 264 : 48;
-        double areaWidth = 1920 - left - right - 48;
         bool expired = state.ClockUncertain || state.LastContact > 0 && clock.ToUnixTimeSeconds() - state.ClockOffset - state.LastContact > 72 * 3600;
         var contents = (snapshot["contents"] as JsonArray ?? new()).Where(n => n is not null && n.Str("state") == "published" &&
             DateTimeOffset.TryParse(n.Str("from"), out var start) && DateTimeOffset.TryParse(n.Str("until"), out var end) && start <= clock && clock < end && !expired).Select(n => n!).ToList();
@@ -93,7 +90,7 @@ public sealed partial class Renderer
         foreach (var widget in (layout["canvas"] as JsonArray ?? new()).Where(w => w is not null && w.Flag("visible", true))) {
             var item = widget!;
             string kind = item.Str("kind");
-            var bounds = new Rect(left + 24 + item.Int("x") / 1600d * areaWidth, 72 + item.Int("y"), item.Int("w") / 1600d * areaWidth, item.Int("h"));
+            var bounds = new Rect(item.Int("x"), item.Int("y"), item.Int("w"), item.Int("h"));
             var entries = new List<JsonNode>();
             if (!expired && kind is "homework" or "todo") {
                 string subject = kind == "homework" ? item.Str("subjectFilter") : "";
@@ -104,16 +101,16 @@ public sealed partial class Renderer
                         .ThenBy(c => c.Str("id"), StringComparer.Ordinal);
                 }
                 foreach (var content in ordered)
-                    entries.Add(new JsonObject { ["subject"] = content.Str("subject"), ["body"] = kind == "homework" ? content.Str("subject") + " · " + content.Str("body") : content.Str("body") });
+                    entries.Add(new JsonObject { ["subject"] = content.Str("subject"), ["body"] = content.Str("body") });
             } else if (!expired && kind == "timetable") {
                 for (int index = 0; index < courses.Count; index++) entries.Add(new JsonObject { ["subject"] = index.ToString(), ["body"] = $"{index + 1}  {courses[index]}" });
             } else if (kind == "text" || !expired && kind == "message") {
-                entries.Add(new JsonObject { ["subject"] = "", ["body"] = kind == "text" ? ResolveText(item) : classroom.Str("message") });
+                entries.Add(new JsonObject { ["subject"] = "", ["body"] = kind == "text" ? ResolveText(item) : item.Str("dataSource") == "custom" ? item.Str("text") : classroom.Str("message") });
             }
             bool hasTitle = kind != "text" && item.Flag("showTitle", true);
             double size = item.Int("fontSize", 32), pad = hasTitle ? 48 : 32;
             double inset = hasTitle ? 46 + item.Int("titleSize", 28) * 1.5 : 32;
-            var pages = Paginate(entries, size, bounds.Width - pad, Math.Max(1, (bounds.Height - inset) / (size * item.Num("lineHeight", 1.5))), WidgetFont(item), keepWhole: kind == "homework");
+            var pages = Paginate(entries, size, bounds.Width - pad, Math.Max(1, (bounds.Height - inset) / (size * item.Num("lineHeight", 1.5))), WidgetFont(item), keepWhole: kind == "homework", subjectLabels: kind == "homework" && item.Str("subjectFilter").Length == 0);
             parts.Add(new(item, bounds, pages));
         }
         int count = Math.Max(1, parts.Select(p => p.Pages.Count).DefaultIfEmpty(1).Max());
@@ -127,7 +124,9 @@ public sealed partial class Renderer
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen()) {
             dc.PushTransform(new ScaleTransform(width / 1920d, height / 1080d));
-            dc.DrawDrawing(Background(layout, theme, material, left, right, highContrast, []));
+            dc.DrawDrawing(Background(layout, theme, material, 0, 0, highContrast, []));
+            // 整个显示器对应 1600 × 900 设计坐标，组件与编辑器的选框保持一致。
+            dc.PushTransform(new ScaleTransform(1.2, 1.2));
             foreach (var part in parts) {
                 var item = part.Widget; var box = part.Bounds;
                 string kind = item.Str("kind"), surface = item.Str("surface", "glass");
@@ -146,6 +145,20 @@ public sealed partial class Renderer
                     color.A = (byte)Math.Round(item.Int("opacity", 45) * 2.55);
                     Brush fill = highContrast ? SystemColors.WindowBrush : new SolidColorBrush(color);
                     dc.DrawGeometry(fill, surface == "glass" ? new Pen(highContrast ? text : BrushOf("#80FFFFFF"), 1) : null, outline);
+                    if (surface == "glass" && kind != "shape" && material == "subtle") {
+                        // 对应网页 Liquid Glass 的静态亮边与柔光层；文字在材质之后绘制。
+                        // 壁纸是静态图，不运行网页的鼠标动效与 SVG 折射滤镜。
+                        var glaze = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+                        glaze.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#20FFFFFF"), 0));
+                        glaze.GradientStops.Add(new(Colors.Transparent, .46));
+                        glaze.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#0CC9DEFF"), 1));
+                        var rim = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+                        rim.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#EDFFFFFF"), 0));
+                        rim.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#14FFFFFF"), .42));
+                        rim.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#4AB7CFFF"), .72));
+                        rim.GradientStops.Add(new((Color)ColorConverter.ConvertFromString("#A6FFFFFF"), 1));
+                        dc.DrawGeometry(glaze, new Pen(rim, 2.4), outline);
+                    }
                 }
                 void Label(string value, double x, double y, double font, double span, Brush? brush = null) {
                     var formatted = Text(value, font, brush ?? ink, typeface);
@@ -167,16 +180,17 @@ public sealed partial class Renderer
                     Label(state.ClockUncertain ? "请现场校准系统时间" : clock.ToString("M月d日 dddd", CultureInfo.GetCultureInfo("zh-CN")), box.X + 24, top + 42 + large * 1.2, 22, box.Width - 48);
                 } else if (kind == "countdown" && !expired) {
                     double large = size + 24, top = box.Y + (box.Height - (34 + large * 1.2 + 28)) / 2;
-                    bool valid = DateTime.TryParseExact(classroom.Str("eventDate"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) && classroom.Str("event").Length > 0;
+                    var source = item.Str("dataSource") == "custom" ? item : classroom;
+                    bool valid = DateTime.TryParseExact(source.Str("eventDate"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) && source.Str("event").Length > 0;
                     int days = (date.Date - clock.Date).Days;
-                    Label(valid ? "距离" + classroom.Str("event") : "事件倒计时", box.X + 24, top, 24, box.Width - 48);
+                    Label(valid ? "距离" + source.Str("event") : "事件倒计时", box.X + 24, top, 24, box.Width - 48);
                     Label(valid && days >= 0 ? days == 0 ? "就是今天" : $"{days} 天" : "等待设置", box.X + 24, top + 34, large, box.Width - 48);
-                    Label(valid ? classroom.Str("eventDate") : "在班级设置中填写事件和日期", box.X + 24, top + 34 + large * 1.2, 20, box.Width - 48);
+                    Label(valid ? source.Str("eventDate") : "", box.X + 24, top + 34 + large * 1.2, 20, box.Width - 48);
                 } else if (kind is not ("image" or "shape")) {
                     var slices = part.Pages[(page - 1) % part.Pages.Count];
                     string title = item.Str("title");
-                    if (kind == "homework" && slices.FirstOrDefault() is { Continued: true } first)
-                        title = "续 · " + (first.Subject.Length > 0 ? first.Subject : "作业");
+                    if (kind == "homework" && slices.FirstOrDefault() is { Continued: true, ShowSubject: false })
+                        title += " · 续";
                     bool hasTitle = kind != "text" && item.Flag("showTitle", true);
                     if (hasTitle) Label(title, box.X + 24, box.Y + 18, item.Int("titleSize", 28), box.Width - 48);
                     double padding = hasTitle ? 24 : 16, y = box.Y + (hasTitle ? 26 + item.Int("titleSize", 28) * 1.5 : 16);
@@ -187,6 +201,19 @@ public sealed partial class Renderer
                         if (slices.Count == 0) Label(kind == "homework" ? subject.Length > 0 ? $"暂无{subject}作业" : "今日暂无作业" : kind == "todo" ? "暂无提醒" : kind == "timetable" ? configured ? "今日无课程" : "课表待配置" : "", box.X + padding, y, 24, box.Width - padding * 2, muted);
                         foreach (var slice in slices) {
                             Brush lineBrush = kind == "timetable" && slice.Subject == currentCourse.ToString() ? accent : ink;
+                            if (slice.ShowSubject) {
+                                // 学科标签与正文分别绘制，标签占用的高度与网页分页预算一致。
+                                var caption = Text(slice.Subject + (slice.Continued ? " · 续" : ""), size * .55, ink,
+                                    new Typeface(typeface.FontFamily, typeface.Style, FontWeights.SemiBold, typeface.Stretch));
+                                double available = box.Width - padding * 2;
+                                caption.MaxTextWidth = Math.Max(1, available - 20); caption.MaxLineCount = 1; caption.Trimming = TextTrimming.CharacterEllipsis;
+                                double badgeWidth = Math.Min(available, caption.WidthIncludingTrailingWhitespace + 20), badgeHeight = lineHeight * .65;
+                                double badgeX = box.X + padding + (item.Str("align") == "center" ? (available - badgeWidth) / 2 : item.Str("align") == "right" ? available - badgeWidth : 0);
+                                var badge = ink.Clone(); badge.Opacity = .08;
+                                dc.DrawRoundedRectangle(badge, null, new Rect(badgeX, y, badgeWidth, badgeHeight), 6, 6);
+                                dc.DrawText(caption, new Point(badgeX + 10, y + Math.Max(0, (badgeHeight - caption.Height) / 2)));
+                                y += lineHeight * .9;
+                            }
                             foreach (string line in slice.Lines) { Label(line, box.X + padding, y, size, box.Width - padding * 2, lineBrush); y += lineHeight; }
                             y += lineHeight * .45;
                         }
@@ -194,10 +221,7 @@ public sealed partial class Renderer
                 }
                 dc.Pop();
             }
-            string lastSync = state.LastContentSync > 0 ? DateTimeOffset.FromUnixTimeSeconds((long)state.LastContentSync).ToOffset(TimeSpan.FromHours(8)).ToString("M月d日 HH:mm") : "尚未同步";
-            string status = expired ? state.ClockUncertain ? "系统时间异常，时效内容已暂停，请现场校时" : "离线超过 72 小时，时效内容已暂停" : $"内容同步 {lastSync} · 画面生成 {clock:MM月dd日 HH:mm}";
-            DrawText(dc, status, left + 24, 990, 22, muted, areaWidth - 220);
-            DrawText(dc, $"第 {page} / {count} 页", 1920 - right - 204, 990, 22, muted, 180);
+            dc.Pop();
             dc.Pop();
         }
         var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); bitmap.Render(visual);

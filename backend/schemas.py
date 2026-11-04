@@ -1,6 +1,6 @@
 import base64
 import binascii
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from io import BytesIO
 from itertools import combinations, pairwise
 from typing import Literal
@@ -109,6 +109,9 @@ class CanvasWidget(Input):
     groupId: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,80}$")
     dynamicText: bool = False
     subjectFilter: str = Field(default="", max_length=20)
+    dataSource: Literal["classroom", "custom"] = "classroom"
+    event: str = Field(default="", max_length=60)
+    eventDate: str = Field(default="", pattern=r"^(\d{4}-\d{2}-\d{2})?$")
     showTitle: bool = True
     shape: Literal["rectangle", "ellipse", "pill", "triangle", "diamond", "hexagon", "star", "custom"] = "rectangle"
     vertices: list[ShapePoint] = Field(default_factory=list, max_length=24)
@@ -143,6 +146,8 @@ class CanvasWidget(Input):
 
     @model_validator(mode="after")
     def usable_size(self):
+        if self.eventDate:
+            date.fromisoformat(self.eventDate)
         if self.kind == "shape" and self.shape == "custom" and len({(point.x, point.y) for point in self.vertices}) < 3:
             raise ValueError("自由轮廓至少需要三个不同的顶点")
         if self.x + self.w > 1600 or self.y + self.h > 900:

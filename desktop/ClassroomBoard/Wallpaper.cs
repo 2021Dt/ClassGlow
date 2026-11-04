@@ -29,6 +29,7 @@ public sealed class Wallpaper : IWallpaper
 {
     private static readonly Guid ClassId = new("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD");
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out NativeRect rect);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int length);
 
@@ -59,10 +60,12 @@ public sealed class Wallpaper : IWallpaper
     }
     public bool SafeToApply()
     {
-        // 保守策略：只有前台本来就是桌面才应用。其他软件、全屏和输入场景全部延后。
-        // 不激活窗口、不切桌面、不注入按键，不以后台更新为理由影响正在使用电脑的人。
+        // 本程序的设置窗口也允许同步壁纸，首次启用后无需手动关闭窗口。
+        // 其他程序在前台时继续延后，设置壁纸本身不切换窗口或抢占焦点。
         IntPtr hwnd = GetForegroundWindow();
         if (hwnd == IntPtr.Zero) return false;
+        GetWindowThreadProcessId(hwnd, out uint processId);
+        if (processId == (uint)Environment.ProcessId) return true;
         var name = new System.Text.StringBuilder(256);
         if (GetClassName(hwnd, name, name.Capacity) == 0) return false;
         return name.ToString() is "Progman" or "WorkerW";

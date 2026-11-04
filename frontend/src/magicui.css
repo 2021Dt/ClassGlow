@@ -1,0 +1,13 @@
+/* 使用官方组件所需的 Tailwind 工具类，不加载全局样式重置。 */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "./components/magicui";
+@source "./components/ui";
+@source "./react";
+@theme inline {
+  --color-background: #ffffff;
+  --color-border: #e3e8f0;
+  --color-ring: #91b9f0;
+  --color-primary: #0867e6;
+  --color-primary-foreground: #ffffff;
+}

@@ -36,6 +36,8 @@ import {
   Boxes,
   Group,
   Ungroup,
+  SlidersHorizontal,
+  Palette,
 } from "@lucide/vue";
 import type {
   CanvasWidget,
@@ -62,7 +64,9 @@ import {
   widgetMinimum,
 } from "../canvas";
 import CanvasBoard from "./CanvasBoard.vue";
+import StudioPalette from "./StudioPalette.vue";
 import BackgroundControls from "./BackgroundControls.vue";
+import DatePicker from "./DatePicker.vue";
 import CardImageControls from "./CardImageControls.vue";
 import ShapeSketch from "./ShapeSketch.vue";
 import {
@@ -317,6 +321,79 @@ function add(kind: WidgetKind) {
   change({ ...model.value, editor: "canvas", canvas: [...items.value, item] });
   select(item.id, false, [item]);
 }
+function bindSubject(subject: string) {
+  if (!current.value) return;
+  const oldTitle = current.value.subjectFilter
+    ? `${current.value.subjectFilter}作业`
+    : widgetLabels.homework;
+  patchItem({
+    subjectFilter: subject,
+    ...(current.value.title === oldTitle
+      ? { title: subject ? `${subject}作业` : widgetLabels.homework }
+      : {}),
+  });
+}
+const surfacePresets: {
+  key: string;
+  label: string;
+  patch: Partial<CanvasWidget>;
+}[] = [
+  {
+    key: "glass",
+    label: "柔光玻璃",
+    patch: {
+      surface: "glass",
+      fillColor: "#FFFFFF",
+      opacity: 22,
+      radius: 28,
+      textColor: "",
+    },
+  },
+  {
+    key: "paper",
+    label: "素白纸张",
+    patch: {
+      surface: "solid",
+      fillColor: "#FFFFFF",
+      opacity: 95,
+      radius: 24,
+      textColor: "#252A32",
+    },
+  },
+  {
+    key: "ink",
+    label: "静谧深色",
+    patch: {
+      surface: "solid",
+      fillColor: "#242936",
+      opacity: 96,
+      radius: 24,
+      textColor: "#F4F6FA",
+    },
+  },
+];
+function activeSurface(preset: (typeof surfacePresets)[number]) {
+  return (
+    !!current.value &&
+    Object.entries(preset.patch).every(
+      ([key, value]) => current.value![key as keyof CanvasWidget] === value,
+    )
+  );
+}
+function setDataSource(value: string) {
+  const dataSource = value as "classroom" | "custom";
+  // 第一次改为独立内容时带入班级当前值，已有自定义内容在切换后仍保留。
+  patchItem({
+    dataSource,
+    ...(dataSource === "custom"
+      ? {
+          text: current.value?.text || props.classroom.message,
+          event: current.value?.event || props.classroom.event,
+          eventDate: current.value?.eventDate || props.classroom.eventDate,
+        }
+      : {}),
+  });
+}
 function select(id: string, extend = false, source = items.value) {
   const item = source.find((entry) => entry.id === id);
   if (!item) return;
@@ -461,7 +538,9 @@ function applyTemplate() {
   change({
     ...model.value,
     editor: "canvas",
-    canvas: canvasTemplate(template.value as "standard"),
+    canvas: canvasTemplate(
+      template.value as Parameters<typeof canvasTemplate>[0],
+    ),
     reverse: false,
   });
   selection.value = [];
@@ -671,10 +750,6 @@ function itemStyle(item: CanvasWidget) {
     height: `${item.h / 9}%`,
   };
 }
-const regionStyle = computed(() => ({
-  left: `${(model.value.iconMargin === "left" ? 288 : 72) / 19.2}%`,
-  width: `${(model.value.iconMargin === "none" ? 1776 : 1560) / 19.2}%`,
-}));
 onMounted(() => {
   viewportObserver = new ResizeObserver((entries) => {
     const bounds = entries[0]!.contentRect;
@@ -800,19 +875,7 @@ onUnmounted(() => {
         <div class="studio-section-title">
           <strong>图层素材</strong><span>{{ items.length }}/24</span>
         </div>
-        <div class="studio-palette">
-          <button
-            v-for="entry in palette"
-            :key="entry.kind"
-            :disabled="disabled || items.length >= 24"
-            @click="add(entry.kind)"
-          >
-            <component :is="entry.icon" :size="19" /><span>{{
-              widgetLabels[entry.kind]
-            }}</span
-            ><Plus :size="12" />
-          </button>
-        </div>
+        <StudioPalette :disabled="disabled || items.length >= 24" @add="add" />
         <div class="studio-template">
           <strong>我的积木 <small>本机</small></strong>
           <p v-if="!pieces.length" class="studio-help">
@@ -843,15 +906,16 @@ onUnmounted(() => {
         </div>
         <div class="studio-template">
           <strong>从模板开始</strong
-          ><select
+          ><AppSelect
             v-model="template"
             aria-label="选择画布模板"
             :disabled="disabled"
           >
             <option value="standard">课堂标准</option>
+            <option value="bento">Bento 分区</option>
             <option value="columns">三栏平分</option>
             <option value="notes">灵感便签</option>
-            <option value="blank">空白画布</option></select
+            <option value="blank">空白画布</option></AppSelect
           ><button
             class="button secondary full"
             :disabled="disabled"
@@ -885,7 +949,17 @@ onUnmounted(() => {
               :aria-pressed="selection.includes(item.id)"
               @click="selectLayer(item.id, $event)"
             >
-              {{ item.title || widgetLabels[item.kind] }}</button
+              <component
+                :is="palette.find((entry) => entry.kind === item.kind)?.icon"
+                :size="14"
+              />
+              <span
+                >{{ item.title || widgetLabels[item.kind]
+                }}<small
+                  v-if="item.kind === 'homework' && item.subjectFilter"
+                  >{{ item.subjectFilter }}</small
+                ></span
+              ></button
             ><button
               class="layer-icon"
               :disabled="disabled"
@@ -947,7 +1021,6 @@ onUnmounted(() => {
               ref="surface"
               class="studio-interaction"
               :class="{ snapping: snap }"
-              :style="regionStyle"
               @pointerdown.self="selection = []"
             >
               <div
@@ -1050,14 +1123,16 @@ onUnmounted(() => {
         <div class="studio-inspector-tabs">
           <button
             :class="{ active: propertyTab === 'component' }"
+            :aria-pressed="propertyTab === 'component'"
             @click="propertyTab = 'component'"
           >
-            组件属性</button
+            <SlidersHorizontal :size="14" />组件属性</button
           ><button
             :class="{ active: propertyTab === 'background' }"
+            :aria-pressed="propertyTab === 'background'"
             @click="propertyTab = 'background'"
           >
-            整体外观
+            <Palette :size="14" />整体外观
           </button>
         </div>
         <div v-if="propertyTab === 'component'" class="studio-property-body">
@@ -1140,22 +1215,25 @@ onUnmounted(() => {
                 编辑 {{ item.title || widgetLabels[item.kind] }}
               </button>
             </div>
-            <form class="studio-piece-form" @submit.prevent="savePiece">
-              <input
-                v-model="pieceName"
-                aria-label="积木名称"
-                placeholder="为积木起个名字"
-                maxlength="30"
-                :disabled="disabled"
-              />
-              <button
-                type="submit"
-                class="button secondary"
-                :disabled="disabled || !pieceName.trim()"
-              >
-                保存积木
-              </button>
-            </form>
+            <details class="studio-save-piece">
+              <summary><Boxes :size="14" />存为我的积木</summary>
+              <form class="studio-piece-form" @submit.prevent="savePiece">
+                <input
+                  v-model="pieceName"
+                  aria-label="积木名称"
+                  placeholder="为积木起个名字"
+                  maxlength="30"
+                  :disabled="disabled"
+                />
+                <button
+                  type="submit"
+                  class="button secondary"
+                  :disabled="disabled || !pieceName.trim()"
+                >
+                  保存积木
+                </button>
+              </form>
+            </details>
           </div>
           <div v-if="!selectedItems.length" class="studio-no-selection">
             <Layers :size="27" />
@@ -1221,7 +1299,7 @@ onUnmounted(() => {
               </label>
               <label v-if="current.kind === 'text'" class="field"
                 >插入班级数据
-                <select value="" @change="insertToken">
+                <AppSelect value="" @change="insertToken">
                   <option value="">选择要插入的数据</option>
                   <option
                     v-for="token in textTokens"
@@ -1230,28 +1308,108 @@ onUnmounted(() => {
                   >
                     {{ token }}
                   </option>
-                </select>
+                </AppSelect>
               </label>
-              <label v-if="current.kind === 'homework'" class="field"
-                >展示学科
-                <select
-                  :value="current.subjectFilter ?? ''"
-                  @change="
-                    patchItem({
-                      subjectFilter: ($event.target as HTMLSelectElement).value,
-                    })
-                  "
-                >
-                  <option value="">全部学科</option>
-                  <option
+              <div
+                v-if="current.kind === 'homework'"
+                class="studio-content-binding"
+              >
+                <strong>绑定学科</strong>
+                <div class="studio-subject-options" aria-label="绑定学科">
+                  <button
+                    type="button"
+                    :aria-pressed="!current.subjectFilter"
+                    @click="bindSubject('')"
+                  >
+                    全部学科
+                  </button>
+                  <button
                     v-for="subject in subjectChoices"
                     :key="subject"
-                    :value="subject"
+                    type="button"
+                    :aria-pressed="current.subjectFilter === subject"
+                    @click="bindSubject(subject)"
                   >
                     {{ subject }}
-                  </option>
-                </select>
-              </label>
+                  </button>
+                </div>
+                <small>{{
+                  current.subjectFilter
+                    ? `仅显示已发布的${current.subjectFilter}作业`
+                    : "显示各学科已发布的作业"
+                }}</small>
+              </div>
+              <template v-if="['message', 'countdown'].includes(current.kind)">
+                <div class="field">
+                  内容来源
+                  <div class="studio-source-segments" aria-label="内容来源">
+                    <button
+                      type="button"
+                      :aria-pressed="current.dataSource !== 'custom'"
+                      @click="setDataSource('classroom')"
+                    >
+                      跟随班级
+                    </button>
+                    <button
+                      type="button"
+                      :aria-pressed="current.dataSource === 'custom'"
+                      @click="setDataSource('custom')"
+                    >
+                      独立内容
+                    </button>
+                  </div>
+                </div>
+                <template v-if="current.dataSource === 'custom'">
+                  <label v-if="current.kind === 'message'" class="field"
+                    >寄语内容
+                    <textarea
+                      :value="current.text"
+                      rows="5"
+                      maxlength="2000"
+                      @focus="checkpoint"
+                      @input="
+                        patchItem(
+                          {
+                            text: ($event.target as HTMLTextAreaElement).value,
+                          },
+                          false,
+                        )
+                      "
+                    />
+                  </label>
+                  <template v-else>
+                    <label class="field"
+                      >活动名称<input
+                        :value="current.event ?? ''"
+                        maxlength="60"
+                        @focus="checkpoint"
+                        @input="
+                          patchItem(
+                            {
+                              event: ($event.target as HTMLInputElement).value,
+                            },
+                            false,
+                          )
+                        "
+                    /></label>
+                    <label class="field"
+                      >目标日期<DatePicker
+                        :model-value="current.eventDate ?? ''"
+                        :disabled="disabled || current.locked"
+                        @update:model-value="patchItem({ eventDate: $event })"
+                    /></label>
+                  </template>
+                </template>
+                <p v-else class="studio-source-value">
+                  {{
+                    current.kind === "message"
+                      ? classroom.message || "班级尚未填写寄语"
+                      : [classroom.event, classroom.eventDate]
+                          .filter(Boolean)
+                          .join(" · ") || "班级尚未设置活动"
+                  }}
+                </p>
+              </template>
               <label
                 v-if="
                   ['homework', 'todo', 'timetable', 'message'].includes(
@@ -1407,7 +1565,7 @@ onUnmounted(() => {
                     </button>
                   </div>
                   <label class="field"
-                    >字体样式<select
+                    >字体样式<AppSelect
                       :value="current.fontFamily ?? 'sans'"
                       @change="
                         patchItem({
@@ -1419,7 +1577,7 @@ onUnmounted(() => {
                       <option value="sans">清晰黑体</option>
                       <option value="serif">经典宋体</option>
                       <option value="kai">手写楷体</option>
-                    </select></label
+                    </AppSelect></label
                   >
                   <p
                     class="studio-font-sample"
@@ -1458,7 +1616,7 @@ onUnmounted(() => {
                         @blur="number('titleSize', $event)"
                     /></label>
                     <label class="field"
-                      >文字粗细<select
+                      >文字粗细<AppSelect
                         :value="current.fontWeight ?? 400"
                         @change="
                           patchItem({
@@ -1472,12 +1630,12 @@ onUnmounted(() => {
                         <option :value="500">适中</option>
                         <option :value="600">半粗</option>
                         <option :value="700">加粗</option>
-                      </select></label
+                      </AppSelect></label
                     >
                     <label
                       v-if="!['datetime', 'countdown'].includes(current.kind)"
                       class="field"
-                      >行间距<select
+                      >行间距<AppSelect
                         :value="current.lineHeight ?? 1.5"
                         @change="
                           patchItem({
@@ -1493,7 +1651,7 @@ onUnmounted(() => {
                         <option :value="1.6">舒适 · 1.6</option>
                         <option :value="1.8">宽松 · 1.8</option>
                         <option :value="2">疏朗 · 2.0</option>
-                      </select></label
+                      </AppSelect></label
                     >
                   </div>
                   <div class="studio-color-row">
@@ -1518,7 +1676,7 @@ onUnmounted(() => {
                     </button>
                   </div>
                   <label class="field"
-                    >文字对齐<select
+                    >文字对齐<AppSelect
                       :value="current.align"
                       @change="
                         patchItem({
@@ -1530,11 +1688,32 @@ onUnmounted(() => {
                       <option value="left">左对齐</option>
                       <option value="center">居中</option>
                       <option value="right">右对齐</option>
-                    </select></label
+                    </AppSelect></label
                   >
                 </details></template
-              ><label class="field"
-                >组件底色<select
+              >
+              <div class="studio-surface-presets" aria-label="卡片风格">
+                <strong>卡片风格</strong>
+                <div>
+                  <button
+                    v-for="preset in surfacePresets"
+                    :key="preset.key"
+                    type="button"
+                    :aria-pressed="activeSurface(preset)"
+                    @click="patchItem(preset.patch)"
+                  >
+                    <span
+                      class="studio-surface-swatch"
+                      aria-hidden="true"
+                      :class="`swatch-${preset.key}`"
+                      ><span>Aa<span></span><span></span></span
+                    ></span>
+                    {{ preset.label }}
+                  </button>
+                </div>
+              </div>
+              <label class="field"
+                >组件底色<AppSelect
                   :value="current.surface"
                   @change="
                     patchItem({
@@ -1546,7 +1725,7 @@ onUnmounted(() => {
                   <option value="glass">通透卡片</option>
                   <option value="solid">自定义色块</option>
                   <option value="none">无底色</option>
-                </select></label
+                </AppSelect></label
               >
               <CardImageControls
                 v-if="current.kind !== 'image'"
@@ -1616,7 +1795,7 @@ onUnmounted(() => {
         <div v-else class="studio-property-body">
           <fieldset :disabled="disabled">
             <label class="field"
-              >主题<select
+              >主题<AppSelect
                 :value="model.theme"
                 @change="
                   change({
@@ -1628,9 +1807,9 @@ onUnmounted(() => {
               >
                 <option value="mica_light">云母浅灰</option>
                 <option value="mica_dark">云母深灰</option>
-              </select></label
+              </AppSelect></label
             ><label class="field"
-              >大卡片材质<select
+              >底板材质<AppSelect
                 :value="model.material"
                 @change="
                   change({
@@ -1642,28 +1821,17 @@ onUnmounted(() => {
               >
                 <option value="subtle">通透</option>
                 <option value="solid">纯色</option>
-              </select></label
+              </AppSelect></label
             ><BackgroundControls
               :model-value="model"
               :disabled="disabled"
               @update:model-value="change($event)"
-            /><label class="field"
-              >桌面图标留白<select
-                :value="model.iconMargin"
-                @change="
-                  change({
-                    ...model,
-                    iconMargin: ($event.target as HTMLSelectElement)
-                      .value as Layout['iconMargin'],
-                  })
-                "
-              >
-                <option value="left">左侧</option>
-                <option value="right">右侧</option>
-                <option value="none">不留白</option>
-              </select></label
-            ><label class="field"
-              >自动翻页间隔<select
+            />
+            <p class="studio-source-value">
+              底板固定铺满显示器，组件可自由排版。
+            </p>
+            <label class="field"
+              >自动翻页间隔<AppSelect
                 :value="model.interval"
                 @change="
                   change({
@@ -1677,7 +1845,7 @@ onUnmounted(() => {
                 <option :value="15">15 秒</option>
                 <option :value="20">20 秒</option>
                 <option :value="30">30 秒</option>
-              </select></label
+              </AppSelect></label
             >
           </fieldset>
           <button

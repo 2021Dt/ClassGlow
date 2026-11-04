@@ -149,11 +149,11 @@ function again() {
             重新生成密码
           </button>
           <label class="field"
-            >账号身份<select v-model="form.identity">
+            >账号身份<AppSelect v-model="form.identity">
               <option value="teacher">普通老师 · 维护任教学科</option>
               <option value="headteacher">班主任 · 管理班级和教室</option>
               <option value="system_admin">系统管理员 · 全站最高权限</option>
-            </select></label
+            </AppSelect></label
           >
           <label class="field"
             >账号到期日（北京时间，留空为长期有效）<DatePicker

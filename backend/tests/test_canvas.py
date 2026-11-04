@@ -30,6 +30,10 @@ def test_canvas_publish_snapshot_backup_and_bounds(client, tmp_path):
         for n in range(4)
     ]
     widgets += [
+        {"id": "message", "kind": "message", "x": 0, "y": 0, "w": 400, "h": 250,
+         "dataSource": "custom", "text": "每天向前一点"},
+        {"id": "countdown", "kind": "countdown", "x": 400, "y": 0, "w": 400, "h": 250,
+         "dataSource": "custom", "event": "读书节", "eventDate": "2030-06-01"},
         {
             "id": "words",
             "kind": "text",
@@ -56,6 +60,9 @@ def test_canvas_publish_snapshot_backup_and_bounds(client, tmp_path):
     assert saved_layout["canvas"][-1]["fontFamily"] == "kai"
     assert saved_layout["canvas"][-1]["backgroundImage"] == picture
     assert saved_layout["panelImage"] == picture
+    assert saved_layout["canvas"][-3]["text"] == "每天向前一点"
+    assert saved_layout["canvas"][-2]["dataSource"] == "custom"
+    assert saved_layout["canvas"][-2]["eventDate"] == "2030-06-01"
     snapshot = c.get("/device/snapshot", headers=device_headers).json()
     assert snapshot["classroom"]["layout"] == saved_layout
     old = c.get("/device/snapshot", headers=old_headers)

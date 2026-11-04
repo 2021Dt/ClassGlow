@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import inspect, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -554,6 +554,27 @@ def history(content_id: str, user: User = Depends(actor), db: Session = Depends(
         }
         for h in db.scalars(select(History).where(History.content_id == content_id).order_by(History.revision.desc()))
     ]
+
+
+@app.delete("/contents/{content_id}")
+def delete_content(content_id: str, body: S.RevisionInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+    content = db.get(Content, content_id)
+    if content is None:
+        # 同一次删除重试保持成功，避免网络中断后误以为仍有记录。
+        return {"ok": True}
+    c, m = member(db, user, content.class_id, write=True)
+    content = db.scalar(select(Content).where(Content.id == content_id).execution_options(populate_existing=True))
+    if content is None:
+        return {"ok": True}
+    edit_permission(c, m, content, user, body.reason)
+    if content.revision != body.revision:
+        fail(409, "content_revision_conflict", "内容已被更新，请刷新确认后再删除。")
+    # 先清除关联修订，再删除正文；班级锁使同步版本与删除在同一事务中生效。
+    db.execute(delete(History).where(History.content_id == content.id))
+    db.add(Audit(class_id=c.id, actor=user.id, action="content_deleted", data={"contentId": content.id, "reason": body.reason}))
+    db.delete(content)
+    c.version += 1
+    return {"ok": True}
 
 
 @app.put("/classes/{class_id}/layout")

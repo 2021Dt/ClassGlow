@@ -184,12 +184,12 @@ onBeforeUnmount(() => {
         <button type="button" aria-label="上个月" @click="moveMonth(-1)">
           <ChevronLeft :size="18" />
         </button>
-        <select v-model.number="year" aria-label="年份">
+        <AppSelect v-model.number="year" aria-label="年份">
           <option v-for="y in years" :key="y" :value="y">{{ y }} 年</option>
-        </select>
-        <select v-model.number="month" aria-label="月份">
+        </AppSelect>
+        <AppSelect v-model.number="month" aria-label="月份">
           <option v-for="m in 12" :key="m" :value="m - 1">{{ m }} 月</option>
-        </select>
+        </AppSelect>
         <button type="button" aria-label="下个月" @click="moveMonth(1)">
           <ChevronRight :size="18" />
         </button>
@@ -223,16 +223,16 @@ onBeforeUnmount(() => {
       </span>
       <span v-if="datetime" class="date-time"
         ><span>时间</span
-        ><select v-model="hour" aria-label="小时">
+        ><AppSelect v-model="hour" aria-label="小时">
           <option v-for="h in 24" :key="h" :value="pad(h - 1)">
             {{ pad(h - 1) }}
-          </option></select
+          </option></AppSelect
         ><span>:</span
-        ><select v-model="minute" aria-label="分钟">
+        ><AppSelect v-model="minute" aria-label="分钟">
           <option v-for="m in 60" :key="m" :value="pad(m - 1)">
             {{ pad(m - 1) }}
           </option>
-        </select></span
+        </AppSelect></span
       >
       <span class="date-footer"
         ><button

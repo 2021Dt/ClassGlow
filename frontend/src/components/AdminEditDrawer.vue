@@ -206,14 +206,14 @@ defineExpose({ open });
                 required
                 maxlength="40" /></label
             ><label class="field"
-              >账号身份<select
+              >账号身份<AppSelect
                 v-model="userForm.identity"
                 :disabled="target?.id === session.userId"
               >
                 <option value="teacher">普通老师</option>
                 <option value="headteacher">班主任</option>
                 <option value="system_admin">系统管理员</option>
-              </select></label
+              </AppSelect></label
             >
             <p class="admin-field-help">
               身份控制全站功能入口；班级内的任教与管理权限在班级成员中调整。
@@ -298,11 +298,11 @@ defineExpose({ open });
             </template>
             <template v-else>
               <label class="field"
-                >冻结时间<select v-model.number="securityForm.minutes">
+                >冻结时间<AppSelect v-model.number="securityForm.minutes">
                   <option :value="30">30 分钟</option>
                   <option :value="120">2 小时</option>
                   <option :value="1440">24 小时</option>
-                </select></label
+                </AppSelect></label
               >
               <label class="field"
                 >冻结原因<textarea
@@ -334,7 +334,7 @@ defineExpose({ open });
               /><button type="button" @click="findOwners">查找</button>
             </div>
             <label class="field"
-              >选择负责人<select v-model="classForm.ownerId" required>
+              >选择负责人<AppSelect v-model="classForm.ownerId" required>
                 <option
                   v-for="owner in owners"
                   :key="owner.id"
@@ -342,7 +342,7 @@ defineExpose({ open });
                 >
                   {{ owner.name }} · {{ owner.login }}
                 </option>
-              </select></label
+              </AppSelect></label
             >
             <p class="admin-field-help">
               更换负责人后，原负责人保留班级管理员身份。

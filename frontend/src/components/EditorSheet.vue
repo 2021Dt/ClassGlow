@@ -366,12 +366,12 @@ onUnmounted(() => {
             </details>
             <label class="field"
               >{{ form.kind === "homework" ? "科目" : "提醒范围" }}
-              <select v-model="form.subject">
+              <AppSelect v-model="form.subject">
                 <option v-if="form.kind === 'todo'" value="公共提醒">
                   公共提醒
                 </option>
                 <option v-for="s in subjects" :key="s">{{ s }}</option>
-              </select></label
+              </AppSelect></label
             >
             <p v-if="invalidTargets.length" class="field-error" role="alert">
               {{

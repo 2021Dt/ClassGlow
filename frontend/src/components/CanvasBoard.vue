@@ -5,6 +5,7 @@ import { dateKey, timeLabel } from "../domain";
 import { widgetLabels } from "../canvas";
 import { canvasPageCount, canvasPages } from "../canvasPresentation";
 import { boardFonts, panelImageStyle, shapeStyle } from "../boardAppearance";
+import LiquidGlassLayer from "./LiquidGlassLayer.vue";
 const props = withDefaults(
   defineProps<{
     classroom: Classroom;
@@ -42,13 +43,23 @@ const pageIndex = computed(() =>
   Math.max(0, Math.min(props.page, count.value) - 1),
 );
 watch(count, (value) => emit("pages", value), { immediate: true });
-const days = computed(() =>
-  Math.ceil(
-    (new Date(`${props.classroom.eventDate}T00:00:00+08:00`).getTime() -
-      new Date(`${dateKey(props.now)}T00:00:00+08:00`).getTime()) /
+function countdown(item: CanvasWidget) {
+  const source = item.dataSource === "custom" ? item : props.classroom;
+  const days = Math.round(
+    (Date.parse(source.eventDate ?? "") - Date.parse(dateKey(props.now))) /
       86400000,
-  ),
-);
+  );
+  return {
+    title: source.event ? `距离${source.event}` : "事件倒计时",
+    value:
+      source.event && days >= 0
+        ? days === 0
+          ? "就是今天"
+          : `${days} 天`
+        : "等待设置",
+    date: source.eventDate || "",
+  };
+}
 const dateText = computed(() =>
   new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
@@ -109,6 +120,7 @@ function style(item: CanvasWidget) {
     backgroundPosition: `center,${item.backgroundPosition ?? "center"}`,
     backgroundRepeat: "no-repeat",
     "--widget-line": `${item.fontSize * (item.lineHeight ?? 1.5)}px`,
+    "--widget-subject-size": `${item.fontSize * 0.55}px`,
     "--widget-title-size": `${item.titleSize ?? 28}px`,
     "--widget-title-line": `${(item.titleSize ?? 28) * 1.5}px`,
     "--widget-body-top": `${26 + (item.titleSize ?? 28) * 1.5}px`,
@@ -121,9 +133,10 @@ function entries(item: CanvasWidget) {
 }
 function heading(item: CanvasWidget) {
   const first = entries(item)[0];
-  return item.kind === "homework" && first?.continued
-    ? `续 · ${first.subject || "作业"}`
-    : item.title || widgetLabels[item.kind];
+  const title = item.title || widgetLabels[item.kind];
+  return item.kind === "homework" && first?.continued && !first.showSubject
+    ? `${title} · 续`
+    : title;
 }
 onMounted(() => {
   observer = new ResizeObserver((entries) => {
@@ -131,7 +144,7 @@ onMounted(() => {
     // 下一帧再更新缩放，避免在尺寸通知中触发嵌套的布局刷新。
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => {
-      scale.value = width / 1920;
+      scale.value = width / 1600;
     });
   });
   if (holder.value) observer.observe(holder.value);
@@ -166,6 +179,7 @@ onUnmounted(() => {
             :style="style(item)"
             :aria-label="item.title || widgetLabels[item.kind]"
           >
+            <LiquidGlassLayer v-if="item.surface === 'glass' && item.kind !== 'shape' && layout.material !== 'solid'" :width="item.w" :height="item.h" :radius="item.radius" :scale="scale" />
             <img
               v-if="item.kind === 'image' && item.image"
               :src="item.image"
@@ -187,21 +201,9 @@ onUnmounted(() => {
             >
             <template v-else-if="item.kind === 'countdown'"
               ><div class="canvas-countdown">
-                <p>
-                  {{
-                    classroom.event ? `距离${classroom.event}` : "事件倒计时"
-                  }}
-                </p>
-                <strong>{{
-                  classroom.event && days >= 0
-                    ? days === 0
-                      ? "就是今天"
-                      : `${days} 天`
-                    : "等待设置"
-                }}</strong
-                ><small>{{
-                  classroom.eventDate || "在班级设置中填写事件和日期"
-                }}</small>
+                <p>{{ countdown(item).title }}</p>
+                <strong>{{ countdown(item).value }}</strong>
+                <small>{{ countdown(item).date }}</small>
               </div></template
             >
             <template v-else-if="item.kind !== 'shape'"
@@ -214,7 +216,7 @@ onUnmounted(() => {
                   'free-text': item.kind === 'text' || item.showTitle === false,
                 }"
               >
-                <p
+                <div
                   v-for="entry in entries(item)"
                   :key="entry.id"
                   class="canvas-widget-paragraph"
@@ -224,8 +226,14 @@ onUnmounted(() => {
                       entry.id === `course-${classroom.currentPeriod}`,
                   }"
                 >
-                  {{ entry.lines.join("\n") }}
-                </p>
+                  <div v-if="entry.showSubject" class="canvas-entry-subject">
+                    <span
+                      >{{ entry.subject
+                      }}{{ entry.continued ? " · 续" : "" }}</span
+                    >
+                  </div>
+                  <div>{{ entry.lines.join("\n") }}</div>
+                </div>
                 <p v-if="!entries(item).length" class="canvas-widget-empty">
                   {{
                     item.kind === "homework"
@@ -236,18 +244,13 @@ onUnmounted(() => {
                         ? "暂无提醒"
                         : item.kind === "timetable"
                           ? "暂无课程"
-                          : "在班级设置中填写寄语"
+                          : ""
                   }}
                 </p>
               </div></template
             >
           </section>
         </div>
-        <footer class="canvas-board-status">
-          <span
-            >{{ demo ? "示例内容 · " : "" }}设计预览 {{ timeLabel(now) }}</span
-          ><span>第 {{ pageIndex + 1 }} / {{ count }} 页</span>
-        </footer>
       </div>
     </div>
   </div>

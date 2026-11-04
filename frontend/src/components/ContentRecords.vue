@@ -50,6 +50,8 @@ async function load() {
     if (ticket === serial) {
       items.value = result.items;
       total.value = result.total;
+      if (offset.value > 0 && offset.value >= total.value)
+        offset.value = Math.max(0, Math.ceil(total.value / 20) - 1) * 20;
     }
   } catch (e) {
     if (ticket === serial) error.value = (e as Error).message;
@@ -87,26 +89,26 @@ const mayEdit = (c: Content) =>
   <section class="panel">
     <div class="record-filters">
       <label class="field"
-        >内容类型<select v-model="kind">
+        >内容类型<AppSelect v-model="kind">
           <option value="">全部</option>
           <option value="homework">作业</option>
           <option value="todo">提醒</option>
-        </select></label
+        </AppSelect></label
       ><label class="field"
-        >状态<select v-model="state">
+        >状态<AppSelect v-model="state">
           <option value="">全部状态</option>
           <option value="active">展示中</option>
           <option value="scheduled">待展示</option>
           <option value="ended">展示结束</option>
           <option value="completed">已完成</option>
           <option value="withdrawn">已撤回</option>
-        </select></label
+        </AppSelect></label
       ><label class="field"
-        >学科<select v-model="subject">
+        >学科<AppSelect v-model="subject">
           <option value="">全部学科</option>
           <option value="公共提醒">公共提醒</option>
           <option v-for="s in classroom.subjects" :key="s">{{ s }}</option>
-        </select></label
+        </AppSelect></label
       ><label class="field"
         >某日展示范围<DatePicker type="date" v-model="date" /></label
       ><label class="search-field"
@@ -176,6 +178,13 @@ const mayEdit = (c: Content) =>
             @click="emit('action', c, 'withdraw')"
           >
             撤回
+          </button>
+          <button
+            class="text-button destructive"
+            :disabled="!mayEdit(c)"
+            @click="emit('action', c, 'delete')"
+          >
+            删除
           </button>
         </div>
       </article>

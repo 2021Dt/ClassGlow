@@ -599,7 +599,7 @@ defineExpose({ reload: () => load(true) });
                 /><button type="submit">搜索</button>
               </form>
               <div class="admin-filter-selects">
-                <SlidersHorizontal :size="16" /><select
+                <SlidersHorizontal :size="16" /><AppSelect
                   v-if="tab !== 'audit'"
                   v-model="filters.status"
                   @change="filter"
@@ -608,8 +608,8 @@ defineExpose({ reload: () => load(true) });
                   <option value="">全部状态</option>
                   <option v-for="s in statusOptions" :key="s[0]" :value="s[0]">
                     {{ s[1] }}
-                  </option></select
-                ><select
+                  </option></AppSelect
+                ><AppSelect
                   v-if="tab === 'users'"
                   v-model="filters.license"
                   @change="filter"
@@ -619,8 +619,8 @@ defineExpose({ reload: () => load(true) });
                   <option value="active">许可有效</option>
                   <option value="expiring">7 天内到期</option>
                   <option value="expired">许可已到期</option>
-                  <option value="free">未开通高级功能</option></select
-                ><select
+                  <option value="free">未开通高级功能</option></AppSelect
+                ><AppSelect
                   v-if="tab === 'audit'"
                   v-model="filters.action"
                   @change="filter"
@@ -633,7 +633,7 @@ defineExpose({ reload: () => load(true) });
                     :value="key"
                   >
                     {{ label }}
-                  </option></select
+                  </option></AppSelect
                 ><button
                   v-if="hasFilters"
                   class="text-button"
@@ -701,14 +701,14 @@ defineExpose({ reload: () => load(true) });
                 ></span
               >
               <div>
-                <select
+                <AppSelect
                   v-model.number="pageSize"
                   @change="filter"
                   aria-label="每页条数"
                 >
                   <option :value="10">10 条 / 页</option>
                   <option :value="20">20 条 / 页</option>
-                  <option :value="50">50 条 / 页</option></select
+                  <option :value="50">50 条 / 页</option></AppSelect
                 ><button
                   class="icon-button"
                   aria-label="上一页"

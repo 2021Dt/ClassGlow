@@ -53,6 +53,9 @@ export interface CanvasWidget {
   groupId?: string | null;
   dynamicText?: boolean;
   subjectFilter?: string;
+  dataSource?: "classroom" | "custom";
+  event?: string;
+  eventDate?: string;
   showTitle?: boolean;
   shape?: ShapeKind;
   vertices?: ShapePoint[];

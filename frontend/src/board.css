@@ -75,17 +75,21 @@
 }
 .board-shell {
   position: absolute;
+  inset: 0;
+  border-radius: 0;
+}
+.board-layout-content {
+  position: absolute;
   top: 48px;
   height: 984px;
   left: 264px;
   right: 48px;
-  border-radius: 40px;
 }
-.margin-right .board-shell {
+.margin-right .board-layout-content {
   left: 48px;
   right: 264px;
 }
-.margin-none .board-shell {
+.margin-none .board-layout-content {
   left: 48px;
   right: 48px;
 }

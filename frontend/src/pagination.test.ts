@@ -10,6 +10,27 @@ import {
 import { paginate, wrapText } from "./pagination";
 
 describe("内容完整性与日期边界", () => {
+  it("学科标签占用真实高度，超长正文跨页完整保留", () => {
+    const item = {
+      id: "math",
+      subject: "数学",
+      body: "一\n二\n三\n四",
+    } as Content;
+    const pages = paginate([item], 2.9, 10, (s) => s.length, true, true);
+    expect(pages).toHaveLength(2);
+    expect(pages.flat().map((s) => s.lines)).toEqual([
+      ["一", "二"],
+      ["三", "四"],
+    ]);
+    expect(pages[1]![0]).toMatchObject({
+      showSubject: true,
+      continued: true,
+      subject: "数学",
+    });
+    expect(paginate([item], 1, 10, (s) => s.length, true, true)).toHaveLength(
+      4,
+    );
+  });
   it("中文标点与前文一起换行，正文没有丢失", () => {
     const lines = wrapText("今天认真学习。", 6, (s) => Array.from(s).length);
     expect(lines).toEqual(["今天认真学", "习。"]);
