@@ -8,6 +8,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# 0.4.10 发布的离线资源采用哈希名称；后续版本固定文件名，仅清理这些确定归属的旧文件。
+LEGACY_RENDERER_FILES = ("Renderer/assets/desktop-D_VyVcpg.js", "Renderer/assets/desktop-yi8noDad.css")
 
 
 def main():
@@ -59,6 +61,10 @@ def main():
     )
     install = [f'!insertmacro CheckDirectory "$INSTDIR\\{folder}"' for folder in folders]
     uninstall = install.copy()
+    for name in LEGACY_RENDERER_FILES:
+        relative = Path(name)
+        install += [f'Delete "$INSTDIR\\{relative}"']
+        uninstall += [f'Delete "$INSTDIR\\{relative}"', f'IfFileExists "$INSTDIR\\{relative}" 0 +2', "StrCpy $2 1"]
     # 清单来自编译产物的实际文件，不由卸载程序遍历并猜测哪些文件属于自己。
     for file in sorted(path for path in payload.rglob("*") if path.is_file()):
         relative = file.relative_to(payload)

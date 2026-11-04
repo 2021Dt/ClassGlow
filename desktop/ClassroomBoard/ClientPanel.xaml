@@ -10,6 +10,13 @@
    <StackPanel x:Name="PageBody" Margin="16,20,16,24" MaxWidth="480" VerticalAlignment="Center">
     <Image x:Name="PageArt" Source="{StaticResource GlowConnectArt}" Width="119" Height="104" />
     <TextBlock x:Name="PageTitle" Text="连接班级" Style="{StaticResource GlowPageTitle}" />
+    <Border x:Name="WallpaperConflictBox" Style="{StaticResource GlowCard}" Visibility="Collapsed" Margin="0,0,0,16">
+     <StackPanel>
+      <TextBlock Text="请先退出 Wallpaper Engine" Style="{StaticResource GlowLabel}" FontWeight="SemiBold" />
+      <TextBlock Text="右键系统托盘里的 Wallpaper Engine 图标，选择“退出”，再重新检测。只关闭它的设置窗口不会退出壁纸。" Style="{StaticResource GlowHint}" Margin="0,8,0,12" />
+      <ui:Button Content="我已退出，重新检测" Style="{StaticResource GlowQuiet}" HorizontalAlignment="Left" Click="RecheckWallpaper_Click" />
+     </StackPanel>
+    </Border>
     <StackPanel x:Name="ConnectPage">
      <Border Style="{StaticResource GlowCard}" Padding="26,24">
       <StackPanel>

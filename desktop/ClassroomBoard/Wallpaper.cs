@@ -23,10 +23,12 @@ public interface IWallpaper
     bool SafeToApply();
     void Set(string monitor, string path);
     string Current(string monitor);
+    bool HasConflict(bool refresh = false) => false;
 }
 
 public sealed class Wallpaper : IWallpaper
 {
+    public bool HasConflict(bool refresh = false) => WallpaperConflict.IsRunning(refresh);
     private static readonly Guid ClassId = new("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD");
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);

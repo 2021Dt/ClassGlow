@@ -9,6 +9,14 @@ export default defineConfig({
   build: {
     outDir: "../dist/desktop-material",
     emptyOutDir: true,
-    rolldownOptions: { input: "desktop.html" },
+    rolldownOptions: {
+      input: "desktop.html",
+      // 离线资源随安装包覆盖，版本号已参与材质缓存键；固定名称避免升级遗留旧文件。
+      output: {
+        entryFileNames: "assets/material.js",
+        chunkFileNames: "assets/[name].js",
+        assetFileNames: "assets/[name][extname]",
+      },
+    },
   },
 });

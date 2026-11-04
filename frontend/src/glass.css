@@ -10,8 +10,16 @@
   backdrop-filter: none;
 }
 .canvas-widget.widget-surface-glass {
-  /* 原库的外阴影需要留在卡片之外；正文仍由内部定高容器裁切。 */
-  overflow: visible;
+  /* 网页和离线材质共用：折射留在卡片内，不能向相邻卡片堆叠灰影。 */
+  overflow: hidden;
+}
+.liquid-glass-layer .glass {
+  /* 原库内联的 12px / 40px 深色投影在桌面底图中尤其明显。 */
+  box-shadow: none !important;
+}
+.liquid-glass-layer > span {
+  /* 保留原库的折射与渐变亮边，只移除边缘额外的黑色投影。 */
+  box-shadow: inset 0 0 0 0.5px #ffffff80 !important;
 }
 .canvas-widget > img {
   border-radius: inherit;

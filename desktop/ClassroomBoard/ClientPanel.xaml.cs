@@ -78,6 +78,9 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
     private void RefreshState()
     {
         var state = engine.State;
+        bool conflict = Bound && engine.HasWallpaperConflict();
+        WallpaperConflictBox.Visibility = conflict && (page == "display" ? WallpaperEnabled.IsChecked == true : state.EnableWallpaper)
+            ? Visibility.Visible : Visibility.Collapsed;
         bool hasCode = !Bound && state.PairCode.Length > 0;
         string classroom = state.Snapshot?["classroom"]?["name"]?.GetValue<string>() ?? "已绑定班级";
         PairButton.Visibility = Bound ? Visibility.Collapsed : Visibility.Visible;
@@ -116,8 +119,19 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or InvalidOperationException or IOException or DeviceAuthorizationException) { Tell("绑定未完成：" + error.Message); }
         finally { pairing = false; RefreshState(); }
     }
-    private void Wallpaper_Click(object sender, RoutedEventArgs e) =>
+    private void Wallpaper_Click(object sender, RoutedEventArgs e) {
         MonitorPanel.Visibility = WallpaperEnabled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        RefreshState();
+    }
+    private void RecheckWallpaper_Click(object sender, RoutedEventArgs e)
+    {
+        if (engine.HasWallpaperConflict(refresh: true)) { Tell("Wallpaper Engine 仍在运行，请从它的托盘菜单退出。"); }
+        else {
+            if (!preview) engine.RequestSync();
+            Tell(page == "display" ? "未检测到冲突，可以保存展示设置。" : "未检测到冲突，已请求同步。返回桌面后会恢复展示。");
+        }
+        RefreshState();
+    }
 
     private void Next_Click(object sender, RoutedEventArgs e)
     {

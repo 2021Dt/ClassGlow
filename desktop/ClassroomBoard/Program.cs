@@ -107,8 +107,17 @@ public static class Program
         menu.Items.Add("退出并恢复原壁纸", null, (_, _) => Quit(false));
         tray.ContextMenuStrip = menu;
         tray.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) statusWindow.Open(); };
+        tray.BalloonTipClicked += (_, _) => statusWindow.Open();
+        bool conflictNotified = false;
         timer.Tick += async (_, _) => {
-            try { await engine.Tick(); tray.Text = ("班级看板 · " + engine.Status)[..Math.Min(60, ("班级看板 · " + engine.Status).Length)]; }
+            try {
+                await engine.Tick();
+                tray.Text = ("班级看板 · " + engine.Status)[..Math.Min(60, ("班级看板 · " + engine.Status).Length)];
+                bool conflict = engine.State.BindingId.Length > 0 && engine.State.EnableWallpaper && !engine.State.LocalPaused && !engine.State.RemotePaused && engine.HasWallpaperConflict();
+                // 每次冲突仅提醒一次；不抢占课件窗口，也不擅自结束其他程序。
+                if (conflict && !conflictNotified) tray.ShowBalloonTip(8000, "请先退出 Wallpaper Engine", "请从 Wallpaper Engine 的托盘菜单退出，再回到班级看板重新检测。", Forms.ToolTipIcon.Warning);
+                conflictNotified = conflict;
+            }
             catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException) { engine.State.Error = "本机运行异常，请在托盘状态页检查"; }
         };
         timer.Start();

@@ -14,7 +14,9 @@ public sealed class DeviceAuthorizationException(string message) : Exception(mes
 public sealed class Engine : IDisposable
 {
     public ClientState State { get; }
-    public string Status => State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => "等待返回桌面后安静应用", _ => "等待同步或启用展示" };
+    public bool HasWallpaperConflict(bool refresh = false) => wallpaper.HasConflict(refresh);
+    public string Status => State.EnableWallpaper && !State.LocalPaused && !State.RemotePaused && HasWallpaperConflict() ? "请先退出 Wallpaper Engine" : State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => "等待返回桌面后安静应用", _ => "等待同步或启用展示" };
+    private const string ConflictMessage = "其他壁纸软件正在运行，请在教室电脑退出后恢复展示";
     private readonly StateStore store;
     private readonly Renderer renderer;
     private readonly GlassMaterial glass;
@@ -192,7 +194,8 @@ public sealed class Engine : IDisposable
     {
         string availability = State.LocalPaused || State.RemotePaused ? "paused" : !State.EnableWallpaper ? "disabled" : "unavailable";
         string image = "";
-        if (availability == "unavailable" && State.AppliedVersion > 0 && ClientLifecycle.OwnedWallpaper(State.AppliedWallpaper, store.DirectoryPath) && File.Exists(State.AppliedWallpaper)) {
+        if (availability == "unavailable" && !HasWallpaperConflict(refresh: true) && State.AppliedVersion > 0 && ClientLifecycle.OwnedWallpaper(State.AppliedWallpaper, store.DirectoryPath) && File.Exists(State.AppliedWallpaper)) {
+            // 动态壁纸会盖在系统壁纸上，存在冲突时不能将底下的缓存图报告为当前展示。
             // 只读取已成功设置的本程序 PNG。绝不捕获桌面、其他窗口或用户原壁纸。
             bool current = string.Equals(wallpaper.Current(State.OriginalMonitor), State.AppliedWallpaper, StringComparison.OrdinalIgnoreCase);
             availability = current ? "displayed" : "replaced";
@@ -231,6 +234,12 @@ public sealed class Engine : IDisposable
         else if (action == "resume" && State.LocalPaused) Reject("本机暂停需现场恢复");
         else if (group == "page" && (State.LocalPaused || State.RemotePaused)) Reject("暂停期间不能翻页");
         else if (group == "page" && command.Str("pageSetId") != State.PageSetId) Reject("页集合已改变");
+        else if (action is "resume" or "set_page" or "auto_page" && HasWallpaperConflict(refresh: true)) {
+            DeferWallpaperConflict();
+            result = Report(); result["commandId"] = id;
+            result["result"] = "deferred"; result["error"] = ConflictMessage;
+            await Request("/device/command-acks", "POST", result); return;
+        }
         else if (action != "sync" && (!State.EnableWallpaper || !wallpaper.SafeToApply())) {
             result["result"] = "deferred"; result["error"] = "前台保护，等待返回桌面后安静应用";
             await Request("/device/command-acks", "POST", result); return;
@@ -264,6 +273,7 @@ public sealed class Engine : IDisposable
     private async Task<bool> ApplyCurrent(int requestedPage = 0, bool force = false)
     {
         if (!State.EnableWallpaper) { State.ApplyState = "waiting"; State.Error = "请在本机状态页启用桌面展示"; return false; }
+        if (!State.LocalPaused && !State.RemotePaused && HasWallpaperConflict()) return DeferWallpaperConflict();
         if (!wallpaper.SafeToApply()) { State.ApplyState = "deferred"; return false; }
         if (State.LocalPaused || State.RemotePaused) { if (State.ApplyState != "paused") RestoreWallpaper(); State.ApplyState = "paused"; changed = false; Save(); return true; }
         var monitor = wallpaper.Read(State.MonitorIndex);
@@ -279,6 +289,7 @@ public sealed class Engine : IDisposable
         renderer.MaterialLayer = await glass.GetAsync(State, Clock, monitor.Rect.Right - monitor.Rect.Left, monitor.Rect.Bottom - monitor.Rect.Top, shutdown.Token);
         // 首次生成材质期间，老师仍可暂停或打开课件；应用前重新核对现场状态。
         if (stopping || State.LocalPaused || State.RemotePaused || !State.EnableWallpaper || !wallpaper.SafeToApply()) return false;
+        if (HasWallpaperConflict(refresh: true)) return DeferWallpaperConflict();
         Frame frame;
         try { frame = renderer.Render(State, Clock, monitor.Rect.Right - monitor.Rect.Left, monitor.Rect.Bottom - monitor.Rect.Top, requestedPage); }
         catch when (!State.ReduceEffects) {
@@ -296,6 +307,15 @@ public sealed class Engine : IDisposable
         changed = false; lastRenderKey = renderKey; nextHeartbeat = 0; Save();
         PruneFrames();
         return true;
+    }
+    private bool DeferWallpaperConflict()
+    {
+        // 不关闭其他程序。继续同步内容，退出壁纸软件后重新生成并应用，不能误命中旧渲染键。
+        changed = true;
+        if (State.ApplyState != "deferred" || State.Error != ConflictMessage) {
+            State.ApplyState = "deferred"; State.Error = ConflictMessage; nextHeartbeat = 0; Save();
+        }
+        return false;
     }
     private void PruneFrames()
     {
