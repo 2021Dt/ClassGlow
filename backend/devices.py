@@ -456,7 +456,11 @@ def command(
     d = db.scalar(
         select(Device).where(Device.id == device_id).with_for_update().execution_options(populate_existing=True)
     )
-    key, signature, previous = idempotent(db, user, idempotency_key, f"control:{device_id}", body.model_dump())
+    payload = body.model_dump()
+    if body.notice and body.notice.style is None:
+        # 保持旧版未附带设计的请求签名，升级途中重试也不会产生重复指令。
+        payload["notice"].pop("style", None)
+    key, signature, previous = idempotent(db, user, idempotency_key, f"control:{device_id}", payload)
     if previous is not None:
         return previous
     if d.revoked or d.epoch != sync_epoch(db) or now() - d.last_seen > 90:
@@ -472,6 +476,8 @@ def command(
         )
         if version < (0, 4, 12):
             fail(409, "client_update_required", "这台电脑需要更新至 0.4.12 或更高版本才能播放醒目提醒。")
+        if body.notice and body.notice.style is not None and version < (0, 4, 13):
+            fail(409, "client_update_required", "自定义提醒需要 0.4.13 或更高版本客户端，请先在教室电脑覆盖更新。")
     if body.action == "notice" and (s.get("localPaused") or s.get("remotePaused")):
         fail(409, "device_paused", "这台电脑已暂停，请恢复展示后再发送醒目提醒。")
     if body.action == "resume" and s.get("localPaused"):
@@ -509,7 +515,11 @@ def command(
             "pageSetId": body.pageSetId,
             "localControlEpoch": s.get("localControlEpoch", 0),
             "actorName": user.name,
-            **({"notice": {**body.notice.model_dump(), "endsAt": now() + body.notice.duration}} if body.notice else {}),
+            **(
+                {"notice": {**body.notice.model_dump(exclude_none=True), "endsAt": now() + body.notice.duration}}
+                if body.notice
+                else {}
+            ),
         },
     )
     db.add(cmd)

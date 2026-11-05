@@ -1,5 +1,9 @@
 # 106 服务器停用与清理
 
+## 0.4.13 增量范围
+
+自定义提醒样式随原设备指令保存，由每日维护按过期时间清理；最多包含固定的字体、配色、几何和动画参数，不新增图片文件、数据库表或后台服务。浏览器常用样式每账号最多 12 份，页面支持逐份删除。Windows 安装包为 `.deploy/downloads/ClassGlow-0.4.13-win-x64-setup.exe`，按存储清理页现有版本保护规则管理。
+
 ## 2026-11-05 存储维护
 
 106 服务器的系统 journal 已设置 `MaxRetentionSec=30day`、`SystemMaxUse=512M`、`RuntimeMaxUse=64M`，按天轮转。配置位于 `/etc/systemd/journald.conf.d/80-storage-retention.conf`，作用于全机 journal，包括部署日志。达到容量上限时会提前删除较旧的日志。首次应用后占用从约 2.3 GB 降至 208 MB。容量限额针对可轮转日志，当前活动文件可能造成少量超出。

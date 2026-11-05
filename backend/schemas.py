@@ -373,12 +373,28 @@ class DeviceName(Input):
         return value
 
 
+class ScreenNoticeStyle(Input):
+    fontFamily: Literal["sans", "serif", "kai"] = "sans"
+    fontSize: int = Field(default=56, ge=24, le=120)
+    bold: bool = True
+    textColor: str = Field(default="#ffffff", pattern=r"^#[0-9a-fA-F]{6}$")
+    backgroundColor: str = Field(default="#17458c", pattern=r"^#[0-9a-fA-F]{6}$")
+    opacity: int = Field(default=95, ge=20, le=100)
+    position: Literal["top", "center", "bottom"] = "top"
+    surface: Literal["fullscreen", "card"] = "fullscreen"
+    width: int = Field(default=72, ge=40, le=90)
+    radius: int = Field(default=32, ge=0, le=64)
+    flowSeconds: int = Field(default=14, ge=6, le=40)
+    direction: Literal["left", "right"] = "left"
+
+
 class ScreenNotice(Input):
     mode: Literal["marquee", "barrage", "popup", "countdown"]
     message: str = Field(min_length=1, max_length=160)
     duration: int = Field(default=30, ge=5, le=3600)
     tone: Literal["blue", "amber", "red"] = "blue"
     overFullscreen: bool = False
+    style: ScreenNoticeStyle | None = None
 
     @field_validator("message")
     @classmethod
@@ -386,6 +402,16 @@ class ScreenNotice(Input):
         if not value.strip():
             raise ValueError("请填写提醒内容")
         return value.strip()
+
+    @model_validator(mode="after")
+    def barrage_lines(self):
+        if (
+            self.style is not None
+            and self.mode == "barrage"
+            and len([line for line in self.message.split("\n") if line]) > 3
+        ):
+            raise ValueError("弹幕最多分为 3 条，请合并多余的行")
+        return self
 
 
 class ControlInput(Input):
