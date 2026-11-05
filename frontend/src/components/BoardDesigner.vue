@@ -38,6 +38,7 @@ import {
   Ungroup,
   SlidersHorizontal,
   Palette,
+  Megaphone,
 } from "@lucide/vue";
 import type {
   CanvasWidget,
@@ -957,6 +958,17 @@ onUnmounted(() => {
           <strong>图层素材</strong><span>{{ items.length }}/24</span>
         </div>
         <StudioPalette :disabled="disabled || items.length >= 24" @add="add" />
+        <div v-if="standalone && !classroom.archived" class="studio-template">
+          <a
+            class="button secondary full"
+            :href="`/?notice=${encodeURIComponent(classroom.id)}`"
+            target="_blank"
+            rel="noopener"
+          >
+            <Megaphone :size="15" />发送醒目提醒
+          </a>
+          <p class="studio-help">在教室电脑临时播放跑马灯、弹幕或全屏弹窗。</p>
+        </div>
         <div class="studio-template">
           <strong>我的积木 <small>本机</small></strong>
           <p v-if="!pieces.length" class="studio-help">

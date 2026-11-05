@@ -5,6 +5,7 @@ import {
   Bell,
   Palette,
   Monitor,
+  Megaphone,
   ArrowRight,
   BookOpen,
   CalendarDays,
@@ -36,6 +37,7 @@ const emit = defineEmits<{
   drafts: [];
   timetable: [];
   devices: [id?: string];
+  screenNotice: [];
   design: [];
   guide: [];
 }>();
@@ -126,15 +128,20 @@ const myDrafts = computed(() =>
             ? `${online} 台教室电脑在线`
             : "教室电脑暂时离线"
       }}</span>
-      <button @click="emit('devices')">
-        {{
-          devices.length
-            ? "查看当前看板"
-            : canManage
-              ? "连接电脑"
-              : "查看连接状态"
-        }}<ArrowRight :size="14" />
-      </button>
+      <div class="connection-actions">
+        <button v-if="canManage" @click="emit('screenNotice')">
+          <Megaphone :size="15" />发送醒目提醒
+        </button>
+        <button @click="emit('devices')">
+          {{
+            devices.length
+              ? "查看当前看板"
+              : canManage
+                ? "连接电脑"
+                : "查看连接状态"
+          }}<ArrowRight :size="14" />
+        </button>
+      </div>
     </div>
     <div
       v-if="devices.length"
@@ -347,6 +354,16 @@ const myDrafts = computed(() =>
   background: #fbf8ef;
   border-color: #ede7d8;
   color: #8c7551;
+}
+.class-connection,
+.connection-actions {
+  flex-wrap: wrap;
+}
+.connection-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-left: auto;
 }
 .connection-led {
   height: 7px;

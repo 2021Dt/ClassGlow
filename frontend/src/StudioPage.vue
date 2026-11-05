@@ -137,7 +137,7 @@ async function publish() {
   }
 }
 onMounted(async () => {
-  // 同源新窗口沿用浏览器复制的会话；建立后立即解除 opener，不在链接中传递凭证。
+  // 同源画布直接读取浏览器保存的会话，打开后解除 opener。
   window.opener = null;
   try {
     Object.assign(site, await api("/setup/status"));

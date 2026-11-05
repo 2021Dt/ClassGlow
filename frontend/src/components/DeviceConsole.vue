@@ -35,6 +35,7 @@ const props = defineProps<{
   now: number;
   reload: () => Promise<void>;
   focusDeviceId?: string;
+  initialView?: "screen" | "notice";
 }>();
 const emit = defineEmits<{ refresh: []; bind: []; design: [] }>();
 const selected = ref(""),
@@ -88,6 +89,13 @@ async function saveName() {
 }
 const allowed = computed(
   () => isAdmin(props.classroom) && !props.classroom.archived,
+);
+watch(
+  [() => props.initialView, allowed],
+  ([view, canManage]) => {
+    deviceView.value = canManage && view === "notice" ? "notice" : "screen";
+  },
+  { immediate: true },
 );
 const error = ref(""),
   notice = ref(""),
@@ -460,7 +468,12 @@ watch(
           <Pencil :size="15" />改名
         </button>
       </div>
-      <p>发布内容会同步到本班全部电脑；下方查看画面、暂停和翻页只针对这台。</p>
+      <p v-if="deviceView === 'notice'">
+        提醒只在这台电脑播放。可在上方切换目标。
+      </p>
+      <p v-else>
+        发布内容会同步到本班全部电脑；下方查看画面、暂停和翻页只针对这台。
+      </p>
     </div>
     <p v-if="needsSyncUpdate" class="notice subtle">
       这台电脑仍使用旧版定时同步。<a
@@ -511,7 +524,10 @@ watch(
       <Monitor :size="36" />
       <h2>尚未绑定教室电脑</h2>
       <p v-if="!allowed" class="muted">请联系班主任绑定教室电脑。</p>
-      <ol v-else class="connect-guide">
+      <p v-else-if="deviceView === 'notice'" class="muted">
+        绑定并启用教室电脑后，即可向它发送醒目提醒。
+      </p>
+      <ol v-if="allowed" class="connect-guide">
         <li>
           <span>1</span>
           <div>

@@ -210,7 +210,8 @@ const classForm = reactive({
   pairCode = ref(new URLSearchParams(location.search).get("pair") ?? ""),
   pairName = ref(""),
   pairAlias = ref(""),
-  focusedDevice = ref("");
+  focusedDevice = ref(""),
+  initialDeviceView = ref<"screen" | "notice">("screen");
 watch(
   () => classForm.stage,
   (stage, before) => {
@@ -277,11 +278,17 @@ function openStudio() {
     return;
   }
   const url = `/studio?class=${encodeURIComponent(current.value.id)}`;
-  // 同源新页由浏览器复制 sessionStorage，避免在 URL 中放入登录凭证。
+  // 同源画布直接读取浏览器保存的会话，链接只传递班级 ID。
   if (!window.open(url, "_blank")) location.assign(url);
+}
+function openDevices(id = "", view: "screen" | "notice" = "screen") {
+  focusedDevice.value = id;
+  initialDeviceView.value = view;
+  page.value = "devices";
 }
 function navigate(target: string) {
   if (target === "appearance") openStudio();
+  else if (target === "devices") openDevices();
   else page.value = target;
 }
 
@@ -314,12 +321,24 @@ async function refresh() {
 }
 useDeviceFeed(current, refresh);
 async function handleEntry() {
-  const invite = new URLSearchParams(location.search).get("invite");
+  const query = new URLSearchParams(location.search);
+  const invite = query.get("invite");
+  const noticeClassId = query.get("notice");
   if (invite) {
     inviteToken.value = invite;
     joinInfo.value = await api(`/invites/${encodeURIComponent(invite)}`);
     joinDialog.value?.showModal();
-  } else if (pairCode.value && current.value) bindDialog.value?.showModal();
+  } else if (pairCode.value && current.value) {
+    bindDialog.value?.showModal();
+  } else if (noticeClassId) {
+    const classroom = model.classes.find((c) => c.id === noticeClassId);
+    if (classroom && isAdmin(classroom) && !classroom.archived) {
+      model.selected = classroom.id;
+      openDevices("", "notice");
+    } else flash("你没有这个班级的醒目提醒权限。");
+    query.delete("notice");
+    history.replaceState(null, "", query.toString() ? `/?${query}` : "/");
+  }
 }
 async function applyToClass() {
   await run(async () => {
@@ -527,8 +546,10 @@ async function bind() {
       name: pairAlias.value.trim(),
     });
     await refresh();
-    focusedDevice.value = bound.id;
-    page.value = "devices";
+    openDevices(
+      bound.id,
+      page.value === "devices" ? initialDeviceView.value : "screen",
+    );
     bindDialog.value?.close();
     pairName.value = "";
     flash(`已绑定「${bound.name}」。请在这台电脑的客户端勾选“启用桌面展示”。`);
@@ -816,10 +837,8 @@ onUnmounted(() => {
             @records="page = 'contents'"
             @drafts="page = 'drafts'"
             @timetable="page = 'settings'"
-            @devices="
-              focusedDevice = $event ?? '';
-              page = 'devices';
-            "
+            @devices="openDevices($event)"
+            @screen-notice="openDevices('', 'notice')"
             @guide="startGuide"
             @design="openStudio"
           />
@@ -882,6 +901,7 @@ onUnmounted(() => {
             :classroom="current"
             :devices="devices"
             :focus-device-id="focusedDevice"
+            :initial-view="initialDeviceView"
             :reload="refresh"
             :now="now"
             @refresh="run(refresh)"

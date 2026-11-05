@@ -270,7 +270,7 @@ export interface ScreenNoticeInput {
   position: absolute;
   white-space: nowrap;
   top: 40px;
-  left: 0;
+  left: 100%;
   padding: 8px 20px;
   background: var(--tone);
   color: white;
@@ -289,9 +289,11 @@ export interface ScreenNoticeInput {
 }
 @keyframes notice-flow {
   from {
-    transform: translateX(100%);
+    left: 100%;
+    transform: translateX(0);
   }
   to {
+    left: 0;
     transform: translateX(-100%);
   }
 }
