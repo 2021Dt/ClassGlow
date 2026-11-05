@@ -1,5 +1,21 @@
 # 106 服务器停用与清理
 
+## 2026-11-05 存储维护
+
+106 服务器的系统 journal 已设置 `MaxRetentionSec=30day`、`SystemMaxUse=512M`、`RuntimeMaxUse=64M`，按天轮转。配置位于 `/etc/systemd/journald.conf.d/80-storage-retention.conf`，作用于全机 journal，包括部署日志。达到容量上限时会提前删除较旧的日志。首次应用后占用从约 2.3 GB 降至 208 MB。容量限额针对可轮转日志，当前活动文件可能造成少量超出。
+
+宿主机文本日志使用现有 logrotate：rsyslog 改为每日轮转、保留 30 份，Nginx 沿用每日 14 份；两者均增加 `maxage 30` 和 `maxsize 20M`。旧文件在轮转时按保留期限清理，容量在 logrotate 运行时检查。变更前配置保存在 `/opt/classglow/.deploy/retention-config-backups`，已通过 `logrotate --debug /etc/logrotate.conf` 校验。
+
+本项目在 `deploy/.env` 启用 `KANBAN_JOURNAL_LOGS=true`，Compose 叠加 `compose.retention.yaml`，API、网页及迁移容器日志由 journal 管理。仍可使用 `sudo classglow logs` 查看。其他部署默认沿用 Docker 每份 10 MB、3 份轮转。
+
+每次部署安装 `classglow-maintenance.timer`，北京时间每天 03:30 起的 5 分钟内执行。清理 30 天前的班级与系统操作日志、登录记录、过期指令、过期会话、配对和密码恢复记录，压缩已关闭草稿正文。小型草稿占位及请求幂等标识用于阻止旧请求重新发布。清理与部署共用锁，SQLite 空闲页超过 1 MiB 且占数据库至少 10% 时进行空间回收。可运行 `sudo classglow cleanup` 手动执行，通过 `systemctl status classglow-maintenance.timer` 和 `journalctl -u classglow-maintenance.service` 核对结果。
+
+管理员新增“存储清理”页，可立即清理过期记录、批量删除超过 30 天的备份（保留最新 3 份）、逐个删除旧 Windows 安装包。当前发布包、配置的下载地址对应包、未来版本及最近一个回退版本受保护。安装包目录以可写方式挂入 API，目录归 UID/GID 10001 管理，接口校验管理员权限、文件名、符号链接及版本保护。
+
+“账号管理”“班级管理”“教室设备”“公告管理”提供永久删除。账号需先停用且完成所负责班级的转移或删除，班级需先归档，设备需先解绑，公告需先撤回。弹窗展示关联记录数量，并要求输入目标名称。删除账号会移除该账号发布的内容并推进相关班级展示版本，删除班级会清理课表、画布、教学内容及关联设备。历史备份中的副本由管理员在备份页另行管理。
+
+账号、班级、公告、安装包和备份的永久删除由管理员手动确认。每日维护只处理日志和失效记录。卸载本项目会移除清理 timer 与 service，全机 journal 的保留策略由服务器管理员单独管理。
+
 ## 0.4.12 增量范围
 
 本次增加 `.deploy/downloads/ClassGlow-0.4.12-win-x64-setup.exe`，上传校验后移除专用暂存目录 `.deploy/incoming-0412`。更新通知只在现有 API 内存中持有连接，不新增 Redis、端口、服务、计划任务或数据库表；API 停止即释放连接。醒目提醒的命令、回执和最近播放状态使用现有数据库记录，按原备份/卸载范围管理。
@@ -52,15 +68,15 @@ sudo classglow status
 | --- | --- |
 | SQLite 历史备份 | 先按学校保留期限挑选、离机备份并验证，再逐个删除确定过期的文件；不要按通配符清空 `/app/data`，也不要碰正在使用的数据库、WAL 或 SHM 文件 |
 | 旧 Windows 安装包 | 核对 `/api/client/version`、`deploy/.env` 和仍在使用的下载链接，先保留当前发布包及必要回退包，再删除选定的旧文件 |
-| 容器日志 | Compose 已为本项目配置 `json-file` 轮转，每份 10 MB、保留 3 份；不手工截断 Docker 正在写入的日志 |
-| 自动更新日志 | 由宿主机 journald 管理；查看 `sudo classglow auto-status`，不为本项目清空全机 journal |
+| 容器日志 | 106 使用 journal 的 30 天和容量限制；其他部署默认 `json-file` 每份 10 MB、保留 3 份 |
+| 自动更新日志 | 由宿主机 journal 的 30 天和容量限制管理，查看 `sudo classglow auto-status` |
 | 旧构建镜像/缓存 | 先核对容器引用和项目归属，只处理确定不再使用的本项目独占镜像；共享服务器不使用全局 prune |
 
 目前没有按日期自动删除备份或下载包的任务。上传用的 `.deploy/incoming` 临时目录已在本次发布校验完成后移除；以后若出现中断上传的文件，先确认无传输任务再处理具体文件。
 
 ## 先停止自动更新并保留数据
 
-以下是需要人工停用时的步骤，使用菜单卸载时由脚本执行。先运行 `sudo classglow auto-off`。它停止后续定时触发，已开始的部署仍会完成；通过 `sudo classglow auto-status` 查看定时任务和日志，再用以下命令检查手工/自动更新共用的锁。返回非零时先等待当前部署完成，不强行终止迁移：
+以下是需要人工停用时的步骤，使用菜单卸载时由脚本执行。先运行 `sudo classglow auto-off` 和 `sudo systemctl disable --now classglow-maintenance.timer`。它们停止后续定时触发，已开始的任务仍会完成；通过 `sudo classglow auto-status` 查看定时任务和日志，再用以下命令检查更新和清理共用的锁。返回非零时先等待当前任务完成，不强行终止迁移：
 
 ```bash
 sudo flock -n /opt/classglow/.deploy/update.lock true
@@ -86,7 +102,7 @@ dc down
 
 确认后仅删除上述两个本项目链接，执行 `sudo nginx -t`；通过后才 `sudo systemctl reload nginx`。其他站点、Nginx 主配置和默认站点保留。
 
-需要彻底撤销自动更新时，在定时器停止且部署结束后，删除本项目的 `/etc/systemd/system/classglow-update.timer`、`classglow-update.service` 和 `/usr/local/bin/classglow`，再运行 `sudo systemctl daemon-reload`。不要清理其他 systemd 服务或系统日志。
+需要彻底撤销自动更新与清理时，在定时器停止且任务结束后，删除 `/etc/systemd/system` 中本项目的 `classglow-update.timer`、`classglow-update.service`、`classglow-maintenance.timer`、`classglow-maintenance.service` 和入口 `/usr/local/bin/classglow`，再运行 `sudo systemctl daemon-reload`。不要清理其他 systemd 服务或系统日志。
 
 ## 最终删除需核对的范围
 

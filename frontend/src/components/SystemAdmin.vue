@@ -34,6 +34,8 @@ import AdminOverview from "./AdminOverview.vue";
 import AdminDataTable from "./AdminDataTable.vue";
 import AdminEditDrawer from "./AdminEditDrawer.vue";
 import AdminAnnouncements from "./AdminAnnouncements.vue";
+import PermanentDelete from "./PermanentDelete.vue";
+import StorageManager from "./StorageManager.vue";
 const emit = defineEmits<{
   changed: [];
   restored: [string];
@@ -86,6 +88,12 @@ const sections = [
     group: "授权与数据",
   },
   {
+    id: "storage",
+    name: "存储清理",
+    icon: Database,
+    group: "授权与数据",
+  },
+  {
     id: "audit",
     name: "操作记录",
     icon: ScrollText,
@@ -124,7 +132,9 @@ const busy = ref(false),
   error = ref(""),
   notice = ref(""),
   backupSupported = ref(true);
-const activeSection = computed(() => sections.find((s) => s.id === tab.value)!);
+const activeSection = computed(() =>
+  sections.find((s) => s.id === tab.value)!,
+);
 const hasFilters = computed(() => Object.values(filters).some(Boolean));
 const settingsForm = reactive({ siteName: "" }),
   licenseUserId = ref("");
@@ -134,10 +144,24 @@ const creationDialog = ref<HTMLDialogElement>(),
 const editDrawer = ref<InstanceType<typeof AdminEditDrawer>>();
 const licenseView = ref<InstanceType<typeof LicenseManager>>();
 const announcementView = ref<InstanceType<typeof AdminAnnouncements>>();
+const storageView = ref<InstanceType<typeof StorageManager>>();
+const deletionView = ref<InstanceType<typeof PermanentDelete>>();
 async function refreshPage() {
   await load(true);
   if (tab.value === "licenses") await licenseView.value?.reload();
   if (tab.value === "announcements") await announcementView.value?.reload();
+  if (tab.value === "storage") await storageView.value?.reload();
+}
+function editItem(kind: string, item: any) {
+  if (
+    kind === "delete" &&
+    ["users", "classes", "devices"].includes(tab.value)
+  )
+    deletionView.value?.open(
+      tab.value as "users" | "classes" | "devices",
+      item.id,
+    );
+  else editDrawer.value?.open(kind, item);
 }
 const statusOptions = computed(() =>
   tab.value === "users"
@@ -194,7 +218,8 @@ async function load(withOverview = false) {
     else if (result) {
       rows.value = result.items;
       total.value = result.total ?? result.items.length;
-      if (currentTab === "backups") backupSupported.value = result.supported;
+      if (currentTab === "backups")
+        backupSupported.value = result.supported;
     }
   } catch (e) {
     if (sequence === requestSequence) error.value = (e as Error).message;
@@ -351,7 +376,9 @@ defineExpose({ reload: () => load(true) });
             :class="{ active: tab === item.id }"
             :aria-current="tab === item.id ? 'page' : undefined"
             @click.prevent="go(item.id)"
-            ><component :is="item.icon" :size="18" /><span>{{ item.name }}</span
+            ><component :is="item.icon" :size="18" /><span>{{
+              item.name
+            }}</span
             ><ChevronRight v-if="tab === item.id" :size="14"
           /></a>
         </div>
@@ -395,7 +422,8 @@ defineExpose({ reload: () => load(true) });
           }}</strong>
         </div>
         <div class="admin-topbar-right">
-          <span class="admin-secure"><ShieldCheck :size="14" />管理员空间</span
+          <span class="admin-secure"
+            ><ShieldCheck :size="14" />管理员空间</span
           ><span class="admin-avatar small">{{
             session.name.slice(0, 1)
           }}</span>
@@ -455,7 +483,9 @@ defineExpose({ reload: () => load(true) });
         </div>
         <div v-if="!overview" class="admin-empty">
           <RefreshCw :size="25" :class="{ spinning: loading }" />
-          <p>{{ loading ? "正在读取管理数据…" : "暂时无法加载，请重试。" }}</p>
+          <p>
+            {{ loading ? "正在读取管理数据…" : "暂时无法加载，请重试。" }}
+          </p>
         </div>
         <template v-else>
           <AdminOverview
@@ -470,6 +500,7 @@ defineExpose({ reload: () => load(true) });
             v-else-if="tab === 'announcements'"
             ref="announcementView"
           />
+          <StorageManager v-else-if="tab === 'storage'" ref="storageView" />
           <LicenseManager
             v-else-if="tab === 'licenses'"
             ref="licenseView"
@@ -484,7 +515,10 @@ defineExpose({ reload: () => load(true) });
                 </div>
                 <School :size="20" />
               </header>
-              <form class="admin-settings-form" @submit.prevent="saveSettings">
+              <form
+                class="admin-settings-form"
+                @submit.prevent="saveSettings"
+              >
                 <label class="field"
                   >学校 / 站点名称<input
                     v-model.trim="settingsForm.siteName"
@@ -513,7 +547,9 @@ defineExpose({ reload: () => load(true) });
                   <dt>数据库</dt>
                   <dd>
                     {{
-                      overview.database === "sqlite" ? "SQLite" : "PostgreSQL"
+                      overview.database === "sqlite"
+                        ? "SQLite"
+                        : "PostgreSQL"
                     }}
                   </dd>
                 </div>
@@ -533,7 +569,9 @@ defineExpose({ reload: () => load(true) });
                 </div>
                 <div>
                   <dt>本次运行</dt>
-                  <dd>{{ Math.floor(overview.uptimeSeconds / 60) }} 分钟</dd>
+                  <dd>
+                    {{ Math.floor(overview.uptimeSeconds / 60) }} 分钟
+                  </dd>
                 </div>
                 <div>
                   <dt>服务时间</dt>
@@ -606,7 +644,11 @@ defineExpose({ reload: () => load(true) });
                   :aria-label="`${activeSection.name}状态`"
                 >
                   <option value="">全部状态</option>
-                  <option v-for="s in statusOptions" :key="s[0]" :value="s[0]">
+                  <option
+                    v-for="s in statusOptions"
+                    :key="s[0]"
+                    :value="s[0]"
+                  >
                     {{ s[1] }}
                   </option></AppSelect
                 ><AppSelect
@@ -688,7 +730,7 @@ defineExpose({ reload: () => load(true) });
               v-else
               :kind="tab"
               :rows="rows"
-              @edit="(kind, item) => editDrawer?.open(kind, item)"
+              @edit="editItem"
               @license="manageLicense"
               @open-class="emit('openClass', $event)"
             />
@@ -771,4 +813,5 @@ defineExpose({ reload: () => load(true) });
       @open-class="emit('openClass', $event)"
     />
   </div>
+  <PermanentDelete ref="deletionView" @changed="changed" />
 </template>

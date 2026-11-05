@@ -1,0 +1,14 @@
+# Linux 宿主机启用 30 天 journal 保留策略后使用此覆盖文件。
+services:
+  api:
+    logging: !override
+      driver: journald
+      options: {tag: "classglow-api"}
+  web:
+    logging: !override
+      driver: journald
+      options: {tag: "classglow-web"}
+  migrate:
+    logging: !override
+      driver: journald
+      options: {tag: "classglow-migrate"}

@@ -8,6 +8,7 @@ dc() {
   local env_file="${CLASSGLOW_ENV:-deploy/.env}" files=(-f compose.production.yaml)
   if grep -qx 'KANBAN_GATEWAY=nginx' "$env_file"; then files+=(-f compose.nginx.yaml); fi
   if grep -qx 'KANBAN_DATABASE=postgres' "$env_file"; then files+=(-f compose.postgres.yaml); fi
+  if grep -qx 'KANBAN_JOURNAL_LOGS=true' "$env_file"; then files+=(-f compose.retention.yaml); fi
   docker compose --env-file "$env_file" "${files[@]}" "$@"
 }
 log() { printf '\n[ClassGlow] %s\n' "$*"; }
@@ -71,6 +72,8 @@ deploy_current() {
     false
   fi
   dc config --quiet
+  [[ ! -L .deploy/downloads ]]
+  install -d -m 0755 -o 10001 -g 10001 .deploy/downloads
   phase='构建前后端镜像（此阶段原服务继续运行）'
   log "$phase"
   dc build --pull api web
@@ -100,11 +103,50 @@ deploy_current() {
     --resolve "$domain:443:127.0.0.1" "https://$domain/api/health"
   curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
     --resolve "$domain:443:127.0.0.1" "https://$domain/" -o /dev/null
+  install_maintenance
   printf '%s\n' "$revision" > .deploy/deployed-commit
   rm -f .deploy/failed
   trap - ERR INT TERM
   dc ps
   log "部署完成：$revision；访问 https://$domain"
+}
+
+install_maintenance() {
+  cat > /etc/systemd/system/classglow-maintenance.service <<'EOF'
+[Unit]
+Description=ClassGlow expired record cleanup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/classglow
+ExecStart=/usr/local/bin/classglow cleanup
+TimeoutStartSec=5min
+EOF
+  cat > /etc/systemd/system/classglow-maintenance.timer <<'EOF'
+[Unit]
+Description=Daily ClassGlow storage maintenance
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now classglow-maintenance.timer
+}
+
+cleanup() {
+  exec 9>.deploy/update.lock
+  if ! flock -n 9; then
+    log '部署正在运行，下次维护再清理。'
+    return
+  fi
+  dc exec -T api python -m scripts.storage_maintenance
 }
 
 auto_on() {
@@ -147,7 +189,7 @@ EOF
 main() {
   if [[ "${1:-}" == help || "${1:-}" == --help ]]; then
     echo 'sudo classglow：交互菜单'
-    echo '命令：menu | status | update | logs | admin-init | admin-reset | backup | backup-list | migrate-db | uninstall | auto-on | auto-off | auto-status'
+    echo '命令：menu | status | update | logs | cleanup | admin-init | admin-reset | backup | backup-list | migrate-db | uninstall | auto-on | auto-off | auto-status'
     return
   fi
   if (( EUID != 0 )); then
@@ -159,6 +201,7 @@ main() {
     update) update "${2:-manual}" ;;
     _deploy) deploy_current "$2" ;;
     status) server_status ;;
+    cleanup) cleanup ;;
     logs) dc logs --tail=100 api web ;;
     admin-init) dc exec api python -m scripts.admin_account init ;;
     admin-reset) dc exec api python -m scripts.admin_account reset ;;

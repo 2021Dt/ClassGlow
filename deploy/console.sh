@@ -24,6 +24,7 @@ server_status() {
   printf '网站：https://%s\n' "$(sed -n 's/^KANBAN_DOMAIN=//p' deploy/.env | tr -d '\r')"
   if postgres_enabled; then echo '数据库：PostgreSQL（项目私有网络）'; else echo '数据库：SQLite'; fi
   printf '自动更新：'; systemctl is-active classglow-update.timer || true
+  printf '每日清理：'; systemctl is-active classglow-maintenance.timer || true
   if [[ -f .deploy/database-migration.env ]]; then echo '数据库迁移未收尾：选择“迁移数据库”继续，不要手工删除目标库。'; fi
   if [[ -f .deploy/deployed-commit ]]; then printf '当前版本：'; cut -c1-12 .deploy/deployed-commit; fi
   dc ps -a --format 'table {{.Service}}\t{{.Status}}'
@@ -82,7 +83,7 @@ uninstall_service() (
       echo 'classglow 入口不是本项目生成的文件，停止卸载。'; exit 1;
     }
   fi
-  for unit in /etc/systemd/system/classglow-update.service /etc/systemd/system/classglow-update.timer; do
+  for unit in /etc/systemd/system/classglow-update.service /etc/systemd/system/classglow-update.timer /etc/systemd/system/classglow-maintenance.service /etc/systemd/system/classglow-maintenance.timer; do
     [[ ! -e "$unit" ]] || grep -qE 'ClassGlow|classglow-update.service' "$unit" || {
       echo "定时服务归属不符，停止卸载：$unit"; exit 1;
     }
@@ -105,6 +106,7 @@ uninstall_service() (
     [[ "$answer" == UNINSTALL ]] || exit 0
   fi
   if [[ -e /etc/systemd/system/classglow-update.timer ]]; then systemctl disable --now classglow-update.timer; fi
+  if [[ -e /etc/systemd/system/classglow-maintenance.timer ]]; then systemctl disable --now classglow-maintenance.timer; fi
   if [[ "$mode" == 2 ]]; then
     dc down --volumes
     # 若迁移曾中断，目标数据库也属于同一项目；沿用保留的配置清理，不触碰其他卷。
@@ -121,7 +123,7 @@ uninstall_service() (
     fi
     systemctl reload nginx
   fi
-  rm -f /etc/systemd/system/classglow-update.timer /etc/systemd/system/classglow-update.service /usr/local/bin/classglow
+  rm -f /etc/systemd/system/classglow-update.timer /etc/systemd/system/classglow-update.service /etc/systemd/system/classglow-maintenance.timer /etc/systemd/system/classglow-maintenance.service /usr/local/bin/classglow
   systemctl daemon-reload
   if [[ "$mode" == 2 ]]; then
     docker image rm classroom-board-api:local classroom-board-web:latest 2>/dev/null || true

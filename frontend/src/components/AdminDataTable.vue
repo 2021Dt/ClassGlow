@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { School, Monitor, ArrowUpRight, ScrollText } from "@lucide/vue";
-import { accountRole, accountStatus, adminDate, auditNames } from "../admin";
+import {
+  accountRole,
+  accountStatus,
+  adminDate,
+  auditNames,
+} from "../admin";
 import { session } from "../api";
 defineProps<{ kind: string; rows: any[] }>();
 const emit = defineEmits<{
@@ -57,7 +62,10 @@ const emit = defineEmits<{
                       : 'teacher'
                 "
                 >{{ item.name.slice(0, 1) }}</span
-              ><button class="table-person" @click="emit('edit', 'edit', item)">
+              ><button
+                class="table-person"
+                @click="emit('edit', 'edit', item)"
+              >
                 <strong>{{ item.name }}</strong
                 ><small>{{ item.login }}</small>
               </button>
@@ -109,18 +117,34 @@ const emit = defineEmits<{
             </td>
             <td data-label="操作" class="table-actions">
               <button @click="emit('edit', 'edit', item)">编辑</button
-              ><button v-if="!item.systemAdmin" @click="emit('license', item)">
+              ><button
+                v-if="!item.systemAdmin"
+                @click="emit('license', item)"
+              >
                 许可</button
-              ><button @click="emit('edit', 'password', item)">重置密码</button>
+              ><button @click="emit('edit', 'password', item)">
+                重置密码
+              </button>
               <button
                 v-if="
-                  item.active && item.activated && item.id !== session.userId
+                  item.active &&
+                  item.activated &&
+                  item.id !== session.userId
                 "
                 @click="emit('edit', 'security', item)"
               >
                 {{
-                  item.frozenUntil > item.serverTime ? "解除冻结" : "安全冻结"
+                  item.frozenUntil > item.serverTime
+                    ? "解除冻结"
+                    : "安全冻结"
                 }}
+              </button>
+              <button
+                v-if="!item.active && item.id !== session.userId"
+                class="destructive"
+                @click="emit('edit', 'delete', item)"
+              >
+                永久删除
               </button>
             </td>
           </template>
@@ -130,7 +154,8 @@ const emit = defineEmits<{
               ><span
                 ><strong>{{ item.name }}</strong
                 ><small class="cell-subtext"
-                  >{{ item.stage }} · {{ item.subjects.length }} 门学科</small
+                  >{{ item.stage }} ·
+                  {{ item.subjects.length }} 门学科</small
                 ></span
               >
             </td>
@@ -150,6 +175,13 @@ const emit = defineEmits<{
               <button @click="emit('edit', 'class', item)">管理</button
               ><button @click="emit('openClass', item.id)">
                 进入班级<ArrowUpRight :size="13" />
+              </button>
+              <button
+                v-if="item.archived"
+                class="destructive"
+                @click="emit('edit', 'delete', item)"
+              >
+                永久删除
               </button>
             </td>
           </template>
@@ -198,6 +230,13 @@ const emit = defineEmits<{
               >
                 解绑设备
               </button>
+              <button
+                v-if="item.revoked"
+                class="destructive"
+                @click="emit('edit', 'delete', item)"
+              >
+                永久删除
+              </button>
             </td>
           </template>
           <template v-else
@@ -210,13 +249,17 @@ const emit = defineEmits<{
             </td>
             <td data-label="操作人">
               {{
-                item.actor === "server-console" ? "服务器管理员" : item.actor
+                item.actor === "server-console"
+                  ? "服务器管理员"
+                  : item.actor
               }}
             </td>
             <td data-label="对象" class="audit-target">
               {{ item.target || "—" }}
             </td>
-            <td data-label="时间">{{ adminDate(item.at, true) }}</td></template
+            <td data-label="时间">
+              {{ adminDate(item.at, true) }}
+            </td></template
           >
         </tr>
       </tbody>

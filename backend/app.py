@@ -168,6 +168,8 @@ def idempotent(db: Session, user: User, key: str | None, scope: str, payload: di
     identity = f"{user.id}:{scope}:{key}"
     signature = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     existing = db.get(Idempotency, identity)
+    if existing and existing.result.get("_deleted"):
+        fail(410, "request_deleted", "原请求对应的数据已永久删除，请创建新的操作。")
     if existing and existing.request_hash != signature:
         fail(409, "idempotency_mismatch", "同一个请求标识不能用于不同参数。")
     return identity, signature, existing.result if existing else None
@@ -701,6 +703,7 @@ from .lifecycle import router as lifecycle_router
 from .maintenance import router as maintenance_router
 from .onboarding import router as onboarding_router
 from .queries import router as query_router
+from .storage import router as storage_router
 from .system_admin import router as system_router
 
 app.include_router(device_router)
@@ -712,3 +715,4 @@ app.include_router(onboarding_router)
 app.include_router(license_router)
 app.include_router(security_router)
 app.include_router(announcement_router)
+app.include_router(storage_router)

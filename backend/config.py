@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     client_latest_version: str = "0.4.12"
     client_download_url: str = ""
     storage_dir: Path = Path("data")
+    downloads_dir: Path | None = None
 
 
 def validate_deployment(value: Settings):

@@ -52,6 +52,9 @@ export const auditNames: Record<string, string> = {
   backup_deleted: "删除备份",
   backup_created: "创建备份",
   backup_restored: "恢复备份",
+  storage_cleaned: "清理过期数据",
+  permanent_deleted: "永久删除数据",
+  download_deleted: "删除旧安装包",
 };
 export const fileSize = (bytes: number) =>
   bytes >= 1073741824

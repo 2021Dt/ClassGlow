@@ -4,6 +4,8 @@ import { Megaphone, Search, Send, X } from "@lucide/vue";
 import { api } from "../api";
 import { adminDate } from "../admin";
 import AnnouncementMarkdown from "./AnnouncementMarkdown.vue";
+import PermanentDelete from "./PermanentDelete.vue";
+const deletion = ref<InstanceType<typeof PermanentDelete>>();
 
 type Account = { id: string; name: string; login: string };
 type Announcement = {
@@ -78,12 +80,15 @@ async function searchAccounts(next = 0, query = search.value.trim()) {
 watch(
   () => form.scope,
   (scope) => {
-    if (scope === "selected" && !accounts.value.length) void searchAccounts();
+    if (scope === "selected" && !accounts.value.length)
+      void searchAccounts();
   },
 );
 function toggleAccount(account: Account) {
   if (ids.value.has(account.id))
-    selected.value = selected.value.filter((entry) => entry.id !== account.id);
+    selected.value = selected.value.filter(
+      (entry) => entry.id !== account.id,
+    );
   else if (selected.value.length < 500)
     selected.value = [...selected.value, account];
 }
@@ -152,7 +157,9 @@ onMounted(() => void reload());
 
 <template>
   <div class="announcement-admin">
-    <p v-if="error" class="admin-feedback error" role="alert">{{ error }}</p>
+    <p v-if="error" class="admin-feedback error" role="alert">
+      {{ error }}
+    </p>
     <p v-if="notice" class="admin-feedback success" role="status">
       {{ notice }}
     </p>
@@ -191,10 +198,16 @@ onMounted(() => void reload());
                 <option value="selected">指定账号</option>
               </AppSelect>
             </label>
-            <p v-if="form.scope === 'all'" class="announcement-scope-note muted small">
+            <p
+              v-if="form.scope === 'all'"
+              class="announcement-scope-note muted small"
+            >
               公告撤回前，后续开通的账号也会收到。
             </p>
-            <div v-if="form.scope === 'selected'" class="announcement-targets">
+            <div
+              v-if="form.scope === 'selected'"
+              class="announcement-targets"
+            >
               <div class="announcement-account-search">
                 <input
                   v-model="search"
@@ -250,11 +263,15 @@ onMounted(() => void reload());
                     @change="toggleAccount(account)"
                   />
                   <span
-                    >{{ account.name }} <small>{{ account.login }}</small></span
+                    >{{ account.name }}
+                    <small>{{ account.login }}</small></span
                   >
                 </label>
               </div>
-              <div v-if="accountTotal > pageSize" class="announcement-paging">
+              <div
+                v-if="accountTotal > pageSize"
+                class="announcement-paging"
+              >
                 <button
                   type="button"
                   class="text-button"
@@ -354,6 +371,14 @@ onMounted(() => void reload());
           >
             撤回
           </button>
+          <button
+            v-if="row.withdrawnAt"
+            class="text-button destructive"
+            :disabled="busy || historyBusy"
+            @click="deletion?.open('announcements', row.id)"
+          >
+            永久删除
+          </button>
         </div>
       </article>
       <div v-if="total > pageSize" class="announcement-paging">
@@ -380,6 +405,13 @@ onMounted(() => void reload());
       </div>
     </section>
   </div>
+  <PermanentDelete
+    ref="deletion"
+    @changed="
+      notice = $event;
+      reload(0);
+    "
+  />
 </template>
 
 <style scoped>

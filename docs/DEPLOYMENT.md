@@ -4,6 +4,8 @@
 
 本项目域名：`teacher.dgplus.vip`。代码仓库：[2021Dt/ClassGlow](https://github.com/2021Dt/ClassGlow)，部署分支为 `main`。以下脚本面向 Ubuntu 22.04/24.04/26.04 或 Debian 12/13、使用 systemd 的独立服务器。教师与管理员操作见 [使用说明](USAGE.md)。
 
+2026-11-05 增加每日存储维护与管理员永久删除入口。部署会安装 `classglow-maintenance.timer`，北京时间 03:30 起的 5 分钟内清理 30 天前日志和失效记录并按需回收 SQLite 空间，手工执行使用 `sudo classglow cleanup`。安装包目录 `.deploy/downloads` 的目录所有者为 10001，并挂入 API 供管理员删除旧包。106 已启用 `KANBAN_JOURNAL_LOGS=true`，容器日志进入宿主机 journal，宿主机策略为最多 30 天、持久日志目标上限 512 MB。具体保留规则与删除范围见 [存储维护](SERVER-CLEANUP.md)。
+
 ## 106 服务器交接记录
 
 记录日期：2026-11-04。本机已按“已有 Nginx 的共享服务器”方案部署，日常使用 `sudo classglow` 运维命令即可，不要重复执行独立服务器安装步骤。
