@@ -298,7 +298,13 @@ function keyboard(event: KeyboardEvent) {
     event.shiftKey ? redo() : undo();
     return;
   }
-  if (playing.value || !selected.value || selected.value.locked) return;
+  if (
+    playing.value ||
+    !selected.value ||
+    selected.value.locked ||
+    !(event.target as HTMLElement).closest(".canvas-item")
+  )
+    return;
   if (event.key === "Delete") {
     event.preventDefault();
     remove();
