@@ -82,9 +82,11 @@ onMounted(async () => {
   dialog.value?.showModal();
   await position();
   window.addEventListener("resize", position);
+  window.visualViewport?.addEventListener("resize", position);
 });
 onUnmounted(() => {
   window.removeEventListener("resize", position);
+  window.visualViewport?.removeEventListener("resize", position);
   dialog.value?.close();
 });
 </script>
@@ -170,7 +172,9 @@ onUnmounted(() => {
 .guide-content header button {
   background: none;
   color: #8c9790;
-  padding: 3px;
+  padding: 10px;
+  min-width: 44px;
+  min-height: 44px;
   display: grid;
   place-items: center;
 }
@@ -211,5 +215,36 @@ onUnmounted(() => {
   border-radius: 22px;
   padding: 10px 16px;
   font-size: 12px;
+  min-height: 44px;
+}
+@media (max-width: 600px), (max-height: 500px) {
+  .first-guide {
+    left: 12px !important;
+    top: auto !important;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+    max-width: none;
+  }
+  .guide-content {
+    max-height: calc(70dvh - 24px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 14px 18px;
+  }
+  .guide-content h2 {
+    margin-top: 6px;
+  }
+  .guide-content p {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .guide-content footer {
+    margin-top: 14px;
+  }
+  .guide-skip,
+  .guide-back {
+    min-height: 44px;
+    padding: 8px 2px;
+  }
 }
 </style>

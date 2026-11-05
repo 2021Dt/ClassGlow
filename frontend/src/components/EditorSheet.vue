@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DatePicker from "./DatePicker.vue";
+import TaskGuide from "./TaskGuide.vue";
 import {
   computed,
   nextTick,
@@ -313,6 +314,25 @@ onUnmounted(() => {
         </button>
       </header>
       <div class="sheet-body">
+        <TaskGuide
+          v-if="!preview"
+          name="publish-content"
+          title="发布内容怎么操作？"
+          :steps="[
+            {
+              title: '核对班级与科目',
+              text: '展开“发布班级”确认目标，选择科目再填写正文。多个班级会分别生成发布记录。',
+            },
+            {
+              title: '设置展示时间',
+              text: '开始时间决定何时出现在看板上，结束时间决定何时停止展示；作业截止时间用于提示交作业时间。',
+            },
+            {
+              title: '预览后发布',
+              text: '预览检查内容与时间，再点击发布。草稿不会展示；发布后可在“发布记录”修改或撤回。',
+            },
+          ]"
+        />
         <fieldset class="editor-fields" :disabled="busy || !!pendingPublish">
           <template v-if="!preview">
             <details

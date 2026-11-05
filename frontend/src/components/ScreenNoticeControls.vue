@@ -11,6 +11,13 @@ import {
 import type { Device } from "../domain";
 import { session } from "../api";
 import ScreenNoticePreview from "./ScreenNoticePreview.vue";
+import NoticeCanvasDesigner from "./NoticeCanvasDesigner.vue";
+import TaskGuide from "./TaskGuide.vue";
+import {
+  defaultNoticeCanvas,
+  canvasProblem,
+  supportsNoticeCanvas,
+} from "../noticeCanvas";
 import {
   defaultNoticeStyle,
   noticeModes,
@@ -39,6 +46,10 @@ const form = reactive<ScreenNoticeInput>({
 });
 const custom = ref(false),
   style = reactive(defaultNoticeStyle());
+const canvas = ref(defaultNoticeCanvas());
+const canvasClient = computed(() =>
+  supportsNoticeCanvas(props.device.clientVersion),
+);
 const templateName = ref(""),
   feedback = ref("");
 const storageKey = `classglow-notice-styles-${session.userId}`;
@@ -50,8 +61,12 @@ try {
 }
 const payload = computed<ScreenNoticeInput>(() => ({
   ...form,
-  message: form.message.trim(),
-  ...(custom.value ? { style: { ...style } } : {}),
+  message: form.mode === "canvas" ? "自由画布提醒" : form.message.trim(),
+  ...(form.mode === "canvas"
+    ? { canvas: canvas.value }
+    : custom.value
+      ? { style: { ...style } }
+      : {}),
 }));
 const designedClient = computed(() =>
   supportsNoticeDesign(props.device.clientVersion),
@@ -61,25 +76,27 @@ const active = computed(
     !!props.device.activeNoticeId &&
     (props.device.noticeEndsAt ?? 0) * 1000 + 5000 > props.now,
 );
-const scrolling = computed(() =>
-  ["marquee", "barrage"].includes(form.mode),
-);
+const scrolling = computed(() => ["marquee", "barrage"].includes(form.mode));
 const valid = computed(
   () =>
-    form.message.trim().length > 0 &&
-    form.message.length <= 160 &&
+    (form.mode === "canvas" ||
+      (form.message.trim().length > 0 && form.message.length <= 160)) &&
     Number.isInteger(form.duration) &&
     form.duration >= 5 &&
     form.duration <= 3600 &&
     (form.mode !== "barrage" ||
       form.message.split("\n").filter(Boolean).length <= 3) &&
-    (!custom.value || validNoticeStyle(style)),
+    (form.mode === "canvas"
+      ? !canvasProblem(canvas.value)
+      : !custom.value || validNoticeStyle(style)),
 );
 const sendDisabled = computed(
   () =>
     props.disabled ||
     !valid.value ||
-    (custom.value && !designedClient.value),
+    (form.mode === "canvas"
+      ? !canvasClient.value
+      : custom.value && !designedClient.value),
 );
 function apply(preset: { mode: NoticeMode; style: NoticeStyle }) {
   form.mode = preset.mode;
@@ -116,9 +133,7 @@ function saveStyle() {
     style: { ...style },
   });
   if (persist(next)) {
-    feedback.value = previous
-      ? "同名样式已更新。"
-      : "样式已保存到当前浏览器。";
+    feedback.value = previous ? "同名样式已更新。" : "样式已保存到当前浏览器。";
     templateName.value = "";
   }
 }
@@ -141,6 +156,24 @@ export type { ScreenNoticeInput } from "../screenNotice";
         >这台电脑正在播放</span
       >
     </header>
+    <TaskGuide
+      name="screen-notice"
+      title="发送提醒前，先看这三步"
+      :steps="[
+        {
+          title: '选提醒形式',
+          text: '跑马灯适合短通知，弹幕可分行，弹窗集中提醒，倒计时用于限时任务。自由画布可以组合多个组件。',
+        },
+        {
+          title: '预览和确认目标',
+          text: '预览只在网页演示，不会打扰课堂。核对上方电脑名称、在线状态和客户端版本；未连接时仍可先设计。',
+        },
+        {
+          title: '发送后看执行结果',
+          text: '新提醒会替换该电脑的旧提醒，到时自动关闭。全屏课件是否显示由下方选项控制，也可随时停止提醒。',
+        },
+      ]"
+    />
     <form @submit.prevent="send">
       <div class="notice-modes" role="group" aria-label="提醒形式">
         <button
@@ -154,247 +187,268 @@ export type { ScreenNoticeInput } from "../screenNotice";
           ><small>{{ mode.caption }}</small>
         </button>
       </div>
-      <div
-        class="notice-design-tabs"
-        role="group"
-        aria-label="提醒设计方式"
-      >
-        <button
-          type="button"
-          :aria-pressed="!custom"
-          @click="switchDesign(false)"
-        >
-          快捷配色
-        </button>
-        <button
-          type="button"
-          :aria-pressed="custom"
-          @click="switchDesign(true)"
-        >
-          <SlidersHorizontal :size="15" />自定义设计
-        </button>
-      </div>
-      <div v-if="custom" class="notice-presets" aria-label="设计起点">
-        <span class="muted small">从样式开始</span
-        ><button
-          v-for="preset in noticePresets"
-          :key="preset.name"
-          type="button"
-          @click="apply(preset)"
-        >
-          <i :style="{ background: preset.style.backgroundColor }"></i
-          >{{ preset.name }}
-        </button>
-      </div>
-      <div class="notice-layout">
-        <div class="notice-inputs">
-          <label class="field"
-            >提醒内容<textarea
-              v-model="form.message"
-              maxlength="160"
-              rows="3"
-              required
-              placeholder="输入要告诉全班的话"
-            />
-          </label>
-          <p v-if="form.mode === 'barrage'" class="muted small">
-            换行可分成最多 3 条弹幕。
-          </p>
-          <p
-            v-if="
-              form.mode === 'barrage' &&
-              form.message.split('\n').filter(Boolean).length > 3
-            "
-            class="field-error"
-            role="alert"
+      <template v-if="form.mode !== 'canvas'">
+        <div class="notice-design-tabs" role="group" aria-label="提醒设计方式">
+          <button
+            type="button"
+            :aria-pressed="!custom"
+            @click="switchDesign(false)"
           >
-            弹幕最多 3 条，请合并多余的行。
-          </p>
-          <div class="notice-options">
+            快捷配色
+          </button>
+          <button
+            type="button"
+            :aria-pressed="custom"
+            @click="switchDesign(true)"
+          >
+            <SlidersHorizontal :size="15" />自定义设计
+          </button>
+        </div>
+        <div v-if="custom" class="notice-presets" aria-label="设计起点">
+          <span class="muted small">从样式开始</span
+          ><button
+            v-for="preset in noticePresets"
+            :key="preset.name"
+            type="button"
+            @click="apply(preset)"
+          >
+            <i :style="{ background: preset.style.backgroundColor }"></i
+            >{{ preset.name }}
+          </button>
+        </div>
+        <div class="notice-layout">
+          <div class="notice-inputs">
             <label class="field"
-              >{{
-                form.mode === "countdown"
-                  ? "倒计时（秒）"
-                  : "播放时长（秒）"
-              }}<input
-                v-model.number="form.duration"
-                type="number"
-                min="5"
-                max="3600"
-                step="1"
+              >提醒内容<textarea
+                v-model="form.message"
+                maxlength="160"
+                rows="3"
                 required
-            /></label>
-            <label v-if="!custom" class="field"
-              >颜色<AppSelect v-model="form.tone"
-                ><option value="blue">晴空蓝</option>
-                <option value="amber">暖金色</option>
-                <option value="red">醒目红</option></AppSelect
-              ></label
+                placeholder="输入要告诉全班的话"
+              />
+            </label>
+            <p v-if="form.mode === 'barrage'" class="muted small">
+              换行可分成最多 3 条弹幕。
+            </p>
+            <p
+              v-if="
+                form.mode === 'barrage' &&
+                form.message.split('\n').filter(Boolean).length > 3
+              "
+              class="field-error"
+              role="alert"
             >
-            <label v-else class="field"
-              >字体<AppSelect v-model="style.fontFamily"
-                ><option value="sans">黑体</option>
-                <option value="serif">宋体</option>
-                <option value="kai">楷体</option></AppSelect
-              ></label
-            >
-          </div>
-          <template v-if="custom">
+              弹幕最多 3 条，请合并多余的行。
+            </p>
             <div class="notice-options">
               <label class="field"
-                >字号<input
-                  v-model.number="style.fontSize"
+                >{{
+                  form.mode === "countdown" ? "倒计时（秒）" : "播放时长（秒）"
+                }}<input
+                  v-model.number="form.duration"
                   type="number"
-                  min="24"
-                  max="120"
+                  min="5"
+                  max="3600"
                   step="1"
                   required
               /></label>
-              <label class="field"
-                >字重<AppSelect
-                  :model-value="style.bold ? 'bold' : 'normal'"
-                  @update:model-value="style.bold = $event === 'bold'"
-                  ><option value="normal">常规</option>
-                  <option value="bold">加粗</option></AppSelect
+              <label v-if="!custom" class="field"
+                >颜色<AppSelect v-model="form.tone"
+                  ><option value="blue">晴空蓝</option>
+                  <option value="amber">暖金色</option>
+                  <option value="red">醒目红</option></AppSelect
                 ></label
               >
-              <label class="field notice-color"
-                >文字颜色<input
-                  v-model="style.textColor"
-                  type="color"
-                /><span>{{ style.textColor }}</span></label
-              >
-              <label class="field notice-color"
-                >背景颜色<input
-                  v-model="style.backgroundColor"
-                  type="color"
-                /><span>{{ style.backgroundColor }}</span></label
-              >
-            </div>
-            <label class="field notice-range"
-              >背景不透明度 <output>{{ style.opacity }}%</output
-              ><input
-                v-model.number="style.opacity"
-                type="range"
-                min="20"
-                max="100"
-            /></label>
-            <div class="notice-options">
-              <label v-if="!scrolling" class="field"
-                >呈现方式<AppSelect v-model="style.surface"
-                  ><option value="fullscreen">铺满全屏</option>
-                  <option value="card">悬浮卡片</option></AppSelect
-                ></label
-              >
-              <label
-                v-if="scrolling || style.surface === 'card'"
-                class="field"
-                >显示位置<AppSelect v-model="style.position"
-                  ><option value="top">顶部</option>
-                  <option value="center">中间</option>
-                  <option value="bottom">底部</option></AppSelect
-                ></label
-              >
-              <label v-if="scrolling" class="field"
-                >滚动方向<AppSelect v-model="style.direction"
-                  ><option value="left">从右向左</option>
-                  <option value="right">从左向右</option></AppSelect
+              <label v-else class="field"
+                >字体<AppSelect v-model="style.fontFamily"
+                  ><option value="sans">黑体</option>
+                  <option value="serif">宋体</option>
+                  <option value="kai">楷体</option></AppSelect
                 ></label
               >
             </div>
-            <label v-if="scrolling" class="field notice-range"
-              >滚动一轮 <output>{{ style.flowSeconds }} 秒</output
-              ><input
-                v-model.number="style.flowSeconds"
-                type="range"
-                min="6"
-                max="40"
-              /><small class="muted">时间越长，滚动越慢。</small></label
-            >
-            <label v-if="!scrolling" class="field notice-range"
-              >内容宽度 <output>{{ style.width }}%</output
-              ><input
-                v-model.number="style.width"
-                type="range"
-                min="40"
-                max="90"
-            /></label>
-            <label
-              v-if="
-                form.mode === 'barrage' ||
-                (!scrolling && style.surface === 'card')
-              "
-              class="field notice-range"
-              >圆角 <output>{{ style.radius }}</output
-              ><input
-                v-model.number="style.radius"
-                type="range"
-                min="0"
-                max="64"
-            /></label>
-          </template>
-          <label class="notice-override"
-            ><input
-              v-model="form.overFullscreen"
-              type="checkbox"
-            />全屏课件播放时也显示这条提醒</label
-          >
-        </div>
-        <div class="notice-preview-column">
-          <ScreenNoticePreview :notice="payload" />
-          <section v-if="custom" class="notice-saved">
-            <h3>我的样式</h3>
-            <p class="muted small">
-              只保存外观，保存在当前账号的此浏览器中，最多 12
-              个。同名保存会更新样式。
-            </p>
-            <div class="notice-save-row">
-              <label class="field"
-                >样式名称<input
-                  v-model="templateName"
-                  maxlength="24"
-                  placeholder="例如：课间温柔提醒"
-                  @keydown.enter.prevent="saveStyle" /></label
-              ><button
-                type="button"
-                class="button secondary"
-                :disabled="!templateName.trim() || !validNoticeStyle(style)"
-                @click="saveStyle"
-              >
-                <Save :size="16" />保存样式
-              </button>
-            </div>
-            <ul v-if="saved.length" class="notice-saved-list">
-              <li v-for="preset in saved" :key="preset.id">
-                <button
-                  type="button"
-                  class="text-button"
-                  @click="apply(preset)"
+            <template v-if="custom">
+              <div class="notice-options">
+                <label class="field"
+                  >字号<input
+                    v-model.number="style.fontSize"
+                    type="number"
+                    min="24"
+                    max="120"
+                    step="1"
+                    required
+                /></label>
+                <label class="field"
+                  >字重<AppSelect
+                    :model-value="style.bold ? 'bold' : 'normal'"
+                    @update:model-value="style.bold = $event === 'bold'"
+                    ><option value="normal">常规</option>
+                    <option value="bold">加粗</option></AppSelect
+                  ></label
                 >
-                  <i
-                    :style="{ background: preset.style.backgroundColor }"
-                  ></i
-                  >{{ preset.name }}</button
+                <label class="field notice-color"
+                  >文字颜色<input
+                    v-model="style.textColor"
+                    type="color"
+                  /><span>{{ style.textColor }}</span></label
+                >
+                <label class="field notice-color"
+                  >背景颜色<input
+                    v-model="style.backgroundColor"
+                    type="color"
+                  /><span>{{ style.backgroundColor }}</span></label
+                >
+              </div>
+              <label class="field notice-range"
+                >背景不透明度 <output>{{ style.opacity }}%</output
+                ><input
+                  v-model.number="style.opacity"
+                  type="range"
+                  min="20"
+                  max="100"
+              /></label>
+              <div class="notice-options">
+                <label v-if="!scrolling" class="field"
+                  >呈现方式<AppSelect v-model="style.surface"
+                    ><option value="fullscreen">铺满全屏</option>
+                    <option value="card">悬浮卡片</option></AppSelect
+                  ></label
+                >
+                <label
+                  v-if="scrolling || style.surface === 'card'"
+                  class="field"
+                  >显示位置<AppSelect v-model="style.position"
+                    ><option value="top">顶部</option>
+                    <option value="center">中间</option>
+                    <option value="bottom">底部</option></AppSelect
+                  ></label
+                >
+                <label v-if="scrolling" class="field"
+                  >滚动方向<AppSelect v-model="style.direction"
+                    ><option value="left">从右向左</option>
+                    <option value="right">从左向右</option></AppSelect
+                  ></label
+                >
+              </div>
+              <label v-if="scrolling" class="field notice-range"
+                >滚动一轮 <output>{{ style.flowSeconds }} 秒</output
+                ><input
+                  v-model.number="style.flowSeconds"
+                  type="range"
+                  min="6"
+                  max="40"
+                /><small class="muted">时间越长，滚动越慢。</small></label
+              >
+              <label v-if="!scrolling" class="field notice-range"
+                >内容宽度 <output>{{ style.width }}%</output
+                ><input
+                  v-model.number="style.width"
+                  type="range"
+                  min="40"
+                  max="90"
+              /></label>
+              <label
+                v-if="
+                  form.mode === 'barrage' ||
+                  (!scrolling && style.surface === 'card')
+                "
+                class="field notice-range"
+                >圆角 <output>{{ style.radius }}</output
+                ><input
+                  v-model.number="style.radius"
+                  type="range"
+                  min="0"
+                  max="64"
+              /></label>
+            </template>
+            <label class="notice-override"
+              ><input
+                v-model="form.overFullscreen"
+                type="checkbox"
+              />全屏课件播放时也显示这条提醒</label
+            >
+          </div>
+          <div class="notice-preview-column">
+            <ScreenNoticePreview :notice="payload" />
+            <section v-if="custom" class="notice-saved">
+              <h3>我的样式</h3>
+              <p class="muted small">
+                只保存外观，保存在当前账号的此浏览器中，最多 12
+                个。同名保存会更新样式。
+              </p>
+              <div class="notice-save-row">
+                <label class="field"
+                  >样式名称<input
+                    v-model="templateName"
+                    maxlength="24"
+                    placeholder="例如：课间温柔提醒"
+                    @keydown.enter.prevent="saveStyle" /></label
                 ><button
                   type="button"
-                  class="icon-button"
-                  :aria-label="`删除样式 ${preset.name}`"
-                  @click="removeStyle(preset.id)"
+                  class="button secondary"
+                  :disabled="!templateName.trim() || !validNoticeStyle(style)"
+                  @click="saveStyle"
                 >
-                  <Trash2 :size="14" />
+                  <Save :size="16" />保存样式
                 </button>
-              </li>
-            </ul>
-            <p v-if="feedback" role="status" class="muted small">
-              {{ feedback }}
-            </p>
-          </section>
+              </div>
+              <ul v-if="saved.length" class="notice-saved-list">
+                <li v-for="preset in saved" :key="preset.id">
+                  <button
+                    type="button"
+                    class="text-button"
+                    @click="apply(preset)"
+                  >
+                    <i :style="{ background: preset.style.backgroundColor }"></i
+                    >{{ preset.name }}</button
+                  ><button
+                    type="button"
+                    class="icon-button"
+                    :aria-label="`删除样式 ${preset.name}`"
+                    @click="removeStyle(preset.id)"
+                  >
+                    <Trash2 :size="14" />
+                  </button>
+                </li>
+              </ul>
+              <p v-if="feedback" role="status" class="muted small">
+                {{ feedback }}
+              </p>
+            </section>
+          </div>
         </div>
-      </div>
-      <p v-if="custom && !designedClient" class="notice subtle">
+      </template>
+      <template v-else>
+        <NoticeCanvasDesigner v-model="canvas" :duration="form.duration" />
+        <div class="notice-options">
+          <label class="field"
+            >播放时长（秒）<input
+              v-model.number="form.duration"
+              type="number"
+              min="5"
+              max="3600"
+              step="1"
+              required
+          /></label>
+        </div>
+        <label class="notice-override"
+          ><input
+            v-model="form.overFullscreen"
+            type="checkbox"
+          />全屏课件播放时也显示这条提醒</label
+        >
+      </template>
+      <p v-if="form.mode === 'canvas' && !canvasClient" class="notice subtle">
+        自由画布需要教室电脑升级到
+        <a href="/download" target="_blank" rel="noopener">0.4.14 或更新版本</a
+        >。可以先设计并保存方案，在教室电脑覆盖安装后即可发送，原绑定和设置会保留。
+      </p>
+      <p
+        v-else-if="form.mode !== 'canvas' && custom && !designedClient"
+        class="notice subtle"
+      >
         自定义效果需要教室电脑升级到
-        <a href="/download" target="_blank" rel="noopener"
-          >0.4.13 或更新版本</a
+        <a href="/download" target="_blank" rel="noopener">0.4.13 或更新版本</a
         >。可以先设计和保存样式，覆盖安装后即可发送。
       </p>
       <p class="muted small">
@@ -433,7 +487,7 @@ export type { ScreenNoticeInput } from "../screenNotice";
 }
 .notice-modes {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin: 14px 0 20px;
 }

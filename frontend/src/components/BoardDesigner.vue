@@ -68,6 +68,7 @@ import {
 } from "../canvas";
 import CanvasBoard from "./CanvasBoard.vue";
 import StudioPalette from "./StudioPalette.vue";
+import TaskGuide from "./TaskGuide.vue";
 import BackgroundControls from "./BackgroundControls.vue";
 import DatePicker from "./DatePicker.vue";
 import CardImageControls from "./CardImageControls.vue";
@@ -923,6 +924,24 @@ onUnmounted(() => {
         </button>
       </div>
     </header>
+    <TaskGuide
+      name="board-design"
+      title="看板画布操作指引"
+      :steps="[
+        {
+          title: '先选组件或模板',
+          text: '点组件旁的说明了解用途。手机点“添加组件与模板”打开素材；选择模板会替换当前排版，可用撤销恢复。',
+        },
+        {
+          title: '排版与编辑',
+          text: '点选组件后拖动位置，拖四边或四角缩放。手机点“组件属性与外观”修改内容、尺寸和图层，锁定可防止误拖。',
+        },
+        {
+          title: '保存，再发布',
+          text: '保存草稿便于继续编辑；发布到教室才会更新电脑展示。发布前检查预览、目标班级和组件内的文字。',
+        },
+      ]"
+    />
     <p v-if="publishError" class="notice danger studio-notice" role="alert">
       {{ publishError }}
     </p>

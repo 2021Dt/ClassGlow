@@ -1,4 +1,6 @@
-export type NoticeMode = "marquee" | "barrage" | "popup" | "countdown";
+import type { NoticeCanvas } from "./noticeCanvas";
+export type NoticeMode =
+  "marquee" | "barrage" | "popup" | "countdown" | "canvas";
 export interface NoticeStyle {
   fontFamily: "sans" | "serif" | "kai";
   fontSize: number;
@@ -20,6 +22,7 @@ export interface ScreenNoticeInput {
   tone: "blue" | "amber" | "red";
   overFullscreen: boolean;
   style?: NoticeStyle;
+  canvas?: NoticeCanvas;
 }
 export const noticeTones = {
   blue: "#17458c",
@@ -31,6 +34,7 @@ export const noticeModes = [
   { id: "barrage", name: "弹幕", caption: "悬浮飘过" },
   { id: "popup", name: "全屏弹窗", caption: "全屏或卡片" },
   { id: "countdown", name: "倒计时", caption: "限时任务" },
+  { id: "canvas", name: "自由画布", caption: "组合文字、图片、卡片" },
 ] as const;
 export function defaultNoticeStyle(
   tone: ScreenNoticeInput["tone"] = "blue",
@@ -71,9 +75,7 @@ export function validNoticeStyle(value: NoticeStyle) {
       [value.width, 40, 90],
       [value.radius, 0, 64],
       [value.flowSeconds, 6, 40],
-    ].every(
-      ([v, min, max]) => Number.isInteger(v) && v! >= min! && v! <= max!,
-    )
+    ].every(([v, min, max]) => Number.isInteger(v) && v! >= min! && v! <= max!)
   );
 }
 export const noticePresets: {
@@ -139,7 +141,7 @@ export function readNoticeStyles(raw: string | null): SavedNoticeStyle[] {
           typeof v.name === "string" &&
           v.name.trim() &&
           v.name.length <= 24 &&
-          noticeModes.some((m) => m.id === v.mode) &&
+          noticeModes.some((m) => m.id === v.mode && m.id !== "canvas") &&
           v.style &&
           validNoticeStyle(v.style),
       )
@@ -149,10 +151,7 @@ export function readNoticeStyles(raw: string | null): SavedNoticeStyle[] {
         name: v.name,
         mode: v.mode,
         style: Object.fromEntries(
-          Object.keys(defaultNoticeStyle()).map((key) => [
-            key,
-            v.style[key],
-          ]),
+          Object.keys(defaultNoticeStyle()).map((key) => [key, v.style[key]]),
         ) as unknown as NoticeStyle,
       }));
   } catch {

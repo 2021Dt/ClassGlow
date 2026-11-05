@@ -77,7 +77,7 @@ def device_view(d):
     }
 
 
-def command_view(c):
+def command_view(c, include_canvas=False):
     return {
         "id": c.id,
         "deviceId": c.device_id,
@@ -91,7 +91,12 @@ def command_view(c):
         "syncEpoch": c.epoch,
         "expiresAt": c.expires,
         "issuedAt": c.issued,
-        **{k: v for k, v in c.data.items() if k in ("page", "pageSetId", "localControlEpoch", "notice")},
+        **{k: v for k, v in c.data.items() if k in ("page", "pageSetId", "localControlEpoch")},
+        **(
+            {"notice": {k: v for k, v in c.data["notice"].items() if k != "canvas" or include_canvas}}
+            if "notice" in c.data
+            else {}
+        ),
     }
 
 
@@ -249,7 +254,7 @@ def snapshot(
                     "basicLayout": basic,
                 },
                 "contents": [content_view(db, item) for item in contents],
-                "commands": [command_view(cmd) for cmd in commands],
+                "commands": [command_view(cmd, include_canvas=True) for cmd in commands],
                 "displayRequest": display_request,
             },
             ensure_ascii=False,
@@ -460,6 +465,8 @@ def command(
     if body.notice and body.notice.style is None:
         # 保持旧版未附带设计的请求签名，升级途中重试也不会产生重复指令。
         payload["notice"].pop("style", None)
+    if body.notice and body.notice.canvas is None:
+        payload["notice"].pop("canvas", None)
     key, signature, previous = idempotent(db, user, idempotency_key, f"control:{device_id}", payload)
     if previous is not None:
         return previous
@@ -478,6 +485,8 @@ def command(
             fail(409, "client_update_required", "这台电脑需要更新至 0.4.12 或更高版本才能播放醒目提醒。")
         if body.notice and body.notice.style is not None and version < (0, 4, 13):
             fail(409, "client_update_required", "自定义提醒需要 0.4.13 或更高版本客户端，请先在教室电脑覆盖更新。")
+        if body.notice and body.notice.canvas is not None and version < (0, 4, 14):
+            fail(409, "client_update_required", "自由画布提醒需要 0.4.14 或更高版本客户端，请先在教室电脑覆盖更新。")
     if body.action == "notice" and (s.get("localPaused") or s.get("remotePaused")):
         fail(409, "device_paused", "这台电脑已暂停，请恢复展示后再发送醒目提醒。")
     if body.action == "resume" and s.get("localPaused"):

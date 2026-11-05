@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     public_url: str = "http://127.0.0.1:5173"
     session_hours: int = Field(default=720, ge=1, le=720)
-    client_latest_version: str = "0.4.13"
+    client_latest_version: str = "0.4.14"
     client_download_url: str = ""
     storage_dir: Path = Path("data")
     downloads_dir: Path | None = None

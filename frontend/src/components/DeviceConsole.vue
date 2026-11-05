@@ -376,7 +376,12 @@ watch(
         </p>
       </div>
       <div class="device-heading-actions">
-        <button class="button secondary" @click="guideOpen = !guideOpen">
+        <button
+          class="button secondary"
+          :aria-expanded="guideOpen"
+          aria-controls="device-help"
+          @click="guideOpen ? closeGuide() : (guideOpen = true)"
+        >
           <CircleHelp :size="17" />操作指引
         </button>
         <button class="button primary" v-if="allowed" @click="emit('bind')">
@@ -386,11 +391,12 @@ watch(
     </div>
     <section
       v-if="guideOpen"
+      id="device-help"
       class="panel device-guide"
       aria-label="教室电脑操作指引"
     >
       <header>
-        <h3>第一次连接，按这三步来</h3>
+        <h3>连接、更新与查看执行结果</h3>
         <button class="text-button" @click="closeGuide">收起指引</button>
       </header>
       <ol>
@@ -420,6 +426,25 @@ watch(
             <strong>回到教室电脑启用展示</strong>
             <p>
               勾选“启用桌面展示”。以后网页发布作业会自动同步，客户端收进托盘后继续运行。
+            </p>
+          </div>
+        </li>
+        <li>
+          <span>4</span>
+          <div>
+            <strong>需要更新时，覆盖安装</strong>
+            <p>
+              在教室电脑下载新版安装包并安装，原绑定和设置会保留。手机浏览器刷新即可；自由提醒画布需要
+              0.4.14 及以上客户端。
+            </p>
+          </div>
+        </li>
+        <li>
+          <span>5</span>
+          <div>
+            <strong>确认电脑与执行状态</strong>
+            <p>
+              先选目标电脑，再执行操作。“已受理”表示请求已提交，“已执行”才是电脑完成操作；离线时先检查网络、客户端和本机暂停状态。
             </p>
           </div>
         </li>

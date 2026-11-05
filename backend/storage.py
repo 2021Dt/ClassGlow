@@ -72,7 +72,8 @@ def count(db, model, *where):
 
 
 def clean_records(db, timestamp=None):
-    cutoff = (timestamp if timestamp is not None else now()) - RETENTION_DAYS * 86400
+    timestamp = timestamp if timestamp is not None else now()
+    cutoff = timestamp - RETENTION_DAYS * 86400
     removed = {}
     for model, condition, label in expired_records(cutoff):
         removed[label] = db.execute(delete(model).where(condition)).rowcount
@@ -80,7 +81,24 @@ def clean_records(db, timestamp=None):
     removed["已关闭草稿正文"] = db.execute(
         update(Draft).where(Draft.closed.is_(True), Draft.updated < cutoff, Draft.data != {}).values(data={})
     ).rowcount
+    # 提醒最长 1 小时；过期一天后释放内嵌图片，保留执行记录到 30 天。
+    expired_canvases = db.scalars(select(Command).where(*canvas_cleanup_conditions(timestamp))).yield_per(20)
+    released = 0
+    for command in expired_canvases:
+        command.data = {
+            **command.data,
+            "notice": {k: v for k, v in command.data["notice"].items() if k != "canvas"},
+        }
+        released += 1
+        if released % 20 == 0:
+            db.flush()
+    db.flush()
+    removed["过期提醒画布"] = released
     return removed
+
+
+def canvas_cleanup_conditions(timestamp):
+    return (Command.expires < timestamp - 86400, Command.data["notice"]["canvas"].as_string().is_not(None))
 
 
 def old_backups(db):
@@ -135,10 +153,11 @@ def storage_report(user: User = Depends(system_admin), db: Session = Depends(get
             for model, condition, label in expired_records(cutoff)
         ]
         + [
+            {"label": "过期提醒画布", "count": count(db, Command, *canvas_cleanup_conditions(now()))},
             {
                 "label": "已关闭草稿正文",
                 "count": count(db, Draft, Draft.closed.is_(True), Draft.updated < cutoff, Draft.data != {}),
-            }
+            },
         ],
         "backups": {"count": len(backups), "bytes": sum(p.stat().st_size for p in backups)},
         "downloads": download_files(),

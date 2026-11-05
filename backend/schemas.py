@@ -388,13 +388,68 @@ class ScreenNoticeStyle(Input):
     direction: Literal["left", "right"] = "left"
 
 
+class NoticeElement(Input):
+    id: str = Field(min_length=1, max_length=40)
+    kind: Literal["text", "card", "image", "countdown"]
+    x: int = Field(ge=0, le=1552)
+    y: int = Field(ge=0, le=852)
+    w: int = Field(ge=48, le=1600)
+    h: int = Field(ge=48, le=900)
+    text: str = Field(default="", max_length=240)
+    fontFamily: Literal["sans", "serif", "kai"] = "sans"
+    fontSize: int = Field(default=56, ge=24, le=160)
+    bold: bool = True
+    align: Literal["left", "center", "right"] = "center"
+    textColor: str = Field(default="#ffffff", pattern=r"^#[0-9a-fA-F]{6}$")
+    fillColor: str = Field(default="#215544", pattern=r"^#[0-9a-fA-F]{6}$")
+    opacity: int = Field(default=95, ge=0, le=100)
+    radius: int = Field(default=32, ge=0, le=120)
+    image: str = Field(default="", max_length=240000)
+    imageFit: Literal["cover", "contain"] = "contain"
+    hidden: bool = False
+    locked: bool = False
+
+    @field_validator("image")
+    @classmethod
+    def raster_image(cls, value):
+        return LayoutInput.raster_background(value)
+
+    @model_validator(mode="after")
+    def valid_element(self):
+        if self.x + self.w > 1600 or self.y + self.h > 900:
+            raise ValueError("组件不能超出 1600×900 画布")
+        if (self.kind == "image") != bool(self.image):
+            raise ValueError("图片组件须上传图片，其他组件不能附带图片")
+        return self
+
+
+class NoticeCanvas(Input):
+    backgroundColor: str = Field(default="#102a43", pattern=r"^#[0-9a-fA-F]{6}$")
+    backgroundOpacity: int = Field(default=35, ge=0, le=100)
+    elements: list[NoticeElement] = Field(min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def valid_canvas(self):
+        if len({e.id for e in self.elements}) != len(self.elements):
+            raise ValueError("组件标识不能重复")
+        if not any(
+            not e.hidden and (e.kind in ("image", "countdown") or e.text.strip() or e.kind == "card" and e.opacity > 0)
+            for e in self.elements
+        ):
+            raise ValueError("至少保留一个有内容的可见组件")
+        if len(self.model_dump_json().encode()) > 524288:
+            raise ValueError("画布超过 512 KB，请删除或更换较小的图片")
+        return self
+
+
 class ScreenNotice(Input):
-    mode: Literal["marquee", "barrage", "popup", "countdown"]
+    mode: Literal["marquee", "barrage", "popup", "countdown", "canvas"]
     message: str = Field(min_length=1, max_length=160)
     duration: int = Field(default=30, ge=5, le=3600)
     tone: Literal["blue", "amber", "red"] = "blue"
     overFullscreen: bool = False
     style: ScreenNoticeStyle | None = None
+    canvas: NoticeCanvas | None = None
 
     @field_validator("message")
     @classmethod
@@ -405,6 +460,10 @@ class ScreenNotice(Input):
 
     @model_validator(mode="after")
     def barrage_lines(self):
+        if (self.mode == "canvas") != (self.canvas is not None):
+            raise ValueError("自由画布提醒须附带画布，其他提醒不能附带画布")
+        if self.mode == "canvas" and self.style is not None:
+            raise ValueError("自由画布通过组件设置样式")
         if (
             self.style is not None
             and self.mode == "barrage"

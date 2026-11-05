@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DatePicker from "./DatePicker.vue";
+import TaskGuide from "./TaskGuide.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ChevronLeft, ChevronRight, RefreshCw, Search } from "@lucide/vue";
 import { api, session } from "../api";
@@ -87,6 +88,24 @@ const mayEdit = (c: Content) =>
 
 <template>
   <section class="panel">
+    <TaskGuide
+      name="content-records"
+      title="查找、修改和撤回已发布内容"
+      :steps="[
+        {
+          title: '按状态与日期查找',
+          text: '“展示中”是当前内容，“待展示”会在开始时间自动出现。可组合科目、日期和关键词筛选。',
+        },
+        {
+          title: '修改或停止展示',
+          text: '有权限的内容可编辑、完成或撤回；操作后同步到该班级电脑。查看历史可核对修改前后的内容。',
+        },
+        {
+          title: '需要清理时再删除',
+          text: '先确认内容已结束或撤回，再使用可用的删除入口。永久删除无法恢复，操作前核对目标。',
+        },
+      ]"
+    />
     <div class="record-filters">
       <label class="field"
         >内容类型<AppSelect v-model="kind">

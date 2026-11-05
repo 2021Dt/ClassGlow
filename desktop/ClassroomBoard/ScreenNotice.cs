@@ -109,7 +109,10 @@ public sealed class ScreenNotice : IScreenNotice
         var close = new Button { Content = "关闭提醒 ×", FontSize = 16, Padding = new Thickness(18, 10, 18, 10), Margin = new Thickness(20), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Background = Brushes.White, Foreground = new SolidColorBrush(color), BorderThickness = new Thickness(0) };
         close.Click += (_, _) => Dismiss();
         TextBlock? counter = null;
-        if (notice["style"] is JsonObject) {
+        List<TextBlock> canvasCounters = [];
+        if (mode == "canvas" && notice["canvas"] is JsonObject design) {
+            root.Children.Add(NoticeCanvas.Build(design, out canvasCounters));
+        } else if (notice["style"] is JsonObject) {
             root.Children.Add(DesignedNotice(notice, root, out counter));
         } else if (mode is "popup" or "countdown") {
             root.Background = fill;
@@ -142,10 +145,12 @@ public sealed class ScreenNotice : IScreenNotice
         window = active; ActiveId = command.Str("id"); EndsAt = notice.Num("endsAt");
         // 用单调时钟累计本次播放，避免现场手动改系统时间造成无限播放。
         var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        if (counter is not null) canvasCounters.Add(counter);
         void Tick() {
             double seconds = remaining - elapsed.Elapsed.TotalSeconds;
-            if (counter is not null) { int whole = (int)Math.Max(0, Math.Ceiling(seconds)); counter.Text = whole > 0 ? $"{whole / 60:00}:{whole % 60:00}" : "时间到"; }
-            if (seconds <= (mode == "countdown" ? -5 : 0)) Dismiss();
+            int whole = (int)Math.Max(0, Math.Ceiling(seconds));
+            foreach (var clockText in canvasCounters) clockText.Text = whole > 0 ? $"{whole / 60:00}:{whole % 60:00}" : "时间到";
+            if (seconds <= (canvasCounters.Count > 0 ? -5 : 0)) Dismiss();
         }
         timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) }; timer.Tick += (_, _) => Tick();
         active.Show();
