@@ -9,8 +9,13 @@ permissions:
 jobs:
   web-and-api:
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON_DOWNLOADS: never
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: .python-version
       - uses: astral-sh/setup-uv@v6
         with:
           version: '0.9.9'
@@ -41,7 +46,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet restore desktop/ClassroomBoard/ClassroomBoard.csproj --locked-mode
-      - run: dotnet build desktop/ClassroomBoard/ClassroomBoard.csproj -c Release --no-restore
-      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --self-test --output .qa/desktop
-      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --reliability-check --output .qa/reliability
+      - run: dotnet restore desktop/ClassroomBoard/ClassroomBoard.csproj --locked-mode --runtime win-x64
+      - run: dotnet build desktop/ClassroomBoard/ClassroomBoard.csproj -c Release --no-restore --runtime win-x64
+      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --self-test --output .qa/desktop
+      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --reliability-check --output .qa/reliability

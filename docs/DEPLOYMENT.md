@@ -10,23 +10,31 @@
 
 ## 106 服务器交接记录
 
-记录日期：2026-11-04。本机已按“已有 Nginx 的共享服务器”方案部署，日常使用 `sudo classglow` 运维命令即可，不要重复执行独立服务器安装步骤。
+记录日期：2026-11-05。本机已按“已有 Nginx 的共享服务器”方案部署，日常使用 `sudo classglow` 运维命令即可，不要重复执行独立服务器安装步骤。
 
 | 项目 | 已部署配置 |
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | 0.4.13，醒目提醒自定义样式、预览与常用样式；准确提交通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.4.15，同步范围、独立素材、事务提交、多端会话与页面恢复；应用提交 `132f4f2`，准确部署记录通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
-| 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查新提交；以 `sudo classglow auto-status` 为准 |
+| 自动更新 | 已开启 `classglow-update.timer`，每 5 分钟检查稳定版本标签，仅在北京时间 02:00–05:00 自动部署；以 `sudo classglow auto-status` 为准 |
 | Git 网络 | 仅本仓库 `.git/config` 的 `http.proxy` 使用服务器现有 `http://127.0.0.1:7890`；直连 GitHub 超时，现有代理可正常读取 main |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.4.12 当前用户安装包，位于 `.deploy/downloads`，详见文末下载与校验值 |
+| Windows 发布 | 0.4.15 当前用户安装包，位于 `.deploy/downloads`，下载与校验值见下方本次发布记录 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
+
+### 0.4.15 更新记录
+
+2026-11-05 北京时间 17:16，106 从 `c75254c` 更新到应用提交 `132f4f2`。先构建并检查前后端镜像，再停服备份、执行两项 Alembic 迁移并切换服务；当前数据库结构为 `f4859e63cb27`。本次停写备份为容器内 `/app/data/backups/backup-before-deploy-20261105T091618Z-435e9f1b.db`，先前在线备份为 `backup-before-deploy-20261105T091155Z-ad1ee274.db`，两份备份权限均为 0600。
+
+迁移后账号 2、班级 1、成员关系 1、正式内容 3、修订 4、草稿 23、设备 4，与发布前一致；SQLite `quick_check` 为 `ok`、外键检查无异常、WAL 已启用，同步世代保持。已有设备继续提交心跳并取得 200/304 快照响应。HTTPS 首页、下载页、入口 JS/CSS、健康和版本接口均通过公网检查；未登录访问会话、诊断指标、设备素材和工作台数据均返回 401。自动更新与每日清理定时器已恢复为 active/enabled；维护窗口外的自动部署实际跳过，宿主机 Nginx 配置检查通过。
+
+Windows x64 0.4.15 [安装包下载](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.15-win-x64-setup.exe)，大小 53,726,326 字节，SHA-256 为 `bd7282e7dfa821c612f104e7cbe4f59c22801d2e88a5d5e5c3f984efb1dbf57e`。本地与服务器全文件摘要一致，公网 Range 返回 206、文件头和总长度正确。教室电脑需退出旧客户端后覆盖安装，保留绑定与设置；服务器发布不会替换电脑上的程序。新版本的实体教室长时间运行及完整安装卸载验收仍待执行，范围见 [验证记录](VERIFICATION.md)。
 
 0.4.6 沿用 SQLite，迁移到 `d1529b3fc804`，新增 `device_displays` 表。每台设备最多保留一张 400 KB 的 JPEG 回传图及状态，没有新增上传目录、服务或端口。布局接口上限为 2 MiB，回传接口为 600,000 字节，其他接口保持 128 KiB；已有 Nginx/Caddy 的 2 MiB 网关上限可继续使用。普通班级成员可查看本班回传，远程控制仍按角色和高级许可限制。客户端需手动升级到 0.4.6 并确认修订后的隐私说明，服务端更新不会自动替换教室电脑程序。
 
