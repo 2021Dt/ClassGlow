@@ -94,7 +94,9 @@ def create_user(body: OpenAccount, db: Session, password: str | None = None):
 
 
 @router.post("/system/accounts", status_code=201)
-def create_account(body: ManagedAccount, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def create_account(
+    body: ManagedAccount, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     target = create_user(body, db, body.password)
     # 初始密码只保存摘要，不写入审计。教师拿到账密即可登录，无额外激活步骤。
     log_system(db, user.login, "account_created", target.login, {"identity": body.identity})
@@ -102,7 +104,9 @@ def create_account(body: ManagedAccount, user: User = Depends(system_admin), db:
 
 
 @router.post("/system/account-invitations", status_code=201)
-def open_account(body: OpenAccount, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def open_account(
+    body: OpenAccount, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     target = create_user(body, db)
     result = issue_code(db, target)
     log_system(
@@ -116,7 +120,7 @@ def open_account(body: OpenAccount, user: User = Depends(system_admin), db: Sess
 
 
 @router.post("/system/users/{user_id}/activation")
-def reissue(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def reissue(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     target = db.scalar(select(User).where(User.id == user_id).with_for_update())
     if not target or not target.active or target.activated:
         fail(409, "activation_unavailable", "仅可为启用且尚未激活的账号重发激活码。已激活账号请使用重置密码。")
@@ -126,7 +130,7 @@ def reissue(user_id: str, user: User = Depends(system_admin), db: Session = Depe
 
 
 @router.post("/auth/activate")
-def activate(body: Activate, request: Request, db: Session = Depends(get_db)):
+def activate(body: Activate, request: Request, db: Session = Depends(get_db, scope="function")):
     limit(f"activation:{request.client.host}", 10, 300)
     if not system_config(db).initialized:
         fail(409, "school_pending", "学校尚未开通，请联系管理员。")

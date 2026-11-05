@@ -275,6 +275,65 @@ const myDrafts = computed(() =>
 </template>
 
 <style scoped>
+/* 首页样式随首页加载，不能依赖先打开过异步设备页。 */
+.teacher-guide-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 18px 22px;
+  border: 1px solid #e6ebf2;
+  border-radius: 20px;
+  background: #fff;
+}
+.teacher-guide-entry > div {
+  display: grid;
+  gap: 5px;
+}
+.teacher-guide-entry strong {
+  font-size: 14px;
+}
+.teacher-guide-entry span {
+  font-size: 12px;
+  color: #7c8797;
+}
+.home-device-status {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 10px;
+  max-height: 240px;
+  overflow: auto;
+  margin: 0 0 20px;
+}
+.home-device-status button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  text-align: left;
+  column-gap: 10px;
+  padding: 14px 18px;
+  border: 1px solid #e6ebf2;
+  border-radius: 16px;
+  color: #52647f;
+  background: #fff;
+}
+.home-device-status strong {
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.home-device-status span {
+  grid-column: 2;
+  margin-top: 4px;
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .teacher-guide-entry {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 .teaching-actions {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

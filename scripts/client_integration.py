@@ -8,11 +8,13 @@ import shutil
 import subprocess
 import time
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
+from PIL import Image
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--render-preview", action="store_true", help="在隔离窗口执行渲染和全部远程控制")
@@ -62,6 +64,20 @@ auth = request(
 )
 headers = {"Authorization": f"Bearer {auth['token']}"}
 classroom = request("POST", "/classes", headers=headers, json={"name": "客户端联调班（非真实数据）"})
+if not args.render_preview:
+    # 真实 Engine 必须从独立图片接口读取、校验并完成快照，再确认缓存版本。
+    image = BytesIO()
+    Image.new("RGB", (64, 64), "#C7D8E9").save(image, "JPEG")
+    request(
+        "PUT",
+        f"/classes/{classroom['id']}/layout",
+        headers=headers,
+        json={
+            **classroom["layout"],
+            "backgroundMode": "image",
+            "backgroundImage": "data:image/jpeg;base64," + base64.b64encode(image.getvalue()).decode(),
+        },
+    )
 if args.render_preview:
     # 使用老师在测试服务实际发布的设计，逐项对照网页和 Windows 渲染。
     classes = request("GET", "/classes", headers=headers)
@@ -150,6 +166,12 @@ try:
         readback("displayed")
     else:
         assert cached["device"]["applied"] == 0, "未启用壁纸时不能伪报已应用"
+        wait_for(
+            lambda: (
+                (output / "status.json").exists()
+                and json.loads((output / "status.json").read_text()).get("assetsResolved")
+            )
+        )
     sync = request(
         "POST",
         f"/devices/{device['id']}/commands",
@@ -202,6 +224,7 @@ try:
         "output": "isolated-window" if args.render_preview else "cache-only",
         "wallpaperChanged": False,
         "displayReadback": "displayed-paused-resumed" if args.render_preview else "not-tested",
+        "assetRoundtrip": not args.render_preview,
     }
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False), flush=True)

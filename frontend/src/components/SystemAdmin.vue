@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../admin.css";
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import {
   LayoutDashboard,
@@ -132,9 +133,7 @@ const busy = ref(false),
   error = ref(""),
   notice = ref(""),
   backupSupported = ref(true);
-const activeSection = computed(() =>
-  sections.find((s) => s.id === tab.value)!,
-);
+const activeSection = computed(() => sections.find((s) => s.id === tab.value)!);
 const hasFilters = computed(() => Object.values(filters).some(Boolean));
 const settingsForm = reactive({ siteName: "" }),
   licenseUserId = ref("");
@@ -153,10 +152,7 @@ async function refreshPage() {
   if (tab.value === "storage") await storageView.value?.reload();
 }
 function editItem(kind: string, item: any) {
-  if (
-    kind === "delete" &&
-    ["users", "classes", "devices"].includes(tab.value)
-  )
+  if (kind === "delete" && ["users", "classes", "devices"].includes(tab.value))
     deletionView.value?.open(
       tab.value as "users" | "classes" | "devices",
       item.id,
@@ -218,8 +214,7 @@ async function load(withOverview = false) {
     else if (result) {
       rows.value = result.items;
       total.value = result.total ?? result.items.length;
-      if (currentTab === "backups")
-        backupSupported.value = result.supported;
+      if (currentTab === "backups") backupSupported.value = result.supported;
     }
   } catch (e) {
     if (sequence === requestSequence) error.value = (e as Error).message;
@@ -376,9 +371,7 @@ defineExpose({ reload: () => load(true) });
             :class="{ active: tab === item.id }"
             :aria-current="tab === item.id ? 'page' : undefined"
             @click.prevent="go(item.id)"
-            ><component :is="item.icon" :size="18" /><span>{{
-              item.name
-            }}</span
+            ><component :is="item.icon" :size="18" /><span>{{ item.name }}</span
             ><ChevronRight v-if="tab === item.id" :size="14"
           /></a>
         </div>
@@ -422,8 +415,7 @@ defineExpose({ reload: () => load(true) });
           }}</strong>
         </div>
         <div class="admin-topbar-right">
-          <span class="admin-secure"
-            ><ShieldCheck :size="14" />管理员空间</span
+          <span class="admin-secure"><ShieldCheck :size="14" />管理员空间</span
           ><span class="admin-avatar small">{{
             session.name.slice(0, 1)
           }}</span>
@@ -515,10 +507,7 @@ defineExpose({ reload: () => load(true) });
                 </div>
                 <School :size="20" />
               </header>
-              <form
-                class="admin-settings-form"
-                @submit.prevent="saveSettings"
-              >
+              <form class="admin-settings-form" @submit.prevent="saveSettings">
                 <label class="field"
                   >学校 / 站点名称<input
                     v-model.trim="settingsForm.siteName"
@@ -547,9 +536,7 @@ defineExpose({ reload: () => load(true) });
                   <dt>数据库</dt>
                   <dd>
                     {{
-                      overview.database === "sqlite"
-                        ? "SQLite"
-                        : "PostgreSQL"
+                      overview.database === "sqlite" ? "SQLite" : "PostgreSQL"
                     }}
                   </dd>
                 </div>
@@ -569,9 +556,7 @@ defineExpose({ reload: () => load(true) });
                 </div>
                 <div>
                   <dt>本次运行</dt>
-                  <dd>
-                    {{ Math.floor(overview.uptimeSeconds / 60) }} 分钟
-                  </dd>
+                  <dd>{{ Math.floor(overview.uptimeSeconds / 60) }} 分钟</dd>
                 </div>
                 <div>
                   <dt>服务时间</dt>
@@ -644,11 +629,7 @@ defineExpose({ reload: () => load(true) });
                   :aria-label="`${activeSection.name}状态`"
                 >
                   <option value="">全部状态</option>
-                  <option
-                    v-for="s in statusOptions"
-                    :key="s[0]"
-                    :value="s[0]"
-                  >
+                  <option v-for="s in statusOptions" :key="s[0]" :value="s[0]">
                     {{ s[1] }}
                   </option></AppSelect
                 ><AppSelect

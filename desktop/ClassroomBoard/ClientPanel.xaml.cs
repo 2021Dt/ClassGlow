@@ -217,4 +217,12 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         if (PreviewOnly()) return;
         ClientLifecycle.StartUninstaller();
     }
+    private void Diagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        if (PreviewOnly()) return;
+        var dialog = new Microsoft.Win32.SaveFileDialog { FileName = "ClassGlow-diagnostics.json", Filter = "JSON 诊断文件|*.json", DefaultExt = ".json" };
+        if (dialog.ShowDialog() != true) return;
+        try { Diagnostics.Write(engine.State, dialog.FileName); Tell("诊断文件已保存，可交给管理员排查。"); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { Tell("文件未能保存，请换一个文件夹后重试。"); }
+    }
 }

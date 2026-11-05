@@ -1,5 +1,7 @@
 # 服务器部署与手机使用
 
+当前版本的事务、WAL 备份、两项新增迁移、素材兼容与发布恢复步骤见 [可靠性与发布说明](RELIABILITY.md)。自动更新现按稳定标签和北京时间维护窗口执行，默认 02:00–05:00；本文后面的旧版本部署记录保留作历史证据。
+
 本方案面向一台 Linux 服务器，使用 Docker Compose、Caddy、FastAPI 和持久化 SQLite。前端已经是响应式网页，电脑和手机使用同一个 HTTPS 地址。Windows 客户端安装在教室电脑，服务器上不运行桌面客户端。
 
 本项目域名：`teacher.dgplus.vip`。代码仓库：[2021Dt/ClassGlow](https://github.com/2021Dt/ClassGlow)，部署分支为 `main`。以下脚本面向 Ubuntu 22.04/24.04/26.04 或 Debian 12/13、使用 systemd 的独立服务器。教师与管理员操作见 [使用说明](USAGE.md)。
@@ -88,7 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/instal
 # 手工一键更新：拉取 main、构建、备份、迁移、部署
 sudo classglow update
 
-# 开启每 5 分钟检查新提交并自动部署；服务器重启后仍有效
+# 开启稳定标签检查；默认仅在北京时间 02:00–05:00 自动部署，重启后仍有效
 sudo classglow auto-on
 
 # 查看当前服务、更新日志和定时器
@@ -110,9 +112,9 @@ sudo classglow migrate-db
 sudo classglow uninstall
 ```
 
-“自动整合”是对 `origin/main` 进行快进更新，再一起构建前后端。服务器代码存在未提交修改、本地额外提交或分支分歧时停止，不自动猜测冲突解决方案；服务器配置放入忽略的 `deploy/.env`，业务数据库保存在 Docker 卷。自动更新只在提交改变时部署，手工 `update` 则会重建，也用于配置修改或失败后的重试。脚本拉取后执行新提交中的部署逻辑。
+手工 `update` 对 `origin/main` 进行快进更新，再一起构建前后端；`update --release v版本号` 指定稳定标签。自动更新只选择 main 历史中的稳定标签，并检查北京时间维护窗口。服务器代码存在未提交修改、本地额外提交或分支分歧时停止；服务器配置放入忽略的 `deploy/.env`，业务数据库保存在 Docker 卷。手工更新也可用于配置修改和失败后重试。
 
-更新先构建，构建期间旧服务继续运行；之后存在备份、迁移和启动造成的短暂停服。自动更新默认关闭，开启后 `main` 的新提交最多在下一次 5 分钟检查时触发更新。持续展示的教室客户端会使用本机缓存。
+更新先构建并检查版本，期间旧服务继续运行；之后存在备份、迁移和启动造成的短暂停服。自动更新默认关闭，开启后每 5 分钟检查稳定标签，但只在允许窗口部署。默认北京时间 02:00–05:00，可用 `KANBAN_UPDATE_WINDOW` 调整；稳定标签应在 CI 通过后创建。持续展示的教室客户端使用本机缓存。
 
 备份位于数据卷 `/app/data/backups/backup-before-deploy-*.db`，也可在“系统管理 → 备份恢复”下载。不会自动删除历史备份，需定期下载到服务器外并按学校保留策略清理。部署成功提交号保存在 `/opt/classglow/.deploy/deployed-commit`。失败时保留 `/opt/classglow/.deploy/failed` 和日志，后续定时部署暂停；排查后运行 `sudo classglow update` 重试。构建失败时旧服务保留；迁移阶段失败时保持停服。脚本不自动降级数据库或删除数据卷。
 

@@ -1,9 +1,12 @@
 """生成当前用户安装包及逐文件卸载清单；验证包与正式包的路径和登记完全隔离。"""
 
 import argparse
+import hashlib
+import json
 import os
 import shutil
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -17,6 +20,8 @@ def main():
     parser.add_argument("--qa", action="store_true", help="构建独立卸载验证包，不使用正式应用目录或启动项")
     parser.add_argument("--nsis", type=Path)
     args = parser.parse_args()
+    subprocess.run([sys.executable, "-m", "scripts.release_check"], cwd=ROOT, check=True)
+    subprocess.run([sys.executable, "-m", "scripts.generate_contracts", "--check"], cwd=ROOT, check=True)
     sdk = ROOT / ".tools/dotnet/dotnet.exe"
     dotnet = str(sdk) if sdk.exists() else shutil.which("dotnet") or "dotnet"
     nsis = args.nsis or Path(os.environ["LOCALAPPDATA"]) / "tauri/NSIS/makensis.exe"
@@ -24,11 +29,17 @@ def main():
         raise SystemExit("请安装 NSIS 3，并通过 --nsis 指定 makensis.exe；脚本不会安装全局工具。")
     version = ET.parse(ROOT / "desktop/ClassroomBoard/ClassroomBoard.csproj").findtext(".//Version")
     payload = ROOT / "dist" / ("windows-qa" if args.qa else f"windows-{version}")
-    output = ROOT / "dist" / (f"ClassGlow-{version}-uninstall-QA.exe" if args.qa else f"ClassGlow-{version}-win-x64-setup.exe")
+    output = (
+        ROOT
+        / "dist"
+        / (f"ClassGlow-{version}-uninstall-QA.exe" if args.qa else f"ClassGlow-{version}-win-x64-setup.exe")
+    )
     build = ROOT / ".qa" / ("installer-qa" if args.qa else "installer")
     build.mkdir(parents=True, exist_ok=True)
     npm = shutil.which("npm") or "npm"
-    subprocess.run([npm, "exec", "vite", "build", "--", "--config", "vite.desktop.config.ts"], check=True, cwd=ROOT / "frontend")
+    subprocess.run(
+        [npm, "exec", "vite", "build", "--", "--config", "vite.desktop.config.ts"], check=True, cwd=ROOT / "frontend"
+    )
     command = [
         dotnet,
         "publish",
@@ -88,6 +99,21 @@ def main():
         command += ["/DQA_BUILD"]
     command += [str(ROOT / "desktop/installer/ClassGlow.nsi")]
     subprocess.run(command, check=True, cwd=ROOT / "desktop/installer")
+    with output.open("rb") as package:
+        checksum = hashlib.file_digest(package, "sha256").hexdigest()
+    output.with_suffix(".json").write_text(
+        json.dumps(
+            {
+                "version": version,
+                "file": output.name,
+                "bytes": output.stat().st_size,
+                "sha256": checksum,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(output)
 
 

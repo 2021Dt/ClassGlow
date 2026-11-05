@@ -14,7 +14,7 @@ dc() {
 log() { printf '\n[ClassGlow] %s\n' "$*"; }
 
 update() {
-  local mode="${1:-manual}" target deployed
+  local mode="${1:-manual}" requested="${2:-}" target deployed target_ref=origin/main window
   mkdir -p .deploy
   # 手工更新与定时更新共用同一把锁，避免同时迁移数据库。
   exec 9>.deploy/update.lock
@@ -30,6 +30,13 @@ update() {
     log '上次部署失败，自动更新已暂停；修复后执行 classglow update。'
     return
   fi
+  if [[ "$mode" == --auto ]]; then
+    window="$(sed -n 's/^KANBAN_UPDATE_WINDOW=//p' "${CLASSGLOW_ENV:-deploy/.env}" | tr -d '\r')"
+    if ! python3 -m scripts.release_policy "${window:-02-05}"; then
+      log '当前不在允许的北京时间更新窗口内，本次跳过。'
+      return
+    fi
+  fi
   if [[ -n "$(git status --porcelain)" ]]; then
     echo '服务器工作区有未提交修改，请先处理；部署配置应写入 deploy/.env。' >&2
     return 1
@@ -40,14 +47,27 @@ update() {
   fi
   export GIT_TERMINAL_PROMPT=0
   export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=15}"
-  log '拉取 main 分支并快进整合代码'
-  git fetch --prune origin main
+  log '检查远端提交与稳定版本标签'
+  git fetch --prune --tags origin main
+  if [[ "$mode" == --auto ]]; then
+    target_ref="$(git tag --merged origin/main --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+    if [[ -z "$target_ref" ]]; then log '没有稳定发布标签，本次跳过。'; return; fi
+    target_ref="refs/tags/$target_ref"
+    if [[ "$(git rev-parse "$target_ref^{commit}")" != "$(git rev-parse HEAD)" ]] && git merge-base --is-ancestor "$target_ref" HEAD; then
+      log '本机代码已包含较新的提交，本次不自动降级。'; return
+    fi
+  elif [[ "$mode" == --release ]]; then
+    if [[ ! "$requested" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || ! git rev-parse --verify "refs/tags/$requested" >/dev/null 2>&1; then
+      echo '请指定已存在的稳定版本，例如 classglow update --release v0.4.15。' >&2; return 1
+    fi
+    target_ref="refs/tags/$requested"
+  fi
   # 不生成自动合并提交，不覆盖服务器的本地修改。
-  if ! git merge-base --is-ancestor HEAD origin/main; then
+  if ! git merge-base --is-ancestor HEAD "$target_ref"; then
     echo '服务器有 main 之外的本地提交或分支分歧，请处理后再部署。' >&2
     return 1
   fi
-  git merge --ff-only origin/main
+  git merge --ff-only "$target_ref"
   target="$(git rev-parse HEAD)"
   deployed="$(cat .deploy/deployed-commit 2>/dev/null || true)"
   if [[ "$mode" == --auto && "$target" == "$deployed" ]]; then
@@ -77,6 +97,9 @@ deploy_current() {
   phase='构建前后端镜像（此阶段原服务继续运行）'
   log "$phase"
   dc build --pull api web
+  phase='检查版本与迁移入口'
+  dc run --rm --no-deps api python -m scripts.release_check --runtime
+  dc run --rm --no-deps api alembic heads
   phase='停服并备份数据库'
   log "$phase"
   if postgres_enabled; then dc up -d --wait --wait-timeout 180 db; fi
@@ -104,6 +127,7 @@ deploy_current() {
   curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
     --resolve "$domain:443:127.0.0.1" "https://$domain/" -o /dev/null
   install_maintenance
+  if [[ -f .deploy/deployed-commit ]]; then cp .deploy/deployed-commit .deploy/previous-commit; fi
   printf '%s\n' "$revision" > .deploy/deployed-commit
   rm -f .deploy/failed
   trap - ERR INT TERM
@@ -171,7 +195,7 @@ UMask=0022
 EOF
   cat > /etc/systemd/system/classglow-update.timer <<'EOF'
 [Unit]
-Description=Check ClassGlow main branch every five minutes
+Description=Check ClassGlow stable releases within maintenance window
 
 [Timer]
 OnBootSec=2min
@@ -183,7 +207,7 @@ WantedBy=timers.target
 EOF
   systemctl daemon-reload
   systemctl enable --now classglow-update.timer
-  log '已启用：每 5 分钟检查 main，新提交自动构建部署；更新期间会短暂停服。'
+  log '已启用：每 5 分钟检查稳定版本标签，仅在北京时间允许窗口部署；默认 02:00–05:00。'
 }
 
 main() {
@@ -198,7 +222,7 @@ main() {
   fi
   case "${1:-menu}" in
     menu) console_menu ;;
-    update) update "${2:-manual}" ;;
+    update) update "${2:-manual}" "${3:-}" ;;
     _deploy) deploy_current "$2" ;;
     status) server_status ;;
     cleanup) cleanup ;;

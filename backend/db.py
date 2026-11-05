@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from fastapi import Request
 from sqlalchemy import (
     JSON,
     Boolean,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -74,11 +76,19 @@ class FeatureLicense(Base):
 
 class Token(Base):
     __tablename__ = "sessions"
+    __table_args__ = (
+        Index("uq_sessions_id", "id", unique=True),
+        Index("ix_sessions_user_expires", "user_id", "expires"),
+    )
     digest: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     expires: Mapped[float] = mapped_column(Float)
     epoch: Mapped[str] = mapped_column(String(36))
     revoked_reason: Mapped[str] = mapped_column(String(40), default="")
+    id: Mapped[str] = mapped_column(String(36), default=uid)
+    client_hash: Mapped[str] = mapped_column(String(64), default="")
+    label: Mapped[str] = mapped_column(String(80), default="浏览器")
+    created_at: Mapped[float] = mapped_column(Float, default=now)
 
 
 class LoginRecord(Base):
@@ -124,6 +134,16 @@ class Membership(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class ClassAsset(Base):
+    """图片按班级和内容摘要去重，随数据库一致备份，不允许跨班读取。"""
+
+    __tablename__ = "class_assets"
+    class_id: Mapped[str] = mapped_column(ForeignKey("classrooms.id"), primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64), primary_key=True)
+    mime: Mapped[str] = mapped_column(String(32))
+    data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+
+
 class Draft(Base):
     __tablename__ = "drafts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -136,12 +156,28 @@ class Draft(Base):
 
 class Content(Base):
     __tablename__ = "contents"
+    __table_args__ = (
+        Index("ix_contents_class_state_until", "class_id", "state", "display_until"),
+        Index("ix_contents_class_created", "class_id", "created_at", "id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     class_id: Mapped[str] = mapped_column(ForeignKey("classrooms.id"), index=True)
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     revision: Mapped[int] = mapped_column(Integer, default=1)
     state: Mapped[str] = mapped_column(String(12), default="published")
     data: Mapped[dict] = mapped_column(JSON)
+    display_from: Mapped[float] = mapped_column(Float, default=0)
+    display_until: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[float] = mapped_column(Float, default=0)
+
+
+@event.listens_for(Content, "before_insert")
+@event.listens_for(Content, "before_update")
+def content_times(_, __, content):
+    # 索引列始终从同一份业务数据派生，历史接口与展示过滤不能各维护一套时间。
+    for field, key in (("display_from", "from"), ("display_until", "until"), ("created_at", "created")):
+        value = content.data.get(key)
+        setattr(content, field, datetime.fromisoformat(value).timestamp() if value else 0)
 
 
 class History(Base):
@@ -313,28 +349,50 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
 
-if engine.dialect.name == "sqlite":
 
-    @event.listens_for(engine, "connect")
+def configure_sqlite(target):
+    if target.dialect.name != "sqlite":
+        return
+
+    @event.listens_for(target, "connect")
     def enable_sqlite_constraints(connection, _):
         # SQLite 默认不执行外键检查，显式启用，避免本地数据质量低于后续 PostgreSQL。
         cursor = connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=30000")
+        # WAL 允许查询与写入并行；备份继续使用 SQLite 原生一致性备份 API。
+        cursor.execute("PRAGMA journal_mode=WAL")
         cursor.close()
 
 
-def get_db():
-    with SessionLocal() as session:
+configure_sqlite(engine)
+
+
+def request_is_read_only(request: Request) -> bool:
+    # 快照会更新联系时间和命令结果，其余 GET 的展示状态只计算、不落库。
+    path = getattr(request.scope.get("route"), "path", request.url.path)
+    return request.method in ("GET", "HEAD", "OPTIONS") and path != "/device/snapshot"
+
+
+def database_session(factory, *, read_only=False):
+    with factory(autoflush=not read_only) as session:
+        session.info["read_only"] = read_only
         try:
             # SQLite 无行级锁，单机部署先取事务锁；切换 PostgreSQL 后由行锁承担并发控制。
-            if engine.dialect.name == "sqlite":
-                session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+            if session.get_bind().dialect.name == "sqlite":
+                session.connection().exec_driver_sql("BEGIN" if read_only else "BEGIN IMMEDIATE")
             yield session
-            session.commit()
+            if read_only:
+                session.rollback()
+            else:
+                session.commit()
         except Exception:
             session.rollback()
             raise
+
+
+def get_db(request: Request):
+    yield from database_session(SessionLocal, read_only=request_is_read_only(request))
 
 
 def sync_epoch(db: Session) -> str:

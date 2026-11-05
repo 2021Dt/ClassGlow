@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import {
+  defineAsyncComponent,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from "vue";
 import { Megaphone } from "@lucide/vue";
 import { api, session } from "../api";
 import { adminDate } from "../admin";
-import AnnouncementMarkdown from "./AnnouncementMarkdown.vue";
+const AnnouncementMarkdown = defineAsyncComponent(
+  () => import("./AnnouncementMarkdown.vue"),
+);
 
 const props = defineProps<{ paused?: boolean }>();
 type Notice = {

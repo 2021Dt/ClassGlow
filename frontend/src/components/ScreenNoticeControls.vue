@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, defineAsyncComponent, reactive, ref } from "vue";
 import {
   Megaphone,
   Send,
@@ -11,7 +11,6 @@ import {
 import type { Device } from "../domain";
 import { session } from "../api";
 import ScreenNoticePreview from "./ScreenNoticePreview.vue";
-import NoticeCanvasDesigner from "./NoticeCanvasDesigner.vue";
 import TaskGuide from "./TaskGuide.vue";
 import {
   defaultNoticeCanvas,
@@ -30,6 +29,9 @@ import {
   type NoticeMode,
   type NoticeStyle,
 } from "../screenNotice";
+const NoticeCanvasDesigner = defineAsyncComponent(
+  () => import("./NoticeCanvasDesigner.vue"),
+);
 const props = defineProps<{
   device: Device;
   disabled: boolean;

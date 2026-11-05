@@ -1,4 +1,4 @@
-"""只覆盖冻结、恢复和单会话的关键边界，不使用真实账号或生产数据库。"""
+"""覆盖冻结、恢复和多端会话的关键边界，不使用真实账号或生产数据库。"""
 
 from uuid import uuid4
 
@@ -63,14 +63,17 @@ def test_freeze_recovery_and_classroom_continuity(client):
     assert c.get("/system/users?status=frozen", headers=root).json()["total"] == 0
 
 
-def test_single_session_unfreeze_and_time_expiry(client):
+def test_multiple_devices_same_browser_replacement_and_freeze_expiry(client):
     c, engine = client
     root = root_account(c, engine)
     previous, uid = user(c, "session_teacher")
     current = signin(c, "session_teacher").json()["token"]
     active = {"Authorization": f"Bearer {current}"}
-    assert c.get("/bootstrap", headers=previous).json()["detail"]["code"] == "session_replaced"
+    assert c.get("/bootstrap", headers=previous).status_code == 200
     assert c.get("/bootstrap", headers=active).status_code == 200
+    replacement = signin(c, "session_teacher").json()["token"]
+    assert c.get("/bootstrap", headers=active).json()["detail"]["code"] == "session_replaced"
+    active = {"Authorization": f"Bearer {replacement}"}
     path = f"/system/users/{uid}"
     c.post(f"{path}/freeze", headers=root, json={"reason": "本人确认中"})
     assert c.post(f"{path}/unfreeze", headers=root).status_code == 200

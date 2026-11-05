@@ -1,0 +1,47 @@
+name: Checks
+on:
+  push:
+    branches: [main, 'codex/**']
+    tags: ['v*']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  web-and-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.9.9'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: uv sync --locked --group dev
+      - run: uv run python -m scripts.release_check
+      - run: uv run python -m scripts.generate_contracts --check
+      - run: uv run ruff check backend scripts
+      - run: uv run pytest -q
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test && npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend
+      - run: uv run python -m scripts.load_check
+      - run: for script in deploy/*.sh; do bash -n "$script" || exit; done
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet restore desktop/ClassroomBoard/ClassroomBoard.csproj --locked-mode
+      - run: dotnet build desktop/ClassroomBoard/ClassroomBoard.csproj -c Release --no-restore
+      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --self-test --output .qa/desktop
+      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --reliability-check --output .qa/reliability

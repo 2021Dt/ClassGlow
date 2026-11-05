@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import "../canvas.css";
+import "../studio-controls.css";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   BookOpen,
@@ -52,6 +54,7 @@ import type {
 } from "../domain";
 import { layoutIssue } from "../domain";
 import { clone } from "../store";
+import { useEditHistory } from "../useEditHistory";
 import { session } from "../api";
 import {
   canvasTemplate,
@@ -115,13 +118,16 @@ const selection = ref<string[]>([]),
   viewport = ref<HTMLElement>(),
   fitWidth = ref(700),
   surface = ref<HTMLElement>();
-const history = ref<Layout[]>([]),
-  future = ref<Layout[]>([]),
-  template = ref("standard");
+const template = ref("standard");
 const model = computed(() =>
   props.modelValue.editor === "canvas"
     ? props.modelValue
     : toCanvas(props.modelValue),
+);
+const { history, future, checkpoint, undo, redo } = useEditHistory(
+  () => model.value,
+  (value) => emit("update:modelValue", value),
+  () => !!props.disabled,
 );
 const items = computed(() => model.value.canvas ?? []),
   selectedItems = computed(() =>
@@ -287,11 +293,6 @@ function savePiece() {
     pieceName.value = "";
     feedback.value = "已保存到「我的积木」。";
   }
-}
-function checkpoint() {
-  history.value.push(clone(model.value));
-  if (history.value.length > 20) history.value.shift();
-  future.value = [];
 }
 function change(value: Layout, record = true) {
   if (props.disabled) return;
@@ -473,18 +474,6 @@ async function insertToken(event: Event) {
   await nextTick();
   editor.focus();
   editor.setSelectionRange(start + mark.length, start + mark.length);
-}
-function undo() {
-  const previous = history.value.pop();
-  if (!previous || props.disabled) return;
-  future.value.push(clone(model.value));
-  emit("update:modelValue", previous);
-}
-function redo() {
-  const next = future.value.pop();
-  if (!next || props.disabled) return;
-  history.value.push(clone(model.value));
-  emit("update:modelValue", next);
 }
 function duplicate() {
   insertItems(selectedItems.value);

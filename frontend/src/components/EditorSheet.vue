@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DatePicker from "./DatePicker.vue";
 import TaskGuide from "./TaskGuide.vue";
+import type { ApiPublishInput } from "../generated/api";
 import {
   computed,
   nextTick,
@@ -198,7 +199,10 @@ async function publish() {
     const result = await api(
       "/publish-batches",
       "POST",
-      { draftId: request.draftId, draftRevision: request.draftRevision },
+      {
+        draftId: request.draftId,
+        draftRevision: request.draftRevision,
+      } satisfies ApiPublishInput,
       request.key,
     );
     finishPublished(result.results.length);
@@ -614,9 +618,7 @@ onUnmounted(() => {
                 ? "正在提交…"
                 : pendingPublish
                   ? "使用原请求重试"
-                  : form.classIds.length > 1
-                    ? `发布到 ${form.classIds.length} 个班`
-                    : "确认发布"
+                  : `发布到 ${form.classIds.length} 个班`
             }}
           </button>
         </div>

@@ -6,6 +6,8 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
+from .version import VERSION
+
 
 class Settings(BaseSettings):
     """生产采用 HTTPS；单机 SQLite 须明确启用，后续可切换 PostgreSQL。"""
@@ -17,7 +19,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     public_url: str = "http://127.0.0.1:5173"
     session_hours: int = Field(default=720, ge=1, le=720)
-    client_latest_version: str = "0.4.14"
+    session_limit: int = Field(default=5, ge=2, le=20)
+    client_latest_version: str = VERSION
     client_download_url: str = ""
     storage_dir: Path = Path("data")
     downloads_dir: Path | None = None

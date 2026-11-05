@@ -1,9 +1,8 @@
 <script setup lang="ts">
+import "../device-workspace.css";
 import ClassroomDisplay from "./ClassroomDisplay.vue";
-import ScreenNoticeControls, {
-  type ScreenNoticeInput,
-} from "./ScreenNoticeControls.vue";
-import { computed, ref, watch } from "vue";
+import type { ScreenNoticeInput } from "../screenNotice";
+import { computed, defineAsyncComponent, ref, watch } from "vue";
 import {
   ChevronLeft,
   ChevronRight,
@@ -28,6 +27,9 @@ import {
   type Command,
   type Device,
 } from "../domain";
+const ScreenNoticeControls = defineAsyncComponent(
+  () => import("./ScreenNoticeControls.vue"),
+);
 
 const props = defineProps<{
   classroom: Classroom;

@@ -109,7 +109,9 @@ def managed_user(db: Session, user_id: str) -> User:
 
 
 @router.post("/system/users/{user_id}/freeze")
-def freeze(user_id: str, body: FreezeInput, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def freeze(
+    user_id: str, body: FreezeInput, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     target = managed_user(db, user_id)
     if target.id == user.id:
         fail(409, "current_admin", "不能冻结当前管理员账号。")
@@ -123,14 +125,14 @@ def freeze(user_id: str, body: FreezeInput, user: User = Depends(system_admin), 
 
 
 @router.post("/system/users/{user_id}/unfreeze")
-def unfreeze(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def unfreeze(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     target = managed_user(db, user_id)
     clear_freeze(db, target, user.login)
     return {"ok": True}
 
 
 @router.post("/system/users/{user_id}/recovery-code")
-def issue_recovery(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def issue_recovery(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     target = managed_user(db, user_id)
     if not target.active or (target.expires_at and target.expires_at <= now()):
         fail(409, "account_unavailable", "请先恢复账号的启用状态和使用期限。")
@@ -143,7 +145,7 @@ def issue_recovery(user_id: str, user: User = Depends(system_admin), db: Session
 
 
 @router.post("/auth/recover-password")
-def recover(body: RecoverInput, request: Request, db: Session = Depends(get_db)):
+def recover(body: RecoverInput, request: Request, db: Session = Depends(get_db, scope="function")):
     limit(f"recovery-ip:{request.client.host}", 30, 300)
     target = db.scalar(select(User).where(User.login == body.login.casefold()).with_for_update())
     entry = db.get(PasswordRecovery, target.id) if target else None

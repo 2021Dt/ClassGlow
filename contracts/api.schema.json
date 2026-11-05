@@ -1,0 +1,2622 @@
+{
+  "Activate": {
+    "additionalProperties": false,
+    "properties": {
+      "activationCode": {
+        "maxLength": 40,
+        "minLength": 12,
+        "title": "Activationcode",
+        "type": "string"
+      },
+      "login": {
+        "maxLength": 80,
+        "minLength": 3,
+        "pattern": "^[a-zA-Z0-9_@.\\-]+$",
+        "title": "Login",
+        "type": "string"
+      },
+      "name": {
+        "default": "老师",
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "password": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "login",
+      "password",
+      "activationCode"
+    ],
+    "title": "Activate",
+    "type": "object"
+  },
+  "AnnouncementInput": {
+    "additionalProperties": false,
+    "properties": {
+      "accountIds": {
+        "items": {
+          "maxLength": 36,
+          "minLength": 1,
+          "type": "string"
+        },
+        "maxItems": 500,
+        "title": "Accountids",
+        "type": "array"
+      },
+      "markdown": {
+        "maxLength": 16000,
+        "minLength": 1,
+        "title": "Markdown",
+        "type": "string"
+      },
+      "scope": {
+        "enum": [
+          "all",
+          "selected"
+        ],
+        "title": "Scope",
+        "type": "string"
+      },
+      "title": {
+        "maxLength": 120,
+        "minLength": 1,
+        "title": "Title",
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "markdown",
+      "scope"
+    ],
+    "title": "AnnouncementInput",
+    "type": "object"
+  },
+  "CanvasWidget": {
+    "additionalProperties": false,
+    "properties": {
+      "align": {
+        "default": "left",
+        "enum": [
+          "left",
+          "center",
+          "right"
+        ],
+        "title": "Align",
+        "type": "string"
+      },
+      "backgroundFit": {
+        "default": "cover",
+        "enum": [
+          "cover",
+          "contain"
+        ],
+        "title": "Backgroundfit",
+        "type": "string"
+      },
+      "backgroundImage": {
+        "default": "",
+        "maxLength": 524311,
+        "title": "Backgroundimage",
+        "type": "string"
+      },
+      "backgroundPosition": {
+        "default": "center",
+        "enum": [
+          "center",
+          "top",
+          "bottom",
+          "left",
+          "right"
+        ],
+        "title": "Backgroundposition",
+        "type": "string"
+      },
+      "dataSource": {
+        "default": "classroom",
+        "enum": [
+          "classroom",
+          "custom"
+        ],
+        "title": "Datasource",
+        "type": "string"
+      },
+      "dynamicText": {
+        "default": false,
+        "title": "Dynamictext",
+        "type": "boolean"
+      },
+      "event": {
+        "default": "",
+        "maxLength": 60,
+        "title": "Event",
+        "type": "string"
+      },
+      "eventDate": {
+        "default": "",
+        "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$",
+        "title": "Eventdate",
+        "type": "string"
+      },
+      "fillColor": {
+        "default": "#FFFFFF",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "title": "Fillcolor",
+        "type": "string"
+      },
+      "fontFamily": {
+        "default": "sans",
+        "enum": [
+          "sans",
+          "serif",
+          "kai"
+        ],
+        "title": "Fontfamily",
+        "type": "string"
+      },
+      "fontSize": {
+        "default": 32,
+        "maximum": 96.0,
+        "minimum": 16.0,
+        "title": "Fontsize",
+        "type": "integer"
+      },
+      "fontWeight": {
+        "default": 400,
+        "enum": [
+          400,
+          500,
+          600,
+          700
+        ],
+        "title": "Fontweight",
+        "type": "integer"
+      },
+      "groupId": {
+        "anyOf": [
+          {
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Groupid"
+      },
+      "h": {
+        "maximum": 900.0,
+        "minimum": 48.0,
+        "title": "H",
+        "type": "integer"
+      },
+      "id": {
+        "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "image": {
+        "default": "",
+        "maxLength": 524311,
+        "title": "Image",
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "homework",
+          "todo",
+          "timetable",
+          "datetime",
+          "countdown",
+          "message",
+          "text",
+          "image",
+          "shape"
+        ],
+        "title": "Kind",
+        "type": "string"
+      },
+      "lineHeight": {
+        "default": 1.5,
+        "maximum": 2.0,
+        "minimum": 1.2,
+        "title": "Lineheight",
+        "type": "number"
+      },
+      "locked": {
+        "default": false,
+        "title": "Locked",
+        "type": "boolean"
+      },
+      "opacity": {
+        "default": 45,
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "title": "Opacity",
+        "type": "integer"
+      },
+      "radius": {
+        "default": 24,
+        "maximum": 80.0,
+        "minimum": 0.0,
+        "title": "Radius",
+        "type": "integer"
+      },
+      "shape": {
+        "default": "rectangle",
+        "enum": [
+          "rectangle",
+          "ellipse",
+          "pill",
+          "triangle",
+          "diamond",
+          "hexagon",
+          "star",
+          "custom"
+        ],
+        "title": "Shape",
+        "type": "string"
+      },
+      "showTitle": {
+        "default": true,
+        "title": "Showtitle",
+        "type": "boolean"
+      },
+      "subjectFilter": {
+        "default": "",
+        "maxLength": 20,
+        "title": "Subjectfilter",
+        "type": "string"
+      },
+      "surface": {
+        "default": "glass",
+        "enum": [
+          "glass",
+          "solid",
+          "none"
+        ],
+        "title": "Surface",
+        "type": "string"
+      },
+      "text": {
+        "default": "",
+        "maxLength": 2000,
+        "title": "Text",
+        "type": "string"
+      },
+      "textColor": {
+        "default": "",
+        "pattern": "^(#[0-9a-fA-F]{6})?$",
+        "title": "Textcolor",
+        "type": "string"
+      },
+      "title": {
+        "default": "",
+        "maxLength": 30,
+        "title": "Title",
+        "type": "string"
+      },
+      "titleSize": {
+        "default": 28,
+        "maximum": 64.0,
+        "minimum": 16.0,
+        "title": "Titlesize",
+        "type": "integer"
+      },
+      "vertices": {
+        "items": {
+          "$ref": "#/components/schemas/ShapePoint"
+        },
+        "maxItems": 24,
+        "title": "Vertices",
+        "type": "array"
+      },
+      "visible": {
+        "default": true,
+        "title": "Visible",
+        "type": "boolean"
+      },
+      "w": {
+        "maximum": 1600.0,
+        "minimum": 48.0,
+        "title": "W",
+        "type": "integer"
+      },
+      "x": {
+        "maximum": 1552.0,
+        "minimum": 0.0,
+        "title": "X",
+        "type": "integer"
+      },
+      "y": {
+        "maximum": 852.0,
+        "minimum": 0.0,
+        "title": "Y",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "x",
+      "y",
+      "w",
+      "h"
+    ],
+    "title": "CanvasWidget",
+    "type": "object"
+  },
+  "ClassGrant": {
+    "additionalProperties": false,
+    "properties": {
+      "classId": {
+        "title": "Classid",
+        "type": "string"
+      },
+      "subjects": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "title": "Subjects",
+        "type": "array"
+      }
+    },
+    "required": [
+      "classId"
+    ],
+    "title": "ClassGrant",
+    "type": "object"
+  },
+  "ClassInput": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "maxLength": 60,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "stage": {
+        "default": "小学",
+        "enum": [
+          "小学",
+          "初中",
+          "高中"
+        ],
+        "title": "Stage",
+        "type": "string"
+      },
+      "subjects": {
+        "default": [
+          "语文",
+          "数学",
+          "英语",
+          "科学",
+          "体育",
+          "美术",
+          "班会"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "minItems": 1,
+        "title": "Subjects",
+        "type": "array"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "ClassInput",
+    "type": "object"
+  },
+  "ClassSettings": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "maxLength": 60,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "revision": {
+        "title": "Revision",
+        "type": "integer"
+      },
+      "stage": {
+        "default": "小学",
+        "enum": [
+          "小学",
+          "初中",
+          "高中"
+        ],
+        "title": "Stage",
+        "type": "string"
+      },
+      "subjects": {
+        "default": [
+          "语文",
+          "数学",
+          "英语",
+          "科学",
+          "体育",
+          "美术",
+          "班会"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "minItems": 1,
+        "title": "Subjects",
+        "type": "array"
+      }
+    },
+    "required": [
+      "name",
+      "revision"
+    ],
+    "title": "ClassSettings",
+    "type": "object"
+  },
+  "ClassUpdate": {
+    "additionalProperties": false,
+    "properties": {
+      "archived": {
+        "title": "Archived",
+        "type": "boolean"
+      },
+      "name": {
+        "maxLength": 60,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "ownerId": {
+        "title": "Ownerid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "ownerId",
+      "archived"
+    ],
+    "title": "ClassUpdate",
+    "type": "object"
+  },
+  "CleanupInput": {
+    "additionalProperties": false,
+    "properties": {
+      "category": {
+        "enum": [
+          "records",
+          "backups"
+        ],
+        "title": "Category",
+        "type": "string"
+      },
+      "confirmation": {
+        "maxLength": 200,
+        "minLength": 1,
+        "title": "Confirmation",
+        "type": "string"
+      }
+    },
+    "required": [
+      "confirmation",
+      "category"
+    ],
+    "title": "CleanupInput",
+    "type": "object"
+  },
+  "CommandAck": {
+    "additionalProperties": false,
+    "properties": {
+      "activeNoticeId": {
+        "default": "",
+        "maxLength": 36,
+        "title": "Activenoticeid",
+        "type": "string"
+      },
+      "appliedVersion": {
+        "minimum": 0.0,
+        "title": "Appliedversion",
+        "type": "integer"
+      },
+      "applyState": {
+        "enum": [
+          "applied",
+          "paused",
+          "deferred",
+          "error",
+          "waiting"
+        ],
+        "title": "Applystate",
+        "type": "string"
+      },
+      "bindingId": {
+        "maxLength": 36,
+        "title": "Bindingid",
+        "type": "string"
+      },
+      "cachedVersion": {
+        "minimum": 0.0,
+        "title": "Cachedversion",
+        "type": "integer"
+      },
+      "clientVersion": {
+        "default": "0.1.0",
+        "maxLength": 30,
+        "title": "Clientversion",
+        "type": "string"
+      },
+      "commandId": {
+        "maxLength": 36,
+        "title": "Commandid",
+        "type": "string"
+      },
+      "effectiveMaterial": {
+        "enum": [
+          "subtle",
+          "solid"
+        ],
+        "title": "Effectivematerial",
+        "type": "string"
+      },
+      "effectiveTheme": {
+        "enum": [
+          "mica_light",
+          "mica_dark",
+          "system_high_contrast"
+        ],
+        "title": "Effectivetheme",
+        "type": "string"
+      },
+      "error": {
+        "default": "",
+        "maxLength": 200,
+        "title": "Error",
+        "type": "string"
+      },
+      "finishedAt": {
+        "anyOf": [
+          {
+            "minimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Finishedat"
+      },
+      "localControlEpoch": {
+        "minimum": 0.0,
+        "title": "Localcontrolepoch",
+        "type": "integer"
+      },
+      "localPaused": {
+        "title": "Localpaused",
+        "type": "boolean"
+      },
+      "manualUntil": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Manualuntil",
+        "type": "number"
+      },
+      "materialReason": {
+        "default": "",
+        "maxLength": 200,
+        "title": "Materialreason",
+        "type": "string"
+      },
+      "noticeEndsAt": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Noticeendsat",
+        "type": "number"
+      },
+      "page": {
+        "maximum": 10000.0,
+        "minimum": 1.0,
+        "title": "Page",
+        "type": "integer"
+      },
+      "pageCount": {
+        "maximum": 10000.0,
+        "minimum": 1.0,
+        "title": "Pagecount",
+        "type": "integer"
+      },
+      "pageSetId": {
+        "maxLength": 100,
+        "title": "Pagesetid",
+        "type": "string"
+      },
+      "remotePaused": {
+        "title": "Remotepaused",
+        "type": "boolean"
+      },
+      "renderedAt": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Renderedat",
+        "type": "number"
+      },
+      "result": {
+        "enum": [
+          "executed",
+          "deferred",
+          "rejected"
+        ],
+        "title": "Result",
+        "type": "string"
+      },
+      "startedAt": {
+        "anyOf": [
+          {
+            "minimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Startedat"
+      },
+      "stateReportSeq": {
+        "minimum": 1.0,
+        "title": "Statereportseq",
+        "type": "integer"
+      },
+      "syncEpoch": {
+        "maxLength": 36,
+        "title": "Syncepoch",
+        "type": "string"
+      }
+    },
+    "required": [
+      "bindingId",
+      "syncEpoch",
+      "stateReportSeq",
+      "localControlEpoch",
+      "localPaused",
+      "remotePaused",
+      "cachedVersion",
+      "appliedVersion",
+      "applyState",
+      "pageSetId",
+      "page",
+      "pageCount",
+      "effectiveTheme",
+      "effectiveMaterial",
+      "commandId",
+      "result"
+    ],
+    "title": "CommandAck",
+    "type": "object"
+  },
+  "ControlInput": {
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "sync",
+          "pause",
+          "resume",
+          "set_page",
+          "auto_page",
+          "notice",
+          "stop_notice"
+        ],
+        "title": "Action",
+        "type": "string"
+      },
+      "expectedControlRevision": {
+        "minimum": 0.0,
+        "title": "Expectedcontrolrevision",
+        "type": "integer"
+      },
+      "notice": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ScreenNotice"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "page": {
+        "default": 1,
+        "maximum": 10000.0,
+        "minimum": 1.0,
+        "title": "Page",
+        "type": "integer"
+      },
+      "pageSetId": {
+        "default": "",
+        "maxLength": 100,
+        "title": "Pagesetid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "expectedControlRevision"
+    ],
+    "title": "ControlInput",
+    "type": "object"
+  },
+  "Credentials": {
+    "additionalProperties": false,
+    "properties": {
+      "login": {
+        "maxLength": 80,
+        "minLength": 3,
+        "pattern": "^[a-zA-Z0-9_@.\\-]+$",
+        "title": "Login",
+        "type": "string"
+      },
+      "name": {
+        "default": "老师",
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "password": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "login",
+      "password"
+    ],
+    "title": "Credentials",
+    "type": "object"
+  },
+  "DeleteInput": {
+    "additionalProperties": false,
+    "properties": {
+      "confirmation": {
+        "maxLength": 200,
+        "minLength": 1,
+        "title": "Confirmation",
+        "type": "string"
+      }
+    },
+    "required": [
+      "confirmation"
+    ],
+    "title": "DeleteInput",
+    "type": "object"
+  },
+  "DeviceDisplayInput": {
+    "additionalProperties": false,
+    "properties": {
+      "activeNoticeId": {
+        "default": "",
+        "maxLength": 36,
+        "title": "Activenoticeid",
+        "type": "string"
+      },
+      "appliedVersion": {
+        "minimum": 0.0,
+        "title": "Appliedversion",
+        "type": "integer"
+      },
+      "applyState": {
+        "enum": [
+          "applied",
+          "paused",
+          "deferred",
+          "error",
+          "waiting"
+        ],
+        "title": "Applystate",
+        "type": "string"
+      },
+      "availability": {
+        "enum": [
+          "displayed",
+          "paused",
+          "disabled",
+          "replaced",
+          "unavailable"
+        ],
+        "title": "Availability",
+        "type": "string"
+      },
+      "bindingId": {
+        "maxLength": 36,
+        "title": "Bindingid",
+        "type": "string"
+      },
+      "cachedVersion": {
+        "minimum": 0.0,
+        "title": "Cachedversion",
+        "type": "integer"
+      },
+      "clientVersion": {
+        "default": "0.1.0",
+        "maxLength": 30,
+        "title": "Clientversion",
+        "type": "string"
+      },
+      "effectiveMaterial": {
+        "enum": [
+          "subtle",
+          "solid"
+        ],
+        "title": "Effectivematerial",
+        "type": "string"
+      },
+      "effectiveTheme": {
+        "enum": [
+          "mica_light",
+          "mica_dark",
+          "system_high_contrast"
+        ],
+        "title": "Effectivetheme",
+        "type": "string"
+      },
+      "error": {
+        "default": "",
+        "maxLength": 200,
+        "title": "Error",
+        "type": "string"
+      },
+      "imageBase64": {
+        "default": "",
+        "maxLength": 550000,
+        "title": "Imagebase64",
+        "type": "string"
+      },
+      "localControlEpoch": {
+        "minimum": 0.0,
+        "title": "Localcontrolepoch",
+        "type": "integer"
+      },
+      "localPaused": {
+        "title": "Localpaused",
+        "type": "boolean"
+      },
+      "manualUntil": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Manualuntil",
+        "type": "number"
+      },
+      "materialReason": {
+        "default": "",
+        "maxLength": 200,
+        "title": "Materialreason",
+        "type": "string"
+      },
+      "noticeEndsAt": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Noticeendsat",
+        "type": "number"
+      },
+      "page": {
+        "maximum": 10000.0,
+        "minimum": 1.0,
+        "title": "Page",
+        "type": "integer"
+      },
+      "pageCount": {
+        "maximum": 10000.0,
+        "minimum": 1.0,
+        "title": "Pagecount",
+        "type": "integer"
+      },
+      "pageSetId": {
+        "maxLength": 100,
+        "title": "Pagesetid",
+        "type": "string"
+      },
+      "remotePaused": {
+        "title": "Remotepaused",
+        "type": "boolean"
+      },
+      "renderedAt": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Renderedat",
+        "type": "number"
+      },
+      "requestId": {
+        "maxLength": 36,
+        "minLength": 1,
+        "title": "Requestid",
+        "type": "string"
+      },
+      "stateReportSeq": {
+        "minimum": 1.0,
+        "title": "Statereportseq",
+        "type": "integer"
+      },
+      "syncEpoch": {
+        "maxLength": 36,
+        "title": "Syncepoch",
+        "type": "string"
+      }
+    },
+    "required": [
+      "bindingId",
+      "syncEpoch",
+      "stateReportSeq",
+      "localControlEpoch",
+      "localPaused",
+      "remotePaused",
+      "cachedVersion",
+      "appliedVersion",
+      "applyState",
+      "pageSetId",
+      "page",
+      "pageCount",
+      "effectiveTheme",
+      "effectiveMaterial",
+      "requestId",
+      "availability"
+    ],
+    "title": "DeviceDisplayInput",
+    "type": "object"
+  },
+  "DeviceName": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "maxLength": 60,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "DeviceName",
+    "type": "object"
+  },
+  "DisplayInput": {
+    "additionalProperties": false,
+    "properties": {
+      "event": {
+        "default": "",
+        "maxLength": 40,
+        "title": "Event",
+        "type": "string"
+      },
+      "eventDate": {
+        "default": "",
+        "title": "Eventdate",
+        "type": "string"
+      },
+      "message": {
+        "default": "",
+        "maxLength": 80,
+        "title": "Message",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 1.0,
+        "title": "Revision",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "title": "DisplayInput",
+    "type": "object"
+  },
+  "DraftInput": {
+    "additionalProperties": false,
+    "properties": {
+      "baseRevision": {
+        "anyOf": [
+          {
+            "minimum": 1.0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Baserevision"
+      },
+      "body": {
+        "maxLength": 500,
+        "title": "Body",
+        "type": "string"
+      },
+      "classIds": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 10,
+        "minItems": 1,
+        "title": "Classids",
+        "type": "array"
+      },
+      "due": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "const": "",
+            "type": "string"
+          }
+        ],
+        "default": "",
+        "title": "Due"
+      },
+      "from": {
+        "format": "date-time",
+        "title": "From",
+        "type": "string"
+      },
+      "id": {
+        "maxLength": 36,
+        "minLength": 1,
+        "title": "Id",
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "homework",
+          "todo"
+        ],
+        "title": "Kind",
+        "type": "string"
+      },
+      "priority": {
+        "default": false,
+        "title": "Priority",
+        "type": "boolean"
+      },
+      "reason": {
+        "default": "",
+        "maxLength": 100,
+        "title": "Reason",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 0.0,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "sourceId": {
+        "anyOf": [
+          {
+            "maxLength": 36,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Sourceid"
+      },
+      "subject": {
+        "maxLength": 20,
+        "minLength": 1,
+        "title": "Subject",
+        "type": "string"
+      },
+      "until": {
+        "format": "date-time",
+        "title": "Until",
+        "type": "string"
+      },
+      "updated": {
+        "default": "",
+        "title": "Updated",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "classIds",
+      "subject",
+      "body",
+      "from",
+      "until",
+      "revision"
+    ],
+    "title": "DraftInput",
+    "type": "object"
+  },
+  "FreezeInput": {
+    "additionalProperties": false,
+    "properties": {
+      "minutes": {
+        "default": 30,
+        "enum": [
+          30,
+          120,
+          1440
+        ],
+        "title": "Minutes",
+        "type": "integer"
+      },
+      "reason": {
+        "maxLength": 200,
+        "minLength": 2,
+        "title": "Reason",
+        "type": "string"
+      }
+    },
+    "required": [
+      "reason"
+    ],
+    "title": "FreezeInput",
+    "type": "object"
+  },
+  "GridRect": {
+    "additionalProperties": false,
+    "properties": {
+      "h": {
+        "maximum": 12.0,
+        "minimum": 4.0,
+        "title": "H",
+        "type": "integer"
+      },
+      "w": {
+        "maximum": 12.0,
+        "minimum": 5.0,
+        "title": "W",
+        "type": "integer"
+      },
+      "x": {
+        "maximum": 11.0,
+        "minimum": 0.0,
+        "title": "X",
+        "type": "integer"
+      },
+      "y": {
+        "maximum": 11.0,
+        "minimum": 0.0,
+        "title": "Y",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "x",
+      "y",
+      "w",
+      "h"
+    ],
+    "title": "GridRect",
+    "type": "object"
+  },
+  "HTTPValidationError": {
+    "properties": {
+      "detail": {
+        "items": {
+          "$ref": "#/components/schemas/ValidationError"
+        },
+        "title": "Detail",
+        "type": "array"
+      }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+  },
+  "InviteInput": {
+    "additionalProperties": false,
+    "properties": {
+      "subjects": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "minItems": 1,
+        "title": "Subjects",
+        "type": "array"
+      }
+    },
+    "required": [
+      "subjects"
+    ],
+    "title": "InviteInput",
+    "type": "object"
+  },
+  "Issue": {
+    "additionalProperties": false,
+    "properties": {
+      "days": {
+        "maximum": 3660.0,
+        "minimum": 1.0,
+        "title": "Days",
+        "type": "integer"
+      },
+      "userId": {
+        "title": "Userid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "userId",
+      "days"
+    ],
+    "title": "Issue",
+    "type": "object"
+  },
+  "LayoutInput": {
+    "additionalProperties": false,
+    "properties": {
+      "backgroundColor": {
+        "default": "#E7E8EB",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "title": "Backgroundcolor",
+        "type": "string"
+      },
+      "backgroundImage": {
+        "default": "",
+        "maxLength": 524311,
+        "title": "Backgroundimage",
+        "type": "string"
+      },
+      "backgroundMode": {
+        "default": "mica",
+        "enum": [
+          "mica",
+          "color",
+          "image"
+        ],
+        "title": "Backgroundmode",
+        "type": "string"
+      },
+      "canvas": {
+        "items": {
+          "$ref": "#/components/schemas/CanvasWidget"
+        },
+        "maxItems": 24,
+        "title": "Canvas",
+        "type": "array"
+      },
+      "editor": {
+        "default": "grid",
+        "enum": [
+          "grid",
+          "canvas"
+        ],
+        "title": "Editor",
+        "type": "string"
+      },
+      "font": {
+        "default": "medium",
+        "enum": [
+          "small",
+          "medium",
+          "large"
+        ],
+        "title": "Font",
+        "type": "string"
+      },
+      "grid": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/GridRect"
+        },
+        "propertyNames": {
+          "enum": [
+            "homework",
+            "todo",
+            "timetable"
+          ]
+        },
+        "title": "Grid",
+        "type": "object"
+      },
+      "iconMargin": {
+        "default": "left",
+        "enum": [
+          "left",
+          "right",
+          "none"
+        ],
+        "title": "Iconmargin",
+        "type": "string"
+      },
+      "interval": {
+        "default": 20,
+        "enum": [
+          15,
+          20,
+          30
+        ],
+        "title": "Interval",
+        "type": "integer"
+      },
+      "material": {
+        "default": "subtle",
+        "enum": [
+          "subtle",
+          "solid"
+        ],
+        "title": "Material",
+        "type": "string"
+      },
+      "modules": {
+        "additionalProperties": {
+          "type": "boolean"
+        },
+        "propertyNames": {
+          "enum": [
+            "datetime",
+            "homework",
+            "todo",
+            "timetable",
+            "countdown",
+            "message"
+          ]
+        },
+        "title": "Modules",
+        "type": "object"
+      },
+      "panelImage": {
+        "default": "",
+        "maxLength": 524311,
+        "title": "Panelimage",
+        "type": "string"
+      },
+      "panelImageFit": {
+        "default": "cover",
+        "enum": [
+          "cover",
+          "contain"
+        ],
+        "title": "Panelimagefit",
+        "type": "string"
+      },
+      "panelImagePosition": {
+        "default": "center",
+        "enum": [
+          "center",
+          "top",
+          "bottom",
+          "left",
+          "right"
+        ],
+        "title": "Panelimageposition",
+        "type": "string"
+      },
+      "reverse": {
+        "default": false,
+        "title": "Reverse",
+        "type": "boolean"
+      },
+      "revision": {
+        "minimum": 1.0,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "surfaceOpacity": {
+        "default": 38,
+        "maximum": 95.0,
+        "minimum": 0.0,
+        "title": "Surfaceopacity",
+        "type": "integer"
+      },
+      "theme": {
+        "default": "mica_light",
+        "enum": [
+          "mica_light",
+          "mica_dark"
+        ],
+        "title": "Theme",
+        "type": "string"
+      }
+    },
+    "required": [
+      "modules",
+      "revision"
+    ],
+    "title": "LayoutInput",
+    "type": "object"
+  },
+  "LoginInput": {
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "default": "",
+        "maxLength": 80,
+        "pattern": "^[a-zA-Z0-9_-]*$",
+        "title": "Clientid",
+        "type": "string"
+      },
+      "login": {
+        "maxLength": 80,
+        "minLength": 3,
+        "pattern": "^[a-zA-Z0-9_@.\\-]+$",
+        "title": "Login",
+        "type": "string"
+      },
+      "name": {
+        "default": "老师",
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "password": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "login",
+      "password"
+    ],
+    "title": "LoginInput",
+    "type": "object"
+  },
+  "ManagedAccount": {
+    "additionalProperties": false,
+    "properties": {
+      "classes": {
+        "items": {
+          "$ref": "#/components/schemas/ClassGrant"
+        },
+        "maxItems": 20,
+        "title": "Classes",
+        "type": "array"
+      },
+      "expiresAt": {
+        "default": 0,
+        "maximum": 4102444800.0,
+        "minimum": 0.0,
+        "title": "Expiresat",
+        "type": "number"
+      },
+      "identity": {
+        "enum": [
+          "teacher",
+          "headteacher",
+          "system_admin"
+        ],
+        "title": "Identity",
+        "type": "string"
+      },
+      "login": {
+        "maxLength": 80,
+        "minLength": 3,
+        "pattern": "^[a-zA-Z0-9_@.\\-]+$",
+        "title": "Login",
+        "type": "string"
+      },
+      "name": {
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "password": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "login",
+      "name",
+      "identity",
+      "password"
+    ],
+    "title": "ManagedAccount",
+    "type": "object"
+  },
+  "MemberInput": {
+    "additionalProperties": false,
+    "properties": {
+      "active": {
+        "default": true,
+        "title": "Active",
+        "type": "boolean"
+      },
+      "role": {
+        "enum": [
+          "admin",
+          "teacher"
+        ],
+        "title": "Role",
+        "type": "string"
+      },
+      "subjects": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 20,
+        "title": "Subjects",
+        "type": "array"
+      }
+    },
+    "required": [
+      "role",
+      "subjects"
+    ],
+    "title": "MemberInput",
+    "type": "object"
+  },
+  "NoticeCanvas": {
+    "additionalProperties": false,
+    "properties": {
+      "backgroundColor": {
+        "default": "#102a43",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "title": "Backgroundcolor",
+        "type": "string"
+      },
+      "backgroundOpacity": {
+        "default": 35,
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "title": "Backgroundopacity",
+        "type": "integer"
+      },
+      "elements": {
+        "items": {
+          "$ref": "#/components/schemas/NoticeElement"
+        },
+        "maxItems": 12,
+        "minItems": 1,
+        "title": "Elements",
+        "type": "array"
+      }
+    },
+    "required": [
+      "elements"
+    ],
+    "title": "NoticeCanvas",
+    "type": "object"
+  },
+  "NoticeElement": {
+    "additionalProperties": false,
+    "properties": {
+      "align": {
+        "default": "center",
+        "enum": [
+          "left",
+          "center",
+          "right"
+        ],
+        "title": "Align",
+        "type": "string"
+      },
+      "bold": {
+        "default": true,
+        "title": "Bold",
+        "type": "boolean"
+      },
+      "fillColor": {
+        "default": "#215544",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "title": "Fillcolor",
+        "type": "string"
+      },
+      "fontFamily": {
+        "default": "sans",
+        "enum": [
+          "sans",
+          "serif",
+          "kai"
+        ],
+        "title": "Fontfamily",
+        "type": "string"
+      },
+      "fontSize": {
+        "default": 56,
+        "maximum": 160.0,
+        "minimum": 24.0,
+        "title": "Fontsize",
+        "type": "integer"
+      },
+      "h": {
+        "maximum": 900.0,
+        "minimum": 48.0,
+        "title": "H",
+        "type": "integer"
+      },
+      "hidden": {
+        "default": false,
+        "title": "Hidden",
+        "type": "boolean"
+      },
+      "id": {
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Id",
+        "type": "string"
+      },
+      "image": {
+        "default": "",
+        "maxLength": 240000,
+        "title": "Image",
+        "type": "string"
+      },
+      "imageFit": {
+        "default": "contain",
+        "enum": [
+          "cover",
+          "contain"
+        ],
+        "title": "Imagefit",
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "text",
+          "card",
+          "image",
+          "countdown"
+        ],
+        "title": "Kind",
+        "type": "string"
+      },
+      "locked": {
+        "default": false,
+        "title": "Locked",
+        "type": "boolean"
+      },
+      "opacity": {
+        "default": 95,
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "title": "Opacity",
+        "type": "integer"
+      },
+      "radius": {
+        "default": 32,
+        "maximum": 120.0,
+        "minimum": 0.0,
+        "title": "Radius",
+        "type": "integer"
+      },
+      "text": {
+        "default": "",
+        "maxLength": 240,
+        "title": "Text",
+        "type": "string"
+      },
+      "textColor": {
+        "default": "#ffffff",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "title": "Textcolor",
+        "type": "string"
+      },
+      "w": {
+        "maximum": 1600.0,
+        "minimum": 48.0,
+        "title": "W",
+        "type": "integer"
+      },
+      "x": {
+        "maximum": 1552.0,
+        "minimum": 0.0,
+        "title": "X",
+        "type": "integer"
+      },
+      "y": {
+        "maximum": 852.0,
+        "minimum": 0.0,
+        "title": "Y",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "x",
+      "y",
+      "w",
+      "h"
+    ],
+    "title": "NoticeElement",
+    "type": "object"
+  },
+  "OpenAccount": {
+    "additionalProperties": false,
+    "properties": {
+      "classes": {
+        "items": {
+          "$ref": "#/components/schemas/ClassGrant"
+        },
+        "maxItems": 20,
+        "title": "Classes",
+        "type": "array"
+      },
+      "expiresAt": {
+        "default": 0,
+        "maximum": 4102444800.0,
+        "minimum": 0.0,
+        "title": "Expiresat",
+        "type": "number"
+      },
+      "identity": {
+        "enum": [
+          "teacher",
+          "headteacher",
+          "system_admin"
+        ],
+        "title": "Identity",
+        "type": "string"
+      },
+      "login": {
+        "maxLength": 80,
+        "minLength": 3,
+        "pattern": "^[a-zA-Z0-9_@.\\-]+$",
+        "title": "Login",
+        "type": "string"
+      },
+      "name": {
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "login",
+      "name",
+      "identity"
+    ],
+    "title": "OpenAccount",
+    "type": "object"
+  },
+  "OverrideInput": {
+    "additionalProperties": false,
+    "properties": {
+      "date": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "title": "Date",
+        "type": "string"
+      },
+      "mode": {
+        "enum": [
+          "closed",
+          "weekday",
+          "custom"
+        ],
+        "title": "Mode",
+        "type": "string"
+      },
+      "periods": {
+        "default": [],
+        "items": {
+          "$ref": "#/components/schemas/Period"
+        },
+        "maxItems": 12,
+        "title": "Periods",
+        "type": "array"
+      },
+      "revision": {
+        "minimum": 1.0,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "weekday": {
+        "default": 1,
+        "maximum": 7.0,
+        "minimum": 1.0,
+        "title": "Weekday",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "revision",
+      "date",
+      "mode"
+    ],
+    "title": "OverrideInput",
+    "type": "object"
+  },
+  "PairConfirm": {
+    "additionalProperties": false,
+    "properties": {
+      "classId": {
+        "maxLength": 36,
+        "minLength": 1,
+        "title": "Classid",
+        "type": "string"
+      },
+      "code": {
+        "pattern": "^\\d{6}$",
+        "title": "Code",
+        "type": "string"
+      },
+      "name": {
+        "anyOf": [
+          {
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Name"
+      }
+    },
+    "required": [
+      "code",
+      "classId"
+    ],
+    "title": "PairConfirm",
+    "type": "object"
+  },
+  "PairInput": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "maxLength": 60,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "PairInput",
+    "type": "object"
+  },
+  "Period": {
+    "additionalProperties": false,
+    "properties": {
+      "end": {
+        "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+        "title": "End",
+        "type": "string"
+      },
+      "start": {
+        "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+        "title": "Start",
+        "type": "string"
+      },
+      "subject": {
+        "maxLength": 20,
+        "minLength": 1,
+        "title": "Subject",
+        "type": "string"
+      }
+    },
+    "required": [
+      "start",
+      "end",
+      "subject"
+    ],
+    "title": "Period",
+    "type": "object"
+  },
+  "PublishInput": {
+    "additionalProperties": false,
+    "properties": {
+      "draftId": {
+        "maxLength": 36,
+        "minLength": 1,
+        "title": "Draftid",
+        "type": "string"
+      },
+      "draftRevision": {
+        "minimum": 1.0,
+        "title": "Draftrevision",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "draftId",
+      "draftRevision"
+    ],
+    "title": "PublishInput",
+    "type": "object"
+  },
+  "RecoverInput": {
+    "additionalProperties": false,
+    "properties": {
+      "code": {
+        "maxLength": 40,
+        "minLength": 8,
+        "title": "Code",
+        "type": "string"
+      },
+      "login": {
+        "maxLength": 80,
+        "minLength": 3,
+        "pattern": "^[a-zA-Z0-9_@.\\-]+$",
+        "title": "Login",
+        "type": "string"
+      },
+      "name": {
+        "default": "老师",
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "password": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "login",
+      "password",
+      "code"
+    ],
+    "title": "RecoverInput",
+    "type": "object"
+  },
+  "Redeem": {
+    "additionalProperties": false,
+    "properties": {
+      "code": {
+        "maxLength": 40,
+        "minLength": 12,
+        "title": "Code",
+        "type": "string"
+      }
+    },
+    "required": [
+      "code"
+    ],
+    "title": "Redeem",
+    "type": "object"
+  },
+  "ReportInput": {
+    "additionalProperties": false,
+    "properties": {
+      "activeNoticeId": {
+        "default": "",
+        "maxLength": 36,
+        "title": "Activenoticeid",
+        "type": "string"
+      },
+      "appliedVersion": {
+        "minimum": 0.0,
+        "title": "Appliedversion",
+        "type": "integer"
+      },
+      "applyState": {
+        "enum": [
+          "applied",
+          "paused",
+          "deferred",
+          "error",
+          "waiting"
+        ],
+        "title": "Applystate",
+        "type": "string"
+      },
+      "bindingId": {
+        "maxLength": 36,
+        "title": "Bindingid",
+        "type": "string"
+      },
+      "cachedVersion": {
+        "minimum": 0.0,
+        "title": "Cachedversion",
+        "type": "integer"
+      },
+      "clientVersion": {
+        "default": "0.1.0",
+        "maxLength": 30,
+        "title": "Clientversion",
+        "type": "string"
+      },
+      "effectiveMaterial": {
+        "enum": [
+          "subtle",
+          "solid"
+        ],
+        "title": "Effectivematerial",
+        "type": "string"
+      },
+      "effectiveTheme": {
+        "enum": [
+          "mica_light",
+          "mica_dark",
+          "system_high_contrast"
+        ],
+        "title": "Effectivetheme",
+        "type": "string"
+      },
+      "error": {
+        "default": "",
+        "maxLength": 200,
+        "title": "Error",
+        "type": "string"
+      },
+      "localControlEpoch": {
+        "minimum": 0.0,
+        "title": "Localcontrolepoch",
+        "type": "integer"
+      },
+      "localPaused": {
+        "title": "Localpaused",
+        "type": "boolean"
+      },
+      "manualUntil": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Manualuntil",
+        "type": "number"
+      },
+      "materialReason": {
+        "default": "",
+        "maxLength": 200,
+        "title": "Materialreason",
+        "type": "string"
+      },
+      "noticeEndsAt": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Noticeendsat",
+        "type": "number"
+      },
+      "page": {
+        "maximum": 10000.0,
+        "minimum": 1.0,
+        "title": "Page",
+        "type": "integer"
+      },
+      "pageCount": {
+        "maximum": 10000.0,
+        "minimum": 1.0,
+        "title": "Pagecount",
+        "type": "integer"
+      },
+      "pageSetId": {
+        "maxLength": 100,
+        "title": "Pagesetid",
+        "type": "string"
+      },
+      "remotePaused": {
+        "title": "Remotepaused",
+        "type": "boolean"
+      },
+      "renderedAt": {
+        "default": 0,
+        "minimum": 0.0,
+        "title": "Renderedat",
+        "type": "number"
+      },
+      "stateReportSeq": {
+        "minimum": 1.0,
+        "title": "Statereportseq",
+        "type": "integer"
+      },
+      "syncEpoch": {
+        "maxLength": 36,
+        "title": "Syncepoch",
+        "type": "string"
+      }
+    },
+    "required": [
+      "bindingId",
+      "syncEpoch",
+      "stateReportSeq",
+      "localControlEpoch",
+      "localPaused",
+      "remotePaused",
+      "cachedVersion",
+      "appliedVersion",
+      "applyState",
+      "pageSetId",
+      "page",
+      "pageCount",
+      "effectiveTheme",
+      "effectiveMaterial"
+    ],
+    "title": "ReportInput",
+    "type": "object"
+  },
+  "RestoreInput": {
+    "additionalProperties": false,
+    "properties": {
+      "confirmation": {
+        "title": "Confirmation",
+        "type": "string"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "password",
+      "confirmation"
+    ],
+    "title": "RestoreInput",
+    "type": "object"
+  },
+  "RevisionInput": {
+    "additionalProperties": false,
+    "properties": {
+      "reason": {
+        "default": "",
+        "maxLength": 100,
+        "title": "Reason",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 1.0,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "until": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Until"
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "title": "RevisionInput",
+    "type": "object"
+  },
+  "ScreenNotice": {
+    "additionalProperties": false,
+    "properties": {
+      "canvas": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/NoticeCanvas"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "duration": {
+        "default": 30,
+        "maximum": 3600.0,
+        "minimum": 5.0,
+        "title": "Duration",
+        "type": "integer"
+      },
+      "message": {
+        "maxLength": 160,
+        "minLength": 1,
+        "title": "Message",
+        "type": "string"
+      },
+      "mode": {
+        "enum": [
+          "marquee",
+          "barrage",
+          "popup",
+          "countdown",
+          "canvas"
+        ],
+        "title": "Mode",
+        "type": "string"
+      },
+      "overFullscreen": {
+        "default": false,
+        "title": "Overfullscreen",
+        "type": "boolean"
+      },
+      "style": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ScreenNoticeStyle"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "tone": {
+        "default": "blue",
+        "enum": [
+          "blue",
+          "amber",
+          "red"
+        ],
+        "title": "Tone",
+        "type": "string"
+      }
+    },
+    "required": [
+      "mode",
+      "message"
+    ],
+    "title": "ScreenNotice",
+    "type": "object"
+  },
+  "ScreenNoticeStyle": {
+    "additionalProperties": false,
+    "properties": {
+      "backgroundColor": {
+        "default": "#17458c",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "title": "Backgroundcolor",
+        "type": "string"
+      },
+      "bold": {
+        "default": true,
+        "title": "Bold",
+        "type": "boolean"
+      },
+      "direction": {
+        "default": "left",
+        "enum": [
+          "left",
+          "right"
+        ],
+        "title": "Direction",
+        "type": "string"
+      },
+      "flowSeconds": {
+        "default": 14,
+        "maximum": 40.0,
+        "minimum": 6.0,
+        "title": "Flowseconds",
+        "type": "integer"
+      },
+      "fontFamily": {
+        "default": "sans",
+        "enum": [
+          "sans",
+          "serif",
+          "kai"
+        ],
+        "title": "Fontfamily",
+        "type": "string"
+      },
+      "fontSize": {
+        "default": 56,
+        "maximum": 120.0,
+        "minimum": 24.0,
+        "title": "Fontsize",
+        "type": "integer"
+      },
+      "opacity": {
+        "default": 95,
+        "maximum": 100.0,
+        "minimum": 20.0,
+        "title": "Opacity",
+        "type": "integer"
+      },
+      "position": {
+        "default": "top",
+        "enum": [
+          "top",
+          "center",
+          "bottom"
+        ],
+        "title": "Position",
+        "type": "string"
+      },
+      "radius": {
+        "default": 32,
+        "maximum": 64.0,
+        "minimum": 0.0,
+        "title": "Radius",
+        "type": "integer"
+      },
+      "surface": {
+        "default": "fullscreen",
+        "enum": [
+          "fullscreen",
+          "card"
+        ],
+        "title": "Surface",
+        "type": "string"
+      },
+      "textColor": {
+        "default": "#ffffff",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+        "title": "Textcolor",
+        "type": "string"
+      },
+      "width": {
+        "default": 72,
+        "maximum": 90.0,
+        "minimum": 40.0,
+        "title": "Width",
+        "type": "integer"
+      }
+    },
+    "title": "ScreenNoticeStyle",
+    "type": "object"
+  },
+  "SettingsInput": {
+    "additionalProperties": false,
+    "properties": {
+      "registrationOpen": {
+        "default": false,
+        "title": "Registrationopen",
+        "type": "boolean"
+      },
+      "siteName": {
+        "maxLength": 80,
+        "minLength": 1,
+        "title": "Sitename",
+        "type": "string"
+      }
+    },
+    "required": [
+      "siteName"
+    ],
+    "title": "SettingsInput",
+    "type": "object"
+  },
+  "ShapePoint": {
+    "additionalProperties": false,
+    "properties": {
+      "x": {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "title": "X",
+        "type": "integer"
+      },
+      "y": {
+        "maximum": 100.0,
+        "minimum": 0.0,
+        "title": "Y",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "x",
+      "y"
+    ],
+    "title": "ShapePoint",
+    "type": "object"
+  },
+  "TimetableInput": {
+    "additionalProperties": false,
+    "properties": {
+      "effectiveFrom": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "title": "Effectivefrom",
+        "type": "string"
+      },
+      "effectiveUntil": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "title": "Effectiveuntil",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 1.0,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "weekdays": {
+        "additionalProperties": {
+          "items": {
+            "$ref": "#/components/schemas/Period"
+          },
+          "type": "array"
+        },
+        "title": "Weekdays",
+        "type": "object"
+      }
+    },
+    "required": [
+      "revision",
+      "effectiveFrom",
+      "effectiveUntil",
+      "weekdays"
+    ],
+    "title": "TimetableInput",
+    "type": "object"
+  },
+  "TransferInput": {
+    "additionalProperties": false,
+    "properties": {
+      "recipient": {
+        "maxLength": 36,
+        "minLength": 1,
+        "title": "Recipient",
+        "type": "string"
+      }
+    },
+    "required": [
+      "recipient"
+    ],
+    "title": "TransferInput",
+    "type": "object"
+  },
+  "UserInput": {
+    "additionalProperties": false,
+    "properties": {
+      "login": {
+        "maxLength": 80,
+        "minLength": 3,
+        "pattern": "^[a-zA-Z0-9_@.\\-]+$",
+        "title": "Login",
+        "type": "string"
+      },
+      "name": {
+        "default": "老师",
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "password": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Password",
+        "type": "string"
+      },
+      "systemAdmin": {
+        "default": false,
+        "title": "Systemadmin",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "login",
+      "password"
+    ],
+    "title": "UserInput",
+    "type": "object"
+  },
+  "UserUpdate": {
+    "additionalProperties": false,
+    "properties": {
+      "active": {
+        "title": "Active",
+        "type": "boolean"
+      },
+      "canCreateClasses": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Cancreateclasses"
+      },
+      "expiresAt": {
+        "anyOf": [
+          {
+            "maximum": 4102444800.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Expiresat"
+      },
+      "name": {
+        "maxLength": 40,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "systemAdmin": {
+        "title": "Systemadmin",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "name",
+      "active",
+      "systemAdmin"
+    ],
+    "title": "UserUpdate",
+    "type": "object"
+  },
+  "ValidationError": {
+    "properties": {
+      "ctx": {
+        "title": "Context",
+        "type": "object"
+      },
+      "input": {
+        "title": "Input"
+      },
+      "loc": {
+        "items": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "title": "Location",
+        "type": "array"
+      },
+      "msg": {
+        "title": "Message",
+        "type": "string"
+      },
+      "type": {
+        "title": "Error Type",
+        "type": "string"
+      }
+    },
+    "required": [
+      "loc",
+      "msg",
+      "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+  },
+  "backend__lifecycle__PasswordInput": {
+    "additionalProperties": false,
+    "properties": {
+      "newPassword": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Newpassword",
+        "type": "string"
+      },
+      "oldPassword": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Oldpassword",
+        "type": "string"
+      }
+    },
+    "required": [
+      "oldPassword",
+      "newPassword"
+    ],
+    "title": "PasswordInput",
+    "type": "object"
+  },
+  "backend__system_admin__PasswordInput": {
+    "additionalProperties": false,
+    "properties": {
+      "password": {
+        "maxLength": 128,
+        "minLength": 10,
+        "title": "Password",
+        "type": "string"
+      }
+    },
+    "required": [
+      "password"
+    ],
+    "title": "PasswordInput",
+    "type": "object"
+  }
+}

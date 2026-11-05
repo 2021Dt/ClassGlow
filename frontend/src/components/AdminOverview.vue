@@ -13,6 +13,7 @@ import {
   Check,
 } from "@lucide/vue";
 import { adminDate, auditNames } from "../admin";
+import RequestMetrics from "./RequestMetrics.vue";
 const props = defineProps<{ overview: any; activity: any[] }>();
 const emit = defineEmits<{
   navigate: [string, Record<string, string>?];
@@ -122,6 +123,7 @@ const onlinePercent = computed(() =>
     </div>
   </section>
   <div class="admin-overview-grid">
+    <RequestMetrics :overview="overview" />
     <section class="admin-card admin-attention">
       <header class="admin-card-heading">
         <div>

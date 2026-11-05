@@ -39,6 +39,7 @@ from .devices import device_view
 from .entitlements import profile
 from .security import fail, passwords, system_admin
 from .system_service import log_system, system_config
+from .version import VERSION
 
 router = APIRouter()
 started_at = time.monotonic()
@@ -95,7 +96,7 @@ def available_accounts(timestamp):
 
 
 @router.get("/setup/status")
-def setup_status(db: Session = Depends(get_db)):
+def setup_status(db: Session = Depends(get_db, scope="function")):
     config = system_config(db)
     return {
         "initialized": config.initialized,
@@ -105,7 +106,7 @@ def setup_status(db: Session = Depends(get_db)):
 
 
 @router.get("/system/overview")
-def overview(user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def overview(user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     config = system_config(db)
     count = lambda model, *where: db.scalar(select(func.count()).select_from(model).where(*where))
     database = db.get_bind().url
@@ -122,7 +123,7 @@ def overview(user: User = Depends(system_admin), db: Session = Depends(get_db)):
         "diskFreeBytes": disk.free,
         "uptimeSeconds": int(time.monotonic() - started_at),
         "serverTime": now(),
-        "version": "0.1.0",
+        "version": VERSION,
         "initializedAt": config.initialized_at,
         "users": count(User),
         "activeUsers": count(User, User.active.is_(True)),
@@ -150,7 +151,9 @@ def overview(user: User = Depends(system_admin), db: Session = Depends(get_db)):
 
 
 @router.put("/system/settings")
-def save_settings(body: SettingsInput, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def save_settings(
+    body: SettingsInput, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     config = system_config(db, lock=True)
     config.site_name, config.registration_open = body.siteName.strip(), False
     log_system(db, user.login, "system_settings_changed", config.site_name)
@@ -166,7 +169,7 @@ def list_users(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     timestamp = now()
     where = [or_(User.login.contains(search, autoescape=True), User.name.contains(search, autoescape=True))]
@@ -218,7 +221,7 @@ def list_users(
 
 
 @router.post("/system/users", status_code=201)
-def create_user(body: UserInput, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def create_user(body: UserInput, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     target = User(
         login=body.login.casefold(),
         name=body.name.strip(),
@@ -232,7 +235,7 @@ def create_user(body: UserInput, user: User = Depends(system_admin), db: Session
 
 
 @router.get("/system/users/{user_id}")
-def get_user(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def get_user(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     target = db.get(User, user_id)
     if not target:
         fail(404, "user_missing", "账号不存在。")
@@ -240,7 +243,9 @@ def get_user(user_id: str, user: User = Depends(system_admin), db: Session = Dep
 
 
 @router.put("/system/users/{user_id}")
-def edit_user(user_id: str, body: UserUpdate, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def edit_user(
+    user_id: str, body: UserUpdate, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     target = db.get(User, user_id)
     if not target:
         fail(404, "user_missing", "账号不存在。")
@@ -261,7 +266,10 @@ def edit_user(user_id: str, body: UserUpdate, user: User = Depends(system_admin)
 
 @router.post("/system/users/{user_id}/reset-password")
 def reset_password(
-    user_id: str, body: PasswordInput, user: User = Depends(system_admin), db: Session = Depends(get_db)
+    user_id: str,
+    body: PasswordInput,
+    user: User = Depends(system_admin),
+    db: Session = Depends(get_db, scope="function"),
 ):
     target = db.scalar(select(User).where(User.id == user_id).with_for_update())
     if not target:
@@ -284,7 +292,7 @@ def list_classes(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     where = [Classroom.name.contains(search, autoescape=True)]
     if status:
@@ -315,7 +323,12 @@ def list_classes(
 
 
 @router.put("/system/classes/{class_id}")
-def edit_class(class_id: str, body: ClassUpdate, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def edit_class(
+    class_id: str,
+    body: ClassUpdate,
+    user: User = Depends(system_admin),
+    db: Session = Depends(get_db, scope="function"),
+):
     c = db.scalar(select(Classroom).where(Classroom.id == class_id).with_for_update())
     owner = db.get(User, body.ownerId)
     if not c or not owner or (owner.id != c.owner_id and not owner.active):
@@ -352,7 +365,7 @@ def list_devices(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     query = (
         select(Device, Classroom.name)
@@ -384,7 +397,7 @@ def revoke_device(db, device):
 
 
 @router.post("/system/devices/{device_id}/revoke")
-def revoke(device_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def revoke(device_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     device = db.get(Device, device_id)
     if not device:
         fail(404, "device_missing", "设备不存在。")
@@ -400,7 +413,7 @@ def audit(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     where = [
         or_(SystemAudit.actor.contains(search, autoescape=True), SystemAudit.target.contains(search, autoescape=True))
@@ -450,7 +463,7 @@ def make_backup(db, reason="manual"):
 
 
 @router.get("/system/backups")
-def backups(user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def backups(user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     return {
         "supported": db.get_bind().dialect.name == "sqlite",
         "items": [
@@ -462,7 +475,7 @@ def backups(user: User = Depends(system_admin), db: Session = Depends(get_db)):
 
 
 @router.post("/system/backups", status_code=201)
-def create_backup(user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def create_backup(user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     name = make_backup(db)
     log_system(db, user.login, "backup_created", name)
     return {"name": name}
@@ -524,7 +537,7 @@ def backup_details(name: str, user: User = Depends(system_admin)):
 
 
 @router.delete("/system/backups/{name}")
-def delete_backup(name: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def delete_backup(name: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     path = backup_path(name)
     # 即使运维误将当前数据库放入备份目录，也不能从此入口删除它。
     if db.get_bind().dialect.name == "sqlite" and path.samefile(sqlite_source(db)):
@@ -535,7 +548,9 @@ def delete_backup(name: str, user: User = Depends(system_admin), db: Session = D
 
 
 @router.post("/system/backups/{name}/restore")
-def restore_backup(name: str, body: RestoreInput, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def restore_backup(
+    name: str, body: RestoreInput, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     sqlite_source(db)
     if body.confirmation != "恢复备份" or not passwords.verify(body.password, user.password):
         fail(403, "restore_confirmation", "请填写当前管理员口令并输入“恢复备份”。")

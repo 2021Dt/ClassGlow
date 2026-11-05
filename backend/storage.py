@@ -17,6 +17,7 @@ from .db import (
     AnnouncementReceipt,
     AnnouncementTarget,
     Audit,
+    ClassAsset,
     Classroom,
     Command,
     Content,
@@ -143,7 +144,7 @@ def download_files():
 
 
 @router.get("/system/storage")
-def storage_report(user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def storage_report(user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     cutoff = now() - RETENTION_DAYS * 86400
     backups = old_backups(db)
     return {
@@ -166,7 +167,7 @@ def storage_report(user: User = Depends(system_admin), db: Session = Depends(get
 
 
 @router.post("/system/storage/cleanup")
-def cleanup(body: CleanupInput, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def cleanup(body: CleanupInput, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     if body.confirmation != "清理过期数据":
         fail(422, "cleanup_confirmation", "请输入“清理过期数据”确认。")
     if body.category == "records":
@@ -184,7 +185,9 @@ def cleanup(body: CleanupInput, user: User = Depends(system_admin), db: Session 
 
 
 @router.delete("/system/storage/downloads/{name}")
-def delete_download(name: str, body: DeleteInput, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def delete_download(
+    name: str, body: DeleteInput, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     if body.confirmation != name or not PACKAGE_PATTERN.fullmatch(name):
         fail(422, "delete_confirmation", "请核对安装包名称。")
     entry = next((item for item in download_files() if item["name"] == name), None)
@@ -251,7 +254,10 @@ def deletion_details(db, kind, target, actor):
 
 @router.get("/system/deletion/{kind}/{resource_id}")
 def preview_deletion(
-    kind: ResourceKind, resource_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)
+    kind: ResourceKind,
+    resource_id: str,
+    user: User = Depends(system_admin),
+    db: Session = Depends(get_db, scope="function"),
 ):
     target = deletion_target(db, kind, resource_id)
     if target is None:
@@ -277,7 +283,7 @@ def permanent_delete(
     resource_id: str,
     body: DeleteInput,
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     target = deletion_target(db, kind, resource_id)
     if target is None:
@@ -290,7 +296,7 @@ def permanent_delete(
     if kind == "classes":
         remove_contents(db, select(Content.id).where(Content.class_id == target.id))
         remove_devices(db, select(Device.id).where(Device.class_id == target.id))
-        for model in (Membership, Invitation, Transfer, Audit):
+        for model in (Membership, Invitation, Transfer, Audit, ClassAsset):
             db.execute(delete(model).where(model.class_id == target.id))
         for draft in db.scalars(select(Draft).with_for_update()):
             classes = draft.data.get("classIds", [])

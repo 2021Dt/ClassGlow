@@ -1,5 +1,6 @@
 import hashlib
 import json
+import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,8 +18,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from . import schemas as S
-from .account_security import LoginInput, record_login, revoke_sessions
+from .account_security import LoginInput, record_login
+from .assets import layout_view, map_images, materialize_layout, store_layout
+from .assets import router as assets_router
 from .config import settings
+from .content_queries import display_contents
 from .db import (
     Audit,
     Base,
@@ -39,9 +43,12 @@ from .db import (
 )
 from .entitlements import class_entitlement, profile, require_premium
 from .middleware import BodyLimitMiddleware, body_limit
+from .observability import log_request, metrics
+from .observability import router as observability_router
 from .realtime import router as realtime_router
 from .security import actor, bearer, check_frozen, digest, fail, frozen_detail, limit, member, passwords, secret
 from .system_service import system_config
+from .version import ASSET_PROTOCOL, RELEASE, VERSION, downloadable_version
 
 
 def iso(value: float) -> str:
@@ -85,13 +92,15 @@ async def lifespan(_):
     yield
 
 
-app = FastAPI(title="班级看板服务", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="班级看板服务", version=VERSION, lifespan=lifespan)
 app.include_router(realtime_router)
+app.include_router(assets_router)
+app.include_router(observability_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "If-None-Match"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "If-None-Match", "X-ClassGlow-Assets"],
     expose_headers=["ETag", "X-Request-ID"],
 )
 app.add_middleware(BodyLimitMiddleware)
@@ -100,16 +109,46 @@ app.add_middleware(BodyLimitMiddleware)
 @app.middleware("http")
 async def request_context(request: Request, call_next):
     request.state.request_id = str(uuid4())
+    started = time.perf_counter()
+    error_type = ""
     try:
-        length = int(request.headers.get("content-length", "0"))
-    except ValueError:
-        return JSONResponse({"message": "请求长度无效"}, 400)
-    if length > body_limit(request.url.path, request.method):
-        return JSONResponse({"message": "请求过大"}, 413)
-    response = await call_next(request)
+        try:
+            length = int(request.headers.get("content-length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0:
+            response = JSONResponse({"detail": {"code": "length_invalid", "message": "请求长度无效。"}}, 400)
+        elif length > body_limit(request.url.path, request.method):
+            response = JSONResponse({"detail": {"code": "body_too_large", "message": "请求内容超过允许大小。"}}, 413)
+        else:
+            response = await call_next(request)
+    except Exception as error:  # noqa: BLE001 -- 最外层只记录异常类型，避免默认日志带出教学正文或 SQL 参数。
+        error_type = type(error).__name__
+        response = JSONResponse(
+            {
+                "detail": {
+                    "code": "internal_error",
+                    "message": "请求未完成，请保留输入并联系管理员。",
+                    "request_id": request.state.request_id,
+                }
+            },
+            500,
+        )
+    route = getattr(request.scope.get("route"), "path", "<unmatched>")
+    elapsed = (time.perf_counter() - started) * 1000
+    metrics.observe(request.method, route, response.status_code, elapsed)
+    log_request(
+        request.state.request_id,
+        request.method,
+        route,
+        response.status_code,
+        elapsed,
+        error_type or getattr(request.state, "error_type", ""),
+    )
     response.headers["X-Request-ID"] = request.state.request_id
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Server-Timing"] = f"app;dur={elapsed:.1f}"
     return response
 
 
@@ -130,7 +169,8 @@ async def validation_error(request: Request, exc: RequestValidationError):
 
 
 @app.exception_handler(IntegrityError)
-async def concurrent_write(request: Request, _):
+async def concurrent_write(request: Request, error):
+    request.state.error_type = type(error).__name__
     return JSONResponse(
         {
             "detail": {
@@ -144,7 +184,8 @@ async def concurrent_write(request: Request, _):
 
 
 @app.exception_handler(SQLAlchemyError)
-async def database_unavailable(request: Request, _):
+async def database_unavailable(request: Request, error):
+    request.state.error_type = type(error).__name__
     # 不把 SQL、正文、口令哈希或连接信息放进响应和默认异常日志。
     return JSONResponse(
         {
@@ -175,15 +216,12 @@ def idempotent(db: Session, user: User, key: str | None, scope: str, payload: di
     return identity, signature, existing.result if existing else None
 
 
-def session_result(db, user):
+def session_result(db, user, client_id="", user_agent=""):
     check_frozen(user)
-    revoke_sessions(db, user, "session_replaced")
+    from .sessions import create_session
+
     token = secret()
-    db.add(
-        Token(
-            digest=digest(token), user_id=user.id, expires=now() + settings.session_hours * 3600, epoch=sync_epoch(db)
-        )
-    )
+    create_session(db, user, token, client_id, user_agent)
     return {
         "token": token,
         "user": profile(user),
@@ -191,7 +229,7 @@ def session_result(db, user):
 
 
 @app.get("/health")
-def health(db: Session = Depends(get_db)):
+def health(db: Session = Depends(get_db, scope="function")):
     return {"status": "ok", "syncEpoch": sync_epoch(db), "serverTime": now()}
 
 
@@ -199,19 +237,20 @@ def health(db: Session = Depends(get_db)):
 def client_version():
     # 只提供人工升级信息，不向教室端发送自动下载或重启指令。
     return {
-        "latestVersion": settings.client_latest_version,
-        "minimumSchema": 1,
+        "latestVersion": downloadable_version(settings.client_latest_version, settings.client_download_url),
+        "serverVersion": VERSION,
+        "minimumSchema": RELEASE["schema"],
         "downloadUrl": settings.client_download_url,
     }
 
 
 @app.post("/auth/register", status_code=201)
-def register(body: S.Credentials, request: Request, db: Session = Depends(get_db)):
+def register(body: S.Credentials, request: Request, db: Session = Depends(get_db, scope="function")):
     fail(403, "registration_closed", "账号由管理员统一创建，请联系管理员领取账号和密码。")
 
 
 @app.post("/auth/login")
-def login(body: LoginInput, request: Request, db: Session = Depends(get_db)):
+def login(body: LoginInput, request: Request, db: Session = Depends(get_db, scope="function")):
     if not system_config(db).initialized:
         fail(409, "setup_required", "学校尚未开通，请联系管理员。")
     limit(f"login-ip:{request.client.host}", 30, 300)
@@ -227,18 +266,18 @@ def login(body: LoginInput, request: Request, db: Session = Depends(get_db)):
     if record_login(db, user, request, body.clientId):
         # 拒绝登录时仍提交冻结和审计，不能用异常触发事务回滚。
         return JSONResponse({"detail": frozen_detail(user)}, 403)
-    return session_result(db, user)
+    return session_result(db, user, body.clientId, request.headers.get("user-agent", ""))
 
 
 @app.post("/auth/logout")
-def logout(authorization: str = Header(), user: User = Depends(actor), db: Session = Depends(get_db)):
+def logout(authorization: str = Header(), user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     token = db.get(Token, digest(bearer(authorization)))
     if token:
         db.delete(token)
     return {"ok": True}
 
 
-def class_view(c, m, db):
+def class_view(c, m, db, references=False):
     return {
         "id": c.id,
         "name": c.name,
@@ -251,12 +290,15 @@ def class_view(c, m, db):
         "revision": c.revision,
         "archived": c.archived,
         **{k: v for k, v in c.data.items() if k != "subjects"},
-        "layout": S.LayoutInput.model_validate(c.data["layout"]).model_dump(),
+        "layout": layout_view(db, c.id, c.data["layout"], references),
     }
 
 
 def content_view(db, content, user_id=None):
-    author = db.get(User, content.author_id)
+    names = db.info.setdefault("author_names", {})
+    if content.author_id not in names:
+        author = db.get(User, content.author_id)
+        names[content.author_id] = author.name if author else "已离开成员"
     return {
         **content.data,
         "id": content.id,
@@ -264,12 +306,16 @@ def content_view(db, content, user_id=None):
         "revision": content.revision,
         "state": content.state,
         "authorId": content.author_id,
-        "author": "我" if user_id == content.author_id else author.name if author else "已离开成员",
+        "author": "我" if user_id == content.author_id else names[content.author_id],
     }
 
 
 @app.get("/bootstrap")
-def bootstrap(user: User = Depends(actor), db: Session = Depends(get_db)):
+def bootstrap(
+    x_classglow_assets: str = Header(default=""),
+    user: User = Depends(actor),
+    db: Session = Depends(get_db, scope="function"),
+):
     memberships = db.scalars(select(Membership).where(Membership.user_id == user.id, Membership.active.is_(True))).all()
     if user.system_admin:
         memberships = [
@@ -282,13 +328,12 @@ def bootstrap(user: User = Depends(actor), db: Session = Depends(get_db)):
 
     devices = db.scalars(select(Device).where(Device.class_id.in_(ids), Device.revoked.is_(False))).all()
     return {
-        "schema": 1,
+        "schema": RELEASE["schema"],
         "user": profile(user),
-        "classes": [class_view(db.get(Classroom, m.class_id), m, db) for m in memberships],
-        "contents": [
-            content_view(db, c, user.id)
-            for c in db.scalars(select(Content).where(Content.class_id.in_(ids)).order_by(Content.id))
+        "classes": [
+            class_view(db.get(Classroom, m.class_id), m, db, x_classglow_assets == ASSET_PROTOCOL) for m in memberships
         ],
+        "contents": [content_view(db, c, user.id) for c in db.scalars(display_contents(ids))],
         "drafts": [
             {**d.data, "revision": d.revision, "updated": iso(d.updated)}
             for d in db.scalars(select(Draft).where(Draft.owner_id == user.id, Draft.closed.is_(False)))
@@ -307,7 +352,7 @@ def bootstrap(user: User = Depends(actor), db: Session = Depends(get_db)):
 
 
 @app.get("/classes")
-def list_classes(user: User = Depends(actor), db: Session = Depends(get_db)):
+def list_classes(user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     if user.system_admin:
         return [class_view(c, Membership(role="admin"), db) for c in db.scalars(select(Classroom))]
     return [
@@ -317,7 +362,7 @@ def list_classes(user: User = Depends(actor), db: Session = Depends(get_db)):
 
 
 @app.post("/classes", status_code=201)
-def create_class(body: S.ClassInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def create_class(body: S.ClassInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     if not (user.system_admin or user.can_create_classes):
         fail(403, "class_creation_forbidden", "创建班级需要班主任或系统管理员权限，请联系管理员分配任教班级。")
     c = Classroom(
@@ -344,7 +389,7 @@ def create_class(body: S.ClassInput, user: User = Depends(actor), db: Session = 
 
 
 @app.get("/drafts")
-def list_drafts(user: User = Depends(actor), db: Session = Depends(get_db)):
+def list_drafts(user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     return [
         {**d.data, "revision": d.revision, "updated": iso(d.updated)}
         for d in db.scalars(
@@ -354,7 +399,9 @@ def list_drafts(user: User = Depends(actor), db: Session = Depends(get_db)):
 
 
 @app.put("/drafts/{draft_id}")
-def save_draft(draft_id: str, body: S.DraftInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def save_draft(
+    draft_id: str, body: S.DraftInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     if draft_id != body.id:
         fail(422, "id_mismatch", "草稿编号不一致。")
     d = db.scalar(select(Draft).where(Draft.id == draft_id).with_for_update())
@@ -376,7 +423,7 @@ def save_draft(draft_id: str, body: S.DraftInput, user: User = Depends(actor), d
 
 
 @app.delete("/drafts/{draft_id}")
-def discard_draft(draft_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def discard_draft(draft_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     d = db.get(Draft, draft_id)
     if not d or d.owner_id != user.id:
         fail(404, "draft_not_found", "草稿不存在。")
@@ -416,7 +463,7 @@ def publish(
     body: S.PublishInput,
     idempotency_key: str | None = Header(default=None),
     user: User = Depends(actor),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     key, signature, previous = idempotent(db, user, idempotency_key, "publish", body.model_dump())
     if previous is not None:
@@ -498,7 +545,7 @@ def publish(
 
 
 @app.get("/publish-batches/{request_key}")
-def publish_result(request_key: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def publish_result(request_key: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     if not 8 <= len(request_key) <= 100:
         fail(422, "key_invalid", "请求标识无效。")
     batch = db.get(Idempotency, f"{user.id}:publish:{request_key}")
@@ -509,7 +556,11 @@ def publish_result(request_key: str, user: User = Depends(actor), db: Session = 
 
 @app.post("/contents/{content_id}/{action_name}")
 def content_action(
-    content_id: str, action_name: str, body: S.RevisionInput, user: User = Depends(actor), db: Session = Depends(get_db)
+    content_id: str,
+    action_name: str,
+    body: S.RevisionInput,
+    user: User = Depends(actor),
+    db: Session = Depends(get_db, scope="function"),
 ):
     content = db.get(Content, content_id)
     if not content:
@@ -542,7 +593,7 @@ def content_action(
 
 
 @app.get("/contents/{content_id}/history")
-def history(content_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def history(content_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     content = db.get(Content, content_id)
     if not content:
         fail(404, "content_not_found", "内容不存在。")
@@ -561,7 +612,9 @@ def history(content_id: str, user: User = Depends(actor), db: Session = Depends(
 
 
 @app.delete("/contents/{content_id}")
-def delete_content(content_id: str, body: S.RevisionInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def delete_content(
+    content_id: str, body: S.RevisionInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     content = db.get(Content, content_id)
     if content is None:
         # 同一次删除重试保持成功，避免网络中断后误以为仍有记录。
@@ -575,36 +628,36 @@ def delete_content(content_id: str, body: S.RevisionInput, user: User = Depends(
         fail(409, "content_revision_conflict", "内容已被更新，请刷新确认后再删除。")
     # 先清除关联修订，再删除正文；班级锁使同步版本与删除在同一事务中生效。
     db.execute(delete(History).where(History.content_id == content.id))
-    db.add(Audit(class_id=c.id, actor=user.id, action="content_deleted", data={"contentId": content.id, "reason": body.reason}))
+    db.add(
+        Audit(
+            class_id=c.id,
+            actor=user.id,
+            action="content_deleted",
+            data={"contentId": content.id, "reason": body.reason},
+        )
+    )
     db.delete(content)
     c.version += 1
     return {"ok": True}
 
 
 @app.put("/classes/{class_id}/layout")
-def layout(class_id: str, body: S.LayoutInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def layout(
+    class_id: str, body: S.LayoutInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, _ = member(db, user, class_id, admin=True, write=True)
     require_premium(user)
     if c.data["layout"]["revision"] != body.revision:
         fail(409, "layout_revision_conflict", "布局已被修改，本次预览方案请保留。")
     value = body.model_dump()
     value["revision"] += 1
-    before = c.data["layout"]
-    c.data = {**c.data, "layout": value, "layoutLicenseUserId": user.id}
+    before = materialize_layout(db, c.id, c.data["layout"])
+    c.data = {**c.data, "layout": store_layout(db, c.id, value), "layoutLicenseUserId": user.id}
     c.version += 1
 
     def audit_layout(item):
         # 图片只在配置快照保存一份，审计使用指纹，避免每次移动组件都复制整张图。
-        picture = item.get("backgroundImage", "")
-        widgets = [
-            {**widget, "image": hashlib.sha256(widget["image"].encode()).hexdigest() if widget.get("image") else ""}
-            for widget in item.get("canvas", [])
-        ]
-        return {
-            **item,
-            "canvas": widgets,
-            "backgroundImage": hashlib.sha256(picture.encode()).hexdigest() if picture else "",
-        }
+        return map_images(item, lambda image: hashlib.sha256(image.encode()).hexdigest() if image else "")
 
     audit(
         db,
@@ -617,7 +670,9 @@ def layout(class_id: str, body: S.LayoutInput, user: User = Depends(actor), db: 
 
 
 @app.put("/classes/{class_id}/display")
-def display(class_id: str, body: S.DisplayInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def display(
+    class_id: str, body: S.DisplayInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, _ = member(db, user, class_id, admin=True, write=True)
     if c.revision != body.revision:
         fail(409, "configuration_conflict", "班级配置已改变，请刷新。")
@@ -643,7 +698,9 @@ def display(class_id: str, body: S.DisplayInput, user: User = Depends(actor), db
 
 
 @app.put("/classes/{class_id}/timetable")
-def timetable(class_id: str, body: S.TimetableInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def timetable(
+    class_id: str, body: S.TimetableInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, _ = member(db, user, class_id, admin=True, write=True)
     if c.revision != body.revision:
         fail(409, "configuration_conflict", "课表配置已改变，请刷新。")
@@ -670,7 +727,9 @@ def timetable(class_id: str, body: S.TimetableInput, user: User = Depends(actor)
 
 
 @app.put("/classes/{class_id}/overrides")
-def override(class_id: str, body: S.OverrideInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def override(
+    class_id: str, body: S.OverrideInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, _ = member(db, user, class_id, admin=True, write=True)
     if body.revision != c.revision:
         fail(409, "configuration_conflict", "课表配置已改变。")
@@ -703,6 +762,7 @@ from .lifecycle import router as lifecycle_router
 from .maintenance import router as maintenance_router
 from .onboarding import router as onboarding_router
 from .queries import router as query_router
+from .sessions import router as sessions_router
 from .storage import router as storage_router
 from .system_admin import router as system_router
 
@@ -716,3 +776,4 @@ app.include_router(license_router)
 app.include_router(security_router)
 app.include_router(announcement_router)
 app.include_router(storage_router)
+app.include_router(sessions_router)

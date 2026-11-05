@@ -5,7 +5,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 # 时区数据由 uv.lock 中的 tzdata 提供，精简镜像不再下载整个系统包索引。
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md release.json ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY backend ./backend
 COPY scripts ./scripts

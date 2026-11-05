@@ -65,12 +65,13 @@ def check_frozen(user: User):
         raise HTTPException(403, frozen_detail(user))
 
 
-def actor(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
+def actor(authorization: str | None = Header(default=None), db: Session = Depends(get_db, scope="function")) -> User:
     session = db.get(Token, digest(bearer(authorization)))
     if not session or session.epoch != sync_epoch(db):
         fail(401, "session_expired", "登录已失效，请重新登录。")
     # 同一账号写入串行化，也使相同幂等键的并发重试取得同一结果。
-    user = db.scalar(select(User).where(User.id == session.user_id).with_for_update())
+    query = select(User).where(User.id == session.user_id)
+    user = db.scalar(query if db.info.get("read_only") else query.with_for_update())
     # 等待账号锁期间可能发生换端登录或重置密码，取得锁后重新读取撤销结果。
     session = db.scalar(select(Token).where(Token.digest == session.digest).execution_options(populate_existing=True))
     if not session:
@@ -80,7 +81,7 @@ def actor(authorization: str | None = Header(default=None), db: Session = Depend
     check_frozen(user)
     if session.expires <= now():
         if session.revoked_reason == "session_replaced":
-            fail(401, "session_replaced", "账号已在另一处登录。如非本人操作，请联系管理员重置密码。")
+            fail(401, "session_replaced", "此设备已重新登录，或登录设备数量达到上限，请重新登录。")
         fail(401, "session_expired", "登录已失效，请重新登录。")
     if user.expires_at and user.expires_at <= now():
         fail(401, "account_expired", "账号使用期限已到，请联系系统管理员续期。数据会保留。")
@@ -95,7 +96,8 @@ def system_admin(user: User = Depends(actor)) -> User:
 
 def member(db: Session, user: User, class_id: str, admin=False, write=False) -> tuple[Classroom, Membership]:
     # 所有班级写入先锁班级，权限变更和发布使用同一锁约定。
-    c = db.scalar(select(Classroom).where(Classroom.id == class_id).with_for_update())
+    query = select(Classroom).where(Classroom.id == class_id)
+    c = db.scalar(query if db.info.get("read_only") else query.with_for_update())
     m = db.scalar(
         select(Membership).where(
             Membership.class_id == class_id, Membership.user_id == user.id, Membership.active.is_(True)
@@ -113,12 +115,16 @@ def member(db: Session, user: User, class_id: str, admin=False, write=False) -> 
     return c, m
 
 
-def device_actor(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> Device:
-    d = db.scalar(select(Device).where(Device.credential_hash == digest(bearer(authorization))).with_for_update())
+def device_actor(
+    authorization: str | None = Header(default=None), db: Session = Depends(get_db, scope="function")
+) -> Device:
+    query = select(Device).where(Device.credential_hash == digest(bearer(authorization)))
+    d = db.scalar(query if db.info.get("read_only") else query.with_for_update())
     if not d or d.revoked or d.epoch != sync_epoch(db):
         fail(401, "device_revoked", "设备授权已失效，请清除缓存并重新绑定。")
     c = db.get(Classroom, d.class_id)
     if not c or c.archived:
         fail(401, "device_revoked", "班级不可用，请清除缓存。")
-    d.last_seen = now()
+    if not db.info.get("read_only") and now() - d.last_seen >= 20:
+        d.last_seen = now()
     return d

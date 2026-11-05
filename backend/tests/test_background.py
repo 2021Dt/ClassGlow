@@ -37,6 +37,8 @@ def test_background_publishes_in_snapshot_and_survives_backup(client, tmp_path):
     saved = backup(Path(engine.url.database), tmp_path / "background-backup.db")
     with sqlite3.connect(saved) as database:
         data = json.loads(database.execute("SELECT data FROM classrooms WHERE id=?", (class_id,)).fetchone()[0])
-    assert data["layout"]["backgroundImage"] == picture
+        asset = database.execute("SELECT mime, data FROM class_assets WHERE class_id=?", (class_id,)).fetchone()
+    assert data["layout"]["backgroundImage"].startswith("asset:")
+    assert f"data:{asset[0]};base64," + base64.b64encode(asset[1]).decode() == picture
     invalid = {**response.json(), "backgroundImage": "data:image/jpeg;base64,bm90LWFuLWltYWdl"}
     assert c.put(f"/classes/{class_id}/layout", headers=headers, json=invalid).status_code == 422

@@ -15,6 +15,7 @@ x-api: &api
     KANBAN_ALLOWED_ORIGINS: '["https://${KANBAN_DOMAIN}"]'
     KANBAN_CLIENT_DOWNLOAD_URL: ${KANBAN_CLIENT_DOWNLOAD_URL:-}
     KANBAN_SESSION_HOURS: ${KANBAN_SESSION_HOURS:-720}
+    KANBAN_SESSION_LIMIT: ${KANBAN_SESSION_LIMIT:-5}
     KANBAN_DOWNLOADS_DIR: /app/downloads
   volumes: ["app_data:/app/data", "./.deploy/downloads:/app/downloads"]
   networks: [backend]

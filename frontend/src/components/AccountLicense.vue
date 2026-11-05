@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { ShieldCheck, KeyRound } from "@lucide/vue";
 import { api, premiumAvailable, session, updateProfile } from "../api";
 import { timeLabel } from "../domain";
+import AccountSessions from "./AccountSessions.vue";
 const emit = defineEmits<{ changed: [] }>();
 const code = ref(""),
   busy = ref(false),
@@ -89,6 +90,7 @@ async function redeem() {
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <p v-if="notice" class="notice subtle" role="status">{{ notice }}</p>
     </section>
+    <AccountSessions />
     <section class="panel">
       <h2>功能范围</h2>
       <div class="license-features">

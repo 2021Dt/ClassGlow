@@ -22,6 +22,7 @@ public static class Program
         if (args.Contains("--lifecycle-self-test")) return LifecycleChecks.Run(args);
         if (args.Contains("--render-preview")) return PreviewExport.Run(args);
         if (args.Contains("--self-test")) return SelfTest.Run(args);
+        if (args.Contains("--reliability-check")) return ReliabilityChecks.Run(args);
         if (args.Contains("--network-self-test")) return SelfTest.Network(args).GetAwaiter().GetResult();
         if (args.Contains("--pairing-check")) return SelfTest.Pairing(args).GetAwaiter().GetResult();
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
@@ -240,7 +241,8 @@ public static class SelfTest
             while (DateTimeOffset.UtcNow < deadline && !File.Exists(Path.Combine(output, "stop"))) {
                 await engine.Tick();
                 File.WriteAllText(Path.Combine(output, "status.json"), new JsonObject { ["deviceId"] = engine.State.DeviceId, ["cached"] = engine.State.CachedVersion, ["applied"] = engine.State.AppliedVersion,
-                    ["wallpaperEnabled"] = engine.State.EnableWallpaper, ["state"] = engine.State.ApplyState }.ToJsonString());
+                    ["wallpaperEnabled"] = engine.State.EnableWallpaper, ["state"] = engine.State.ApplyState,
+                    ["assetsResolved"] = engine.State.Snapshot?["classroom"]?["layout"]?.Str("backgroundImage").StartsWith("data:image/jpeg;base64,") ?? false }.ToJsonString());
                 await Task.Delay(500);
             }
             return engine.State.CachedVersion > 0 && engine.State.AppliedVersion == 0 ? 0 : 1;

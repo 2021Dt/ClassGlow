@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../magicui.css";
 import { onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

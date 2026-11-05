@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import "./teacher.css";
+import {
+  computed,
+  defineAsyncComponent,
+  onMounted,
+  onUnmounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import {
   LayoutDashboard,
   BookOpen,
@@ -24,16 +33,10 @@ import TeacherHome from "./components/TeacherHome.vue";
 import FirstUseGuide from "./components/FirstUseGuide.vue";
 import { classroomForDisplay } from "./classroomView";
 import { useDeviceFeed } from "./useDeviceFeed";
-import EditorSheet from "./components/EditorSheet.vue";
-import SettingsPage from "./components/SettingsPage.vue";
+import { readWorkspaceRoute, workspaceSearch } from "./workspaceRoute";
 import SubjectPicker from "./components/SubjectPicker.vue";
 import { subjectPresets } from "./subjects";
-import ContentRecords from "./components/ContentRecords.vue";
-import DeviceConsole from "./components/DeviceConsole.vue";
 import AccessGate from "./components/AccessGate.vue";
-import AccountLicense from "./components/AccountLicense.vue";
-import SystemAdmin from "./components/SystemAdmin.vue";
-import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import { model, replaceModel, clone } from "./store";
 import {
   api,
@@ -55,6 +58,28 @@ import {
   type Kind,
 } from "./domain";
 
+const EditorSheet = defineAsyncComponent(
+  () => import("./components/EditorSheet.vue"),
+);
+const SettingsPage = defineAsyncComponent(
+  () => import("./components/SettingsPage.vue"),
+);
+const ContentRecords = defineAsyncComponent(
+  () => import("./components/ContentRecords.vue"),
+);
+const DeviceConsole = defineAsyncComponent(
+  () => import("./components/DeviceConsole.vue"),
+);
+const AccountLicense = defineAsyncComponent(
+  () => import("./components/AccountLicense.vue"),
+);
+const SystemAdmin = defineAsyncComponent(
+  () => import("./components/SystemAdmin.vue"),
+);
+const AnnouncementPopup = defineAsyncComponent(
+  () => import("./components/AnnouncementPopup.vue"),
+);
+
 const localStorage = window.localStorage;
 const siteReady = ref(false);
 const site = reactive({
@@ -74,6 +99,7 @@ async function initialized(token: string) {
     await refresh();
     page.value = session.systemAdmin ? "system" : "overview";
     history.replaceState(null, "", "/" + location.search);
+    restoreRoute();
     await handleEntry();
     maybeStartGuide();
   });
@@ -309,7 +335,13 @@ async function run(action: () => Promise<void>) {
 async function refresh() {
   now.value = Date.now();
   const requestToken = session.token;
-  const value = await refreshModel();
+  let value;
+  try {
+    value = await refreshModel();
+  } catch (e) {
+    if (requestToken !== session.token) return;
+    throw e;
+  }
   if (requestToken !== session.token) return;
   // 后台刷新期间用户仍可切换班级，返回结果不能把选择切回请求发起时的班级。
   const selected = model.selected;
@@ -320,6 +352,54 @@ async function refresh() {
   if (page.value === "contents") await recordsView.value?.reload();
 }
 useDeviceFeed(current, refresh);
+watch(
+  () => session.token,
+  (token) => {
+    if (token) return;
+    editor.value = null;
+    replaceModel(emptyModel());
+    incomingTransfers.value = [];
+    notice.value = "";
+    for (const modal of [
+      accountDialog,
+      bindDialog,
+      classDialog,
+      joinDialog,
+      detailsDialog,
+      confirmDialog,
+    ])
+      modal.value?.close();
+    page.value = "overview";
+  },
+  { flush: "sync" },
+);
+let routeReady = false;
+function restoreRoute() {
+  const route = readWorkspaceRoute(location.search);
+  if (model.classes.some((c) => c.id === route.classId))
+    model.selected = route.classId;
+  const allowed =
+    route.page === "license" ||
+    (route.page === "system" && session.systemAdmin) ||
+    nav.value.some((n) => n.id === route.page);
+  page.value = allowed
+    ? route.page
+    : session.systemAdmin
+      ? "system"
+      : "overview";
+  routeReady = true;
+  syncRoute(true);
+}
+function syncRoute(replace = false) {
+  if (!routeReady || !session.token) return;
+  const search = workspaceSearch(location.search, page.value, model.selected);
+  if (search !== location.search)
+    history[replace ? "replaceState" : "pushState"](null, "", "/" + search);
+}
+watch([page, () => model.selected], () => syncRoute(), { flush: "post" });
+function onHistoryChange() {
+  if (session.token && routeReady) restoreRoute();
+}
 async function handleEntry() {
   const query = new URLSearchParams(location.search);
   const invite = query.get("invite");
@@ -564,6 +644,7 @@ onMounted(async () => {
       try {
         await refresh();
         page.value = session.systemAdmin ? "system" : "overview";
+        restoreRoute();
         await handleEntry();
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
@@ -578,9 +659,11 @@ onMounted(async () => {
   ticker = setInterval(() => {
     now.value = Date.now();
   }, 5000);
+  window.addEventListener("popstate", onHistoryChange);
 });
 
 onUnmounted(() => {
+  window.removeEventListener("popstate", onHistoryChange);
   clearInterval(ticker);
   clearTimeout(noticeTimer);
 });

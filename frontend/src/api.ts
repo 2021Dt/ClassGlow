@@ -1,6 +1,9 @@
 import { reactive, ref } from "vue";
 import type { Draft, Model } from "./domain";
 import { defaultLayout, emptyModel, restoreLocalDraft } from "./domain";
+import { clearAssetCache, hydrateAssets } from "./assetCache";
+import { ASSET_PROTOCOL, SCHEMA } from "./generated/protocol";
+import type { ApiDraftInput } from "./generated/api";
 
 // 兼容旧标签页的一次性迁移。有效期由服务端校验，不在浏览器存密码。
 const savedToken =
@@ -21,6 +24,19 @@ export const session = reactive({
   clockOffset: 0,
 });
 export function setSession(token: string) {
+  if (token !== session.token) {
+    clearAssetCache();
+    Object.assign(session, {
+      userId: "",
+      name: "",
+      login: "",
+      systemAdmin: false,
+      canCreateClasses: false,
+      expiresAt: 0,
+      premiumUntil: 0,
+      clockOffset: 0,
+    });
+  }
   session.token = token;
   if (token) localStorage.setItem("kanban-session", token);
   else localStorage.removeItem("kanban-session");
@@ -78,6 +94,7 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     public details?: { frozenUntil?: number; serverTime?: number },
+    public requestId?: string,
   ) {
     super(message);
   }
@@ -98,6 +115,7 @@ export async function api<T = any>(
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(requestToken ? { Authorization: `Bearer ${requestToken}` } : {}),
+        "X-ClassGlow-Assets": ASSET_PROTOCOL,
         ...(key ? { "Idempotency-Key": key } : {}),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -110,12 +128,16 @@ export async function api<T = any>(
         "",
       );
       const failure = new ApiError(
-        typeof detail === "string"
+        (typeof detail === "string"
           ? detail
-          : (fieldMessage ?? detail?.message ?? "请求未完成，请稍后重试。"),
+          : (fieldMessage ?? detail?.message ?? "请求未完成，请稍后重试。")) +
+          (response.status >= 500 && response.headers.get("X-Request-ID")
+            ? `（问题编号：${response.headers.get("X-Request-ID")}）`
+            : ""),
         response.status,
         detail?.code ?? "request_failed",
         detail,
+        response.headers.get("X-Request-ID") ?? undefined,
       );
       if (
         requestToken &&
@@ -149,9 +171,10 @@ export async function api<T = any>(
   }
 }
 export async function refreshModel(): Promise<Model> {
+  const requestToken = session.token;
   const value = await api("/bootstrap");
   if (
-    value.schema !== 1 ||
+    value.schema !== SCHEMA ||
     !value.user?.id ||
     !["classes", "contents", "drafts", "devices", "commands"].every((k) =>
       Array.isArray(value[k]),
@@ -163,20 +186,28 @@ export async function refreshModel(): Promise<Model> {
       "schema_incompatible",
     );
   }
-  updateProfile(value.user);
-  value.classes = value.classes.map((c: any) => ({
-    ...c,
-    layout: {
-      ...defaultLayout(),
-      ...c.layout,
-      modules: { ...defaultLayout().modules, ...c.layout.modules },
-      grid: { ...defaultLayout().grid, ...c.layout.grid },
-    },
-  }));
+  value.classes = await Promise.all(
+    value.classes.map(async (c: any) => ({
+      ...c,
+      layout: {
+        ...defaultLayout(),
+        ...(await hydrateAssets(c.layout, c.id, requestToken)),
+        modules: { ...defaultLayout().modules, ...c.layout.modules },
+        grid: { ...defaultLayout().grid, ...c.layout.grid },
+      },
+    })),
+  );
   value.drafts = value.drafts.map((d: Draft) => ({
     ...d,
     priority: d.priority ?? false,
   }));
+  if (requestToken !== session.token)
+    throw new ApiError(
+      "登录状态已改变，请刷新当前页面。",
+      409,
+      "session_changed",
+    );
+  updateProfile(value.user);
   return {
     ...emptyModel(),
     ...value,
@@ -215,7 +246,8 @@ export function pendingInputs(): Draft[] {
     });
 }
 export async function saveCloudDraft(draft: Draft): Promise<Draft> {
-  const value = await api(`/drafts/${draft.id}`, "PUT", draft);
+  const payload: ApiDraftInput = draft;
+  const value = await api(`/drafts/${draft.id}`, "PUT", payload);
   if (
     value.id !== draft.id ||
     !Number.isSafeInteger(value.revision) ||

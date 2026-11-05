@@ -13,12 +13,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from . import schemas as S
+from .assets import layout_view
 from .config import settings
+from .content_queries import display_contents
 from .db import (
     Audit,
     Classroom,
     Command,
-    Content,
     Device,
     DeviceDisplay,
     Idempotency,
@@ -32,6 +33,7 @@ from .db import (
 )
 from .entitlements import account_available, class_entitlement, has_premium, require_premium
 from .security import actor, bearer, device_actor, digest, fail, limit, member, secret
+from .version import ASSET_PROTOCOL, RELEASE
 
 router = APIRouter()
 GROUPS = {
@@ -101,7 +103,7 @@ def command_view(c, include_canvas=False):
 
 
 @router.post("/device-pairings", status_code=201)
-def pairing(body: S.PairInput, request: Request, db: Session = Depends(get_db)):
+def pairing(body: S.PairInput, request: Request, db: Session = Depends(get_db, scope="function")):
     limit(f"pair-new:{request.client.host}", 30, 600)
     code = f"{secrets.randbelow(1000000):06d}"
     token = secret()
@@ -124,7 +126,9 @@ def pairing(body: S.PairInput, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/device-pairings/confirm")
-def pair_confirm(body: S.PairConfirm, request: Request, user: User = Depends(actor), db: Session = Depends(get_db)):
+def pair_confirm(
+    body: S.PairConfirm, request: Request, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     limit(f"pair-confirm:{user.id}", 5, 300)
     c, _ = member(db, user, body.classId, admin=True, write=True)
     p = db.scalar(select(Pairing).where(Pairing.code_hash == digest(body.code)).with_for_update())
@@ -143,7 +147,7 @@ def pair_confirm(body: S.PairConfirm, request: Request, user: User = Depends(act
 
 
 @router.post("/device-pairings/inspect")
-def inspect_pairing(body: S.PairConfirm, user: User = Depends(actor), db: Session = Depends(get_db)):
+def inspect_pairing(body: S.PairConfirm, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     member(db, user, body.classId, admin=True, write=True)
     limit(f"pair-inspect:{user.id}", 5, 300)
     p = db.scalar(select(Pairing).where(Pairing.code_hash == digest(body.code)))
@@ -153,7 +157,7 @@ def inspect_pairing(body: S.PairConfirm, user: User = Depends(actor), db: Sessio
 
 
 @router.get("/device-pairings/{pair_id}")
-def pair_poll(pair_id: str, authorization: str = Header(), db: Session = Depends(get_db)):
+def pair_poll(pair_id: str, authorization: str = Header(), db: Session = Depends(get_db, scope="function")):
     from .security import bearer
 
     p = db.get(Pairing, pair_id)
@@ -209,8 +213,9 @@ def valid_commands(db, d):
 def snapshot(
     if_none_match: str | None = Header(default=None),
     x_classglow_client_version: str | None = Header(default=None),
+    x_classglow_assets: str = Header(default=""),
     d: Device = Depends(device_actor),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     c = db.get(Classroom, d.class_id)
     entitlement = class_entitlement(db, c)
@@ -220,7 +225,7 @@ def snapshot(
     )
     canvas_supported = bool(version and tuple(map(int, version.groups())) >= (0, 4, 0))
     # 许可状态进入 ETag；到期必须返回新快照，不能被内容版本未变的 304 遮住。
-    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}:{int(canvas_supported)}:{digest(d.name)[:12]}"'
+    etag = f'"{d.binding}:{d.epoch}:{c.version}:{d.control_revision}:{int(entitlement["premiumActive"])}:{entitlement["premiumUntil"]}:{int(canvas_supported)}:{digest(d.name)[:12]}:a{int(x_classglow_assets == ASSET_PROTOCOL)}"'
     # 即使内容未变，只要有待确认命令也必须返回 200，不能让 304 吞掉控制。
     display = db.get(DeviceDisplay, d.id)
     display_request = pending_display(display)
@@ -234,12 +239,13 @@ def snapshot(
     # 老客户端只能显示基础看板；版本能力进入 ETag，升级后同一内容版本也立即重新同步。
     if classroom_data["layout"].get("editor") == "canvas" and not canvas_supported:
         classroom_data["layout"] = basic
+    classroom_data["layout"] = layout_view(db, c.id, classroom_data["layout"], x_classglow_assets == ASSET_PROTOCOL)
 
-    contents = db.scalars(select(Content).where(Content.class_id == c.id, Content.state == "published")).all()
+    contents = db.scalars(display_contents([c.id])).all()
     return Response(
         json.dumps(
             {
-                "schema": 1,
+                "schema": RELEASE["schema"],
                 "deviceId": d.id,
                 "deviceName": d.name,
                 "bindingId": d.binding,
@@ -288,7 +294,7 @@ def apply_report(db, d, body: S.ReportInput):
 
 @router.post("/device/heartbeat")
 @router.post("/device/ack")
-def heartbeat(body: S.ReportInput, d: Device = Depends(device_actor), db: Session = Depends(get_db)):
+def heartbeat(body: S.ReportInput, d: Device = Depends(device_actor), db: Session = Depends(get_db, scope="function")):
     accepted = apply_report(db, d, body)
     return {"accepted": accepted, "serverTime": now()}
 
@@ -322,7 +328,7 @@ def display_view(display):
 
 
 @router.post("/devices/{device_id}/display-request")
-def request_display(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def request_display(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     # 查看画面是基础能力；只能读取本班看板，不授予暂停、翻页等控制权限。
     d = display_device(db, user, device_id)
     if now() - d.last_seen > 90:
@@ -342,7 +348,9 @@ def request_display(device_id: str, user: User = Depends(actor), db: Session = D
 
 
 @router.get("/devices/{device_id}/display")
-def get_display(device_id: str, after: float = 0, user: User = Depends(actor), db: Session = Depends(get_db)):
+def get_display(
+    device_id: str, after: float = 0, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     d = display_device(db, user, device_id)
     display = db.get(DeviceDisplay, d.id)
     result = display_view(display)
@@ -355,7 +363,9 @@ def get_display(device_id: str, after: float = 0, user: User = Depends(actor), d
 
 
 @router.post("/device/display")
-def receive_display(body: S.DeviceDisplayInput, d: Device = Depends(device_actor), db: Session = Depends(get_db)):
+def receive_display(
+    body: S.DeviceDisplayInput, d: Device = Depends(device_actor), db: Session = Depends(get_db, scope="function")
+):
     display = db.get(DeviceDisplay, d.id)
     if not display or pending_display(display) != body.requestId:
         return {"accepted": False}
@@ -391,7 +401,7 @@ def receive_display(body: S.DeviceDisplayInput, d: Device = Depends(device_actor
 
 
 @router.get("/devices/{device_id}/control")
-def control_state(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def control_state(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     d = db.get(Device, device_id)
     if not d:
         fail(404, "device_not_found", "设备不存在。")
@@ -409,7 +419,7 @@ def control_state(device_id: str, user: User = Depends(actor), db: Session = Dep
 
 
 @router.get("/classes/{class_id}/devices")
-def class_devices(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def class_devices(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     c, _ = member(db, user, class_id)
     devices = db.scalars(select(Device).where(Device.class_id == class_id, Device.revoked.is_(False))).all()
     for d in devices:
@@ -425,7 +435,9 @@ def class_devices(class_id: str, user: User = Depends(actor), db: Session = Depe
 
 
 @router.patch("/devices/{device_id}")
-def rename_device(device_id: str, body: S.DeviceName, user: User = Depends(actor), db: Session = Depends(get_db)):
+def rename_device(
+    device_id: str, body: S.DeviceName, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     d = display_device(db, user, device_id)
     member(db, user, d.class_id, admin=True, write=True)
     previous = d.name
@@ -447,7 +459,7 @@ def command(
     body: S.ControlInput,
     idempotency_key: str | None = Header(default=None),
     user: User = Depends(actor),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     from .app import idempotent
 
@@ -547,7 +559,7 @@ def command(
 
 
 @router.post("/device/command-acks")
-def command_ack(body: S.CommandAck, d: Device = Depends(device_actor), db: Session = Depends(get_db)):
+def command_ack(body: S.CommandAck, d: Device = Depends(device_actor), db: Session = Depends(get_db, scope="function")):
     cmd = db.get(Command, body.commandId)
     if not cmd or cmd.device_id != d.id or cmd.binding != d.binding or cmd.epoch != d.epoch:
         fail(409, "command_binding_changed", "命令已失效或属于其他绑定。")
@@ -577,7 +589,7 @@ def command_ack(body: S.CommandAck, d: Device = Depends(device_actor), db: Sessi
 
 
 @router.post("/devices/{device_id}/revoke")
-def revoke(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def revoke(device_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     d = db.get(Device, device_id)
     if not d:
         fail(404, "device_not_found", "设备不存在。")
@@ -593,7 +605,7 @@ def revoke(device_id: str, user: User = Depends(actor), db: Session = Depends(ge
 
 
 @router.post("/device/uninstall")
-def uninstall_device(authorization: str = Header(), db: Session = Depends(get_db)):
+def uninstall_device(authorization: str = Header(), db: Session = Depends(get_db, scope="function")):
     """本机卸载只撤销凭证对应的设备/配对，不接受目标设备 ID，不删除教学内容。"""
     credential = digest(bearer(authorization))
     d = db.scalar(select(Device).where(Device.credential_hash == credential).with_for_update())

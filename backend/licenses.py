@@ -27,7 +27,7 @@ class Redeem(S.Input):
 
 
 @router.post("/system/licenses", status_code=201)
-def issue(body: Issue, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def issue(body: Issue, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     target = db.get(User, body.userId)
     if not target or not target.active or target.system_admin:
         fail(422, "license_target", "请选择启用的班主任或教师账号。系统管理员无需兑换高级许可。")
@@ -55,7 +55,7 @@ def listing(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     epoch, timestamp = sync_epoch(db), now()
     query = select(FeatureLicense, User).join(User, User.id == FeatureLicense.user_id)
@@ -101,7 +101,7 @@ def listing(
 
 
 @router.post("/system/licenses/{license_id}/revoke")
-def revoke(license_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def revoke(license_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")):
     entry = db.scalar(select(FeatureLicense).where(FeatureLicense.id == license_id).with_for_update())
     if not entry or entry.used_at:
         fail(409, "license_used", "许可码不存在或已经兑换；如需停用已生效许可，请在账号许可管理中终止。")
@@ -111,7 +111,9 @@ def revoke(license_id: str, user: User = Depends(system_admin), db: Session = De
 
 
 @router.post("/system/users/{user_id}/license/revoke")
-def revoke_entitlement(user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def revoke_entitlement(
+    user_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     target = db.scalar(select(User).where(User.id == user_id).with_for_update())
     if not target or target.system_admin:
         fail(422, "license_target", "请选择班主任或教师账号。")
@@ -130,7 +132,9 @@ def license_status(user: User = Depends(actor)):
 
 
 @router.post("/account/license/redeem")
-def redeem(body: Redeem, request: Request, user: User = Depends(actor), db: Session = Depends(get_db)):
+def redeem(
+    body: Redeem, request: Request, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     limit(f"license:{user.id}", 10, 300)
     raw = body.code.replace("-", "").replace(" ", "").upper()
     entry = db.scalar(select(FeatureLicense).where(FeatureLicense.code_hash == digest(raw)).with_for_update())

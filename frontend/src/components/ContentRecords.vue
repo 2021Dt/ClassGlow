@@ -4,6 +4,7 @@ import TaskGuide from "./TaskGuide.vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ChevronLeft, ChevronRight, RefreshCw, Search } from "@lucide/vue";
 import { api, session } from "../api";
+import { readRecordFilters, recordFiltersSearch } from "../workspaceRoute";
 import {
   isAdmin,
   statusLabel,
@@ -18,12 +19,13 @@ const emit = defineEmits<{
   history: [Content];
   action: [Content, string];
 }>();
-const kind = ref(""),
-  state = ref(""),
-  subject = ref(""),
-  date = ref(""),
-  search = ref(""),
-  offset = ref(0);
+const initialFilters = readRecordFilters(location.search);
+const kind = ref(initialFilters.kind),
+  state = ref(initialFilters.state),
+  subject = ref(initialFilters.subject),
+  date = ref(initialFilters.date),
+  search = ref(initialFilters.search),
+  offset = ref(initialFilters.offset);
 const items = ref<Content[]>([]),
   total = ref(0),
   error = ref(""),
@@ -32,6 +34,32 @@ const writable = computed(() => !props.classroom.archived);
 const page = computed(() => Math.floor(offset.value / 20) + 1);
 let serial = 0,
   timer: ReturnType<typeof setTimeout>;
+let restoringFilters = false;
+function syncFilters(push = false) {
+  const next = recordFiltersSearch(location.search, {
+    kind: kind.value,
+    state: state.value,
+    subject: subject.value,
+    date: date.value,
+    search: search.value,
+    offset: offset.value,
+  });
+  if (next !== location.search)
+    history[push ? "pushState" : "replaceState"](null, "", "/" + next);
+}
+function restoreFilters() {
+  clearTimeout(timer);
+  restoringFilters = true;
+  const filters = readRecordFilters(location.search);
+  kind.value = filters.kind;
+  state.value = filters.state;
+  subject.value = filters.subject;
+  date.value = filters.date;
+  search.value = filters.search;
+  offset.value = filters.offset;
+  restoringFilters = false;
+  void load();
+}
 async function load() {
   const ticket = ++serial;
   loading.value = true;
@@ -60,25 +88,49 @@ async function load() {
     if (ticket === serial) loading.value = false;
   }
 }
-watch([kind, state, subject, date, search], () => {
-  clearTimeout(timer);
-  timer = setTimeout(() => {
-    offset.value = 0;
-    load();
-  }, 300);
-});
+watch(
+  [kind, state, subject, date, search],
+  () => {
+    if (restoringFilters) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      restoringFilters = true;
+      offset.value = 0;
+      restoringFilters = false;
+      syncFilters();
+      load();
+    }, 300);
+  },
+  { flush: "sync" },
+);
 watch(
   () => props.classroom.id,
   () => {
+    restoringFilters = true;
     subject.value = "";
     offset.value = 0;
+    restoringFilters = false;
+    syncFilters();
     load();
   },
 );
-watch(offset, load);
-onMounted(load);
+watch(
+  offset,
+  () => {
+    if (!restoringFilters) {
+      syncFilters(true);
+      void load();
+    }
+  },
+  { flush: "sync" },
+);
+onMounted(() => {
+  window.addEventListener("popstate", restoreFilters);
+  void load();
+});
 onUnmounted(() => {
   clearTimeout(timer);
+  window.removeEventListener("popstate", restoreFilters);
   serial++;
 });
 defineExpose({ reload: load });

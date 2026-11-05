@@ -12,7 +12,7 @@ Ubuntu / Debian 独立服务器，域名已解析且 80/443 可用时，一条�
 curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/install.sh -o classglow-install.sh && sudo bash classglow-install.sh
 ```
 
-安装后运行 `sudo classglow` 打开交互菜单：状态、更新、管理员初始化/重置、备份、SQLite → PostgreSQL 迁移、自动更新和卸载。仍可用 `sudo classglow update` 直接更新；`sudo classglow auto-on` 开启每 5 分钟自动检查新提交。详细要求、运维命令和恢复方式见 [服务器部署与手机使用](docs/DEPLOYMENT.md)。Windows 客户端服务地址填写 `https://teacher.dgplus.vip/api/`。
+安装后运行 `sudo classglow` 打开交互菜单：状态、更新、管理员初始化/重置、备份、SQLite → PostgreSQL 迁移、自动更新和卸载。仍可用 `sudo classglow update` 手动更新；`sudo classglow auto-on` 每 5 分钟检查稳定版本标签，仅在北京时间维护窗口部署，默认 02:00–05:00。也可用 `sudo classglow update --release v版本号` 指定稳定版本。详细要求、运维命令和恢复方式见 [服务器部署与手机使用](docs/DEPLOYMENT.md)。Windows 客户端服务地址填写 `https://teacher.dgplus.vip/api/`。
 
 **已有 Nginx / Docker 的共享服务器：**使用 `sudo bash classglow-install.sh --existing-nginx`，只增加本项目的站点，网页容器监听 `127.0.0.1:18080`，沿用宿主机 Certbot。此模式要求现有 Docker Compose ≥ 2.24.4、Nginx、Certbot 及已注册的证书账户，不安装系统软件包。Docker 只需要在服务器运行，本地电脑不需要。
 
@@ -42,6 +42,8 @@ npm run dev
 
 当前默认使用 `data/kanban.db`，开发启动时自动运行 Alembic 迁移；SQLAlchemy 数据层、事务规则和迁移脚本均保留数据库切换能力。SQLite 写请求使用事务锁，并显式启用外键检查。`.env`、数据库、浏览器测试截图和本机工具目录均已忽略，不提交凭证。
 
+当前使用 SQLite WAL。纯查询使用只读事务，发布、权限变更和设备快照中的状态写入保留写事务；事务在成功响应发出前提交。首页和设备只同步仍需展示的内容，全部历史记录通过分页接口保留。布局图片按班级与摘要独立存储、鉴权读取并缓存，数据库备份包含完整素材。迁移、发布和验证边界见 [可靠性与发布说明](docs/RELIABILITY.md)。
+
 本地若需要自动重载，使用 `uv run uvicorn backend.app:app --reload --reload-dir backend --no-access-log`。原始访问日志默认关闭，避免短期邀请秘密出现在请求路径日志中；操作审计保存在数据库，错误使用请求编号定位。
 
 ## 后续迁移 PostgreSQL
@@ -70,7 +72,7 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj
 
 已有本机独立 SDK 时，将命令中的 `dotnet` 换成 `& .\.tools\dotnet\dotnet.exe`。已绑定客户端启动后只有托盘入口；首次配置页支持服务地址、短期绑定码、二维码、当前用户开机启动和本机启用展示。
 
-程序默认关闭壁纸写入，先完成配对与同步检查，再在本机启用。当前无打扰策略采用保守条件：只有前台本来就是桌面时才尝试应用；课件、视频与输入期间继续缓存并报告延后。不会主动切换桌面、激活课件、注入按键或重启 Explorer。这一策略仍须在真实教室连续运行验证。
+程序默认关闭壁纸写入，先完成配对与同步检查，再在本机启用。当前策略允许桌面及普通前台窗口期间更新背景，检测到全屏课件或视频时继续缓存并报告延后。不会主动切换桌面、激活课件、注入按键或重启 Explorer。这一策略仍须在真实教室连续运行验证。
 
 壁纸、暂停恢复和现场控制均作用于本机指定目标。原壁纸路径、凭证、业务快照及命令结果保存在当前用户的 `%LOCALAPPDATA%/ClassroomBoard/state.bin`，使用 DPAPI 加密与原子替换；渲染后的 PNG 是明文图片。正常退出恢复本程序仍占用的壁纸，保留用户后来手动更换的壁纸；异常终止时旧壁纸可能保留。首次安装必须验证学校还原保护和重启后的持久化，不能假设 D 盘一定安全。
 
@@ -80,7 +82,7 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj
 dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x64 --self-contained true -o dist/windows
 ```
 
-交付推荐使用 [Windows x64 0.4.6 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.6-win-x64-setup.exe)，内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行分为“隐私说明 → 连接班级 → 展示设置”三页；完成后进入状态页。窗口采用 WPF UI 的圆角标题栏与云母背景；同意前不联网、不创建业务数据。支持选择安装文件夹和桌面快捷方式。客户端“卸载软件”、安装目录 `Uninstall.exe`、Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
+交付推荐使用 [Windows 客户端下载页](https://teacher.dgplus.vip/download)，页面显示实际安装包版本。安装包内置 .NET 运行时，仅安装到当前用户，无需管理员权限。首次运行分为“隐私说明 → 连接班级 → 展示设置”三页；完成后进入状态页。窗口采用 WPF UI 的圆角标题栏与云母背景；同意前不联网、不创建业务数据。支持选择安装文件夹和桌面快捷方式。客户端“卸载软件”、安装目录 `Uninstall.exe`、Windows“已安装的应用”、开始菜单和托盘均可卸载。清理范围与离线处理见 [Windows 隐私与卸载](docs/WINDOWS-PRIVACY.md)。当前仍为未签名测试版，没有客户端自动升级。
 
 构建安装包需要 .NET 10 SDK、Python 和 NSIS 3；脚本不会安装全局工具：
 
@@ -88,7 +90,7 @@ dotnet publish desktop/ClassroomBoard/ClassroomBoard.csproj -c Release -r win-x6
 uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
 ```
 
-输出 `dist/ClassGlow-0.4.6-win-x64-setup.exe`；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
+版本统一来自 `release.json`，输出 `dist/ClassGlow-<版本>-win-x64-setup.exe` 及包含大小、SHA-256 的同名 JSON 清单；`--qa` 构建使用独立目录及注册表项的卸载验证包。旧版便携 ZIP 仅供开发运行，不作为正式卸载入口。
 
 ## 已实现的关键行为
 
@@ -106,9 +108,12 @@ uv run python scripts/package_windows.py --nsis 'C:\路径\NSIS\makensis.exe'
 ```powershell
 uv run pytest -q
 uv run ruff check backend scripts
+uv run python -m scripts.release_check
+uv run python -m scripts.generate_contracts --check
 cd frontend
 npm test
 npm run build
+npm run test:e2e
 ```
 
 C# 安全排版自检只生成文件，不更换壁纸：
@@ -125,7 +130,9 @@ dotnet run --project desktop/ClassroomBoard/ClassroomBoard.csproj -- --render-pr
 
 “Windows 实际渲染”展示导出的固定样例；取消勾选可上传图片、调整布局并查看 Web 实时预览。此命令只输出图片，不设置当前电脑壁纸。预览入口只在开发服务中使用。
 
-历史联调脚本依赖旧注册入口，新版管理员开户流程请使用隔离账号验收。旧版参考命令为 `uv run python scripts/client_integration.py`。该脚本使用临时测试账号和明确标记的测试班级，启动真实 C# 客户端验证绑定、快照缓存、同步回执与暂停延后，强制关闭壁纸写入。结果保存在 `.qa`；不要把该结果当作真实桌面应用验收。
+浏览器端到端测试会启动独立临时数据库和本地服务（端口 8019 / 5179），覆盖管理员开户、教师登录、发布、离线草稿、页面/筛选恢复和多端会话；不使用实际教学账号。首次运行可在 `frontend` 执行 `npx playwright install chromium`；Windows 也可设置 `PLAYWRIGHT_CHANNEL=msedge` 使用已安装的 Edge。
+
+在根目录先编译 Windows Release，再执行 `uv run python -m scripts.verify_client`，会启动独立服务并运行真实 C# 引擎，验证绑定、独立图片读取、快照缓存、同步回执与暂停延后，强制关闭物理壁纸写入。`uv run python -m scripts.load_check` 单独执行 20 台隔离终端的短时并发检查。结果保存在 `.qa`，现场检查步骤见可靠性说明。
 
 ## 备份与恢复
 

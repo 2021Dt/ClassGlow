@@ -100,12 +100,14 @@ def rolled_back(db):
 def device_access(authorization):
     # 长连接不使用 get_db，也不持有 BEGIN IMMEDIATE、连接或行锁等待事件。
     with SessionLocal(autoflush=False) as db:
+        db.info["read_only"] = True
         d = device_actor(authorization, db)
         return {f"content:{d.class_id}", f"device:{d.id}"}
 
 
 def class_access(class_id, authorization):
     with SessionLocal(autoflush=False) as db:
+        db.info["read_only"] = True
         user = actor(authorization, db)
         member(db, user, class_id)
         return {f"status:{class_id}", f"content:{class_id}"}

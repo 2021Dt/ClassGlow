@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 @router.get("/classes/{class_id}/audit")
-def audit_history(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def audit_history(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     member(db, user, class_id, admin=True)
     return [
         {
@@ -37,7 +37,9 @@ class ClassSettings(S.ClassInput):
 
 
 @router.put("/classes/{class_id}/settings")
-def settings(class_id: str, body: ClassSettings, user: User = Depends(actor), db: Session = Depends(get_db)):
+def settings(
+    class_id: str, body: ClassSettings, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, _ = member(db, user, class_id, admin=True, write=True)
     if body.revision != c.revision:
         fail(409, "configuration_conflict", "班级配置已改变，请比较最新设置。")
@@ -52,7 +54,9 @@ def settings(class_id: str, body: ClassSettings, user: User = Depends(actor), db
 
 
 @router.post("/classes/{class_id}/invites/{invitation_id}/revoke")
-def revoke_invite(class_id: str, invitation_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def revoke_invite(
+    class_id: str, invitation_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, _ = member(db, user, class_id, admin=True, write=True)
     i = db.get(Invitation, invitation_id)
     if not i or i.class_id != c.id or i.state not in ("open", "pending"):
@@ -63,7 +67,7 @@ def revoke_invite(class_id: str, invitation_id: str, user: User = Depends(actor)
 
 
 @router.get("/classes/{class_id}/transfer")
-def transfer_state(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def transfer_state(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     c, m = member(db, user, class_id)
     if m.role != "owner" and not user.system_admin:
         fail(403, "owner_required", "仅所有者可查看待发起交接。")
@@ -80,7 +84,11 @@ def transfer_state(class_id: str, user: User = Depends(actor), db: Session = Dep
 
 @router.delete("/classes/{class_id}/overrides/{date}")
 def remove_override(
-    class_id: str, date: str, body: S.RevisionInput, user: User = Depends(actor), db: Session = Depends(get_db)
+    class_id: str,
+    date: str,
+    body: S.RevisionInput,
+    user: User = Depends(actor),
+    db: Session = Depends(get_db, scope="function"),
 ):
     c, _ = member(db, user, class_id, admin=True, write=True)
     if c.revision != body.revision:
@@ -98,7 +106,11 @@ def remove_override(
 
 @router.delete("/classes/{class_id}/timetable/{start}")
 def cancel_future_template(
-    class_id: str, start: str, body: S.RevisionInput, user: User = Depends(actor), db: Session = Depends(get_db)
+    class_id: str,
+    start: str,
+    body: S.RevisionInput,
+    user: User = Depends(actor),
+    db: Session = Depends(get_db, scope="function"),
 ):
     c, _ = member(db, user, class_id, admin=True, write=True)
     if body.revision != c.revision:

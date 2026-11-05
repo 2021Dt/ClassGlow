@@ -33,7 +33,7 @@ class PasswordInput(S.Input):
 
 
 @router.post("/auth/change-password")
-def change_password(body: PasswordInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def change_password(body: PasswordInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     if not passwords.verify(body.oldPassword, user.password):
         fail(403, "password_invalid", "原口令不正确。")
     user.password = passwords.hash(body.newPassword)
@@ -46,7 +46,7 @@ def change_password(body: PasswordInput, user: User = Depends(actor), db: Sessio
 
 
 @router.get("/classes/{class_id}/members")
-def members(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def members(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     _, viewer = member(db, user, class_id)
     rows = db.scalars(select(Membership).where(Membership.class_id == class_id, Membership.active.is_(True))).all()
     invites = db.scalars(
@@ -78,7 +78,9 @@ def members(class_id: str, user: User = Depends(actor), db: Session = Depends(ge
 
 
 @router.post("/classes/{class_id}/invites", status_code=201)
-def invite(class_id: str, body: S.InviteInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def invite(
+    class_id: str, body: S.InviteInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     from .config import settings
 
     c, _ = member(db, user, class_id, admin=True, write=True)
@@ -93,7 +95,7 @@ def invite(class_id: str, body: S.InviteInput, user: User = Depends(actor), db: 
 
 
 @router.post("/invites/{token}/apply")
-def apply_invite(token: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def apply_invite(token: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     i = db.scalar(select(Invitation).where(Invitation.digest == digest(token)))
     if not i:
         fail(410, "invitation_invalid", "邀请已失效，请联系班级管理员。")
@@ -114,7 +116,7 @@ def apply_invite(token: str, user: User = Depends(actor), db: Session = Depends(
 
 
 @router.get("/invites/{token}")
-def invite_details(token: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def invite_details(token: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     i = db.scalar(select(Invitation).where(Invitation.digest == digest(token)))
     if not i or i.expires <= now() or i.state not in ("open", "pending"):
         fail(410, "invitation_invalid", "邀请已失效，请联系班级管理员。")
@@ -133,7 +135,11 @@ def invite_details(token: str, user: User = Depends(actor), db: Session = Depend
 
 @router.post("/classes/{class_id}/invites/{invitation_id}/{decision}")
 def decide_invite(
-    class_id: str, invitation_id: str, decision: str, user: User = Depends(actor), db: Session = Depends(get_db)
+    class_id: str,
+    invitation_id: str,
+    decision: str,
+    user: User = Depends(actor),
+    db: Session = Depends(get_db, scope="function"),
 ):
     c, _ = member(db, user, class_id, admin=True, write=True)
     i = db.scalar(
@@ -157,7 +163,11 @@ def decide_invite(
 
 @router.put("/classes/{class_id}/members/{user_id}")
 def update_member(
-    class_id: str, user_id: str, body: S.MemberInput, user: User = Depends(actor), db: Session = Depends(get_db)
+    class_id: str,
+    user_id: str,
+    body: S.MemberInput,
+    user: User = Depends(actor),
+    db: Session = Depends(get_db, scope="function"),
 ):
     c, current = member(db, user, class_id, admin=True, write=True)
     target = db.scalar(select(Membership).where(Membership.class_id == class_id, Membership.user_id == user_id))
@@ -175,7 +185,9 @@ def update_member(
 
 
 @router.post("/classes/{class_id}/transfers")
-def transfer(class_id: str, body: S.TransferInput, user: User = Depends(actor), db: Session = Depends(get_db)):
+def transfer(
+    class_id: str, body: S.TransferInput, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, current = member(db, user, class_id, write=True)
     if (current.role != "owner" and not user.system_admin) or body.recipient == c.owner_id:
         fail(403, "owner_required", "仅所有者可以向其他有效成员发起转移。")
@@ -197,7 +209,7 @@ def transfer(class_id: str, body: S.TransferInput, user: User = Depends(actor), 
 
 
 @router.get("/transfers")
-def incoming_transfers(user: User = Depends(actor), db: Session = Depends(get_db)):
+def incoming_transfers(user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     return [
         {"id": t.id, "classId": t.class_id, "className": db.get(Classroom, t.class_id).name, "expiresAt": t.expires}
         for t in db.scalars(
@@ -208,7 +220,11 @@ def incoming_transfers(user: User = Depends(actor), db: Session = Depends(get_db
 
 @router.post("/classes/{class_id}/transfers/{transfer_id}/{action_name}")
 def finish_transfer(
-    class_id: str, transfer_id: str, action_name: str, user: User = Depends(actor), db: Session = Depends(get_db)
+    class_id: str,
+    transfer_id: str,
+    action_name: str,
+    user: User = Depends(actor),
+    db: Session = Depends(get_db, scope="function"),
 ):
     c, m = member(db, user, class_id, write=True)
     t = db.get(Transfer, class_id)
@@ -240,7 +256,9 @@ def finish_transfer(
 
 
 @router.post("/classes/{class_id}/{action_name}")
-def lifecycle(class_id: str, action_name: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def lifecycle(
+    class_id: str, action_name: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     c, m = member(db, user, class_id)
     if m.role != "owner" and not user.system_admin:
         fail(403, "owner_required", "仅所有者可以归档或恢复班级。")
@@ -269,15 +287,21 @@ def lifecycle(class_id: str, action_name: str, user: User = Depends(actor), db: 
 
 
 @router.get("/classes/{class_id}/export")
-def export(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def export(class_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     from .app import content_view
+    from .assets import materialize_layout
 
     c, _ = member(db, user, class_id, admin=True)
     contents = db.scalars(select(Content).where(Content.class_id == c.id)).all()
     # 导出采取字段白名单，不序列化 ORM 对象，防止凭证或口令混入。
     return {
         "schema": 1,
-        "classroom": {"name": c.name, "stage": c.stage, "archived": c.archived, "config": c.data},
+        "classroom": {
+            "name": c.name,
+            "stage": c.stage,
+            "archived": c.archived,
+            "config": {**c.data, "layout": materialize_layout(db, c.id, c.data["layout"])},
+        },
         "contents": [content_view(db, item) for item in contents],
         "members": [
             {"name": db.get(User, m.user_id).name, "role": m.role, "subjects": m.subjects}

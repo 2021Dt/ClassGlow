@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import AccessGate from "./components/AccessGate.vue";
 import BoardDesigner from "./components/BoardDesigner.vue";
+import type { ApiLayoutInput } from "./generated/api";
 import AnnouncementPopup from "./components/AnnouncementPopup.vue";
 import {
   api,
@@ -115,7 +116,7 @@ async function publish() {
     const result = await api<Layout>(
       `/classes/${current.value.id}/layout`,
       "PUT",
-      clone(draft.value),
+      clone(draft.value) satisfies ApiLayoutInput,
     );
     restoring = true;
     draft.value = clone(result);

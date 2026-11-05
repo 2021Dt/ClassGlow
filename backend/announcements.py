@@ -52,21 +52,35 @@ def list_announcements(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
-    target_count = select(func.count()).select_from(AnnouncementTarget).where(
-        AnnouncementTarget.announcement_id == Announcement.id
-    ).scalar_subquery()
-    shown_count = select(func.count()).select_from(AnnouncementReceipt).where(
-        AnnouncementReceipt.announcement_id == Announcement.id
-    ).scalar_subquery()
-    rows = db.execute(select(Announcement, target_count, shown_count).order_by(
-        Announcement.published_at.desc(), Announcement.id
-    ).offset(offset).limit(limit))
+    target_count = (
+        select(func.count())
+        .select_from(AnnouncementTarget)
+        .where(AnnouncementTarget.announcement_id == Announcement.id)
+        .scalar_subquery()
+    )
+    shown_count = (
+        select(func.count())
+        .select_from(AnnouncementReceipt)
+        .where(AnnouncementReceipt.announcement_id == Announcement.id)
+        .scalar_subquery()
+    )
+    rows = db.execute(
+        select(Announcement, target_count, shown_count)
+        .order_by(Announcement.published_at.desc(), Announcement.id)
+        .offset(offset)
+        .limit(limit)
+    )
     return {
         "items": [
-            {**notice_view(notice), "scope": notice.scope, "withdrawnAt": notice.withdrawn_at,
-             "targetCount": count if notice.scope == "selected" else None, "shownCount": shown}
+            {
+                **notice_view(notice),
+                "scope": notice.scope,
+                "withdrawnAt": notice.withdrawn_at,
+                "targetCount": count if notice.scope == "selected" else None,
+                "shownCount": shown,
+            }
             for notice, count, shown in rows
         ],
         "total": db.scalar(select(func.count()).select_from(Announcement)),
@@ -78,7 +92,7 @@ def publish_announcement(
     body: AnnouncementInput,
     idempotency_key: str | None = Header(default=None),
     user: User = Depends(system_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     from .app import idempotent
 
@@ -93,14 +107,22 @@ def publish_announcement(
     db.add(notice)
     db.flush()
     db.add_all([AnnouncementTarget(announcement_id=notice.id, user_id=account_id) for account_id in body.accountIds])
-    log_system(db, user.login, "announcement_published", notice.title, {"id": notice.id, "scope": body.scope, "targetCount": len(body.accountIds)})
+    log_system(
+        db,
+        user.login,
+        "announcement_published",
+        notice.title,
+        {"id": notice.id, "scope": body.scope, "targetCount": len(body.accountIds)},
+    )
     result = notice_view(notice)
     db.add(Idempotency(key=identity, request_hash=signature, result=result))
     return result
 
 
 @router.post("/system/announcements/{notice_id}/withdraw")
-def withdraw_announcement(notice_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db)):
+def withdraw_announcement(
+    notice_id: str, user: User = Depends(system_admin), db: Session = Depends(get_db, scope="function")
+):
     notice = db.scalar(select(Announcement).where(Announcement.id == notice_id).with_for_update())
     if notice is None:
         fail(404, "announcement_not_found", "公告不存在。")
@@ -115,27 +137,36 @@ def next_announcement(
     response: Response,
     idempotency_key: str | None = Header(default=None, min_length=8, max_length=36),
     user: User = Depends(actor),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     response.headers["Cache-Control"] = "no-store"
     if idempotency_key:
         # 请求超时后允许同一页面取回本次领取结果，避免网络波动吞掉公告。
-        prior = db.scalar(select(Announcement).join(AnnouncementReceipt).where(
-            AnnouncementReceipt.user_id == user.id, AnnouncementReceipt.claim_key == idempotency_key
-        ))
+        prior = db.scalar(
+            select(Announcement)
+            .join(AnnouncementReceipt)
+            .where(AnnouncementReceipt.user_id == user.id, AnnouncementReceipt.claim_key == idempotency_key)
+        )
         if prior is not None:
             return {"notice": notice_view(prior) if prior.withdrawn_at is None else None}
 
-    targeted = select(AnnouncementTarget.user_id).where(
-        AnnouncementTarget.announcement_id == Announcement.id, AnnouncementTarget.user_id == user.id
-    ).exists()
-    shown = select(AnnouncementReceipt.user_id).where(
-        AnnouncementReceipt.announcement_id == Announcement.id, AnnouncementReceipt.user_id == user.id
-    ).exists()
+    targeted = (
+        select(AnnouncementTarget.user_id)
+        .where(AnnouncementTarget.announcement_id == Announcement.id, AnnouncementTarget.user_id == user.id)
+        .exists()
+    )
+    shown = (
+        select(AnnouncementReceipt.user_id)
+        .where(AnnouncementReceipt.announcement_id == Announcement.id, AnnouncementReceipt.user_id == user.id)
+        .exists()
+    )
     # actor 已锁定当前账号，领取和写入记录在同一事务完成。多个页面也只会领取一次。
-    notice = db.scalar(select(Announcement).where(
-        Announcement.withdrawn_at.is_(None), or_(Announcement.scope == "all", targeted), ~shown
-    ).order_by(Announcement.published_at, Announcement.id).limit(1))
+    notice = db.scalar(
+        select(Announcement)
+        .where(Announcement.withdrawn_at.is_(None), or_(Announcement.scope == "all", targeted), ~shown)
+        .order_by(Announcement.published_at, Announcement.id)
+        .limit(1)
+    )
     if notice is None:
         return {"notice": None}
     db.add(AnnouncementReceipt(announcement_id=notice.id, user_id=user.id, claim_key=idempotency_key))

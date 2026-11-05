@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "../canvas.css";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { Classroom, Content, Layout, CanvasWidget } from "../domain";
 import { dateKey, timeLabel } from "../domain";

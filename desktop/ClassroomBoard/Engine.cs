@@ -20,6 +20,7 @@ public sealed class Engine : IDisposable
     private readonly StateStore store;
     private readonly Renderer renderer;
     private readonly GlassMaterial glass;
+    private readonly LayoutAssets assets = new();
     private readonly IWallpaper wallpaper;
     private readonly IScreenNotice screenNotice;
     private string reportedNotice = "";
@@ -41,7 +42,7 @@ public sealed class Engine : IDisposable
     private static double Utc => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d;
     private DateTimeOffset Clock => DateTimeOffset.UtcNow.AddSeconds(State.ClockOffset).ToOffset(TimeSpan.FromHours(8));
 
-    public Engine(StateStore stateStore, ClientState? initial = null, IWallpaper? desktop = null, IScreenNotice? notices = null) { store = stateStore; wallpaper = desktop ?? new Wallpaper(); screenNotice = notices ?? new ScreenNotice(); State = initial ?? store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); glass = new(store.DirectoryPath); }
+    public Engine(StateStore stateStore, ClientState? initial = null, IWallpaper? desktop = null, IScreenNotice? notices = null) { store = stateStore; wallpaper = desktop ?? new Wallpaper(); screenNotice = notices ?? new ScreenNotice(); State = initial ?? store.Load(); State.ClockUncertain = IsTimeUncertain(Utc,State.LastContact); renderer = new(store.DirectoryPath); glass = new(store.DirectoryPath); assets.Seed(State.Snapshot?["classroom"]?["layout"]); }
     public static bool IsTimeUncertain(double current, double lastContact) => current<1577836800 || current>4102444800 || lastContact>0 && current<lastContact-120;
     public void Save() { if (!stopping) store.Save(State); }
     public async Task StopAsync()
@@ -67,6 +68,7 @@ public sealed class Engine : IDisposable
         try {
         using var request = new HttpRequestMessage(new HttpMethod(method), new Uri(ValidateServer(State.Server), path.TrimStart('/')));
         request.Headers.Add("X-ClassGlow-Client-Version", AppPaths.Version);
+        request.Headers.Add("X-ClassGlow-Assets", Protocol.AssetVersion);
         if (authenticated && State.Credential.Length > 0) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", State.Credential);
         if (etag is not null && etag.Length > 0) request.Headers.TryAddWithoutValidation("If-None-Match", etag);
         if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
@@ -85,6 +87,28 @@ public sealed class Engine : IDisposable
         return (JsonNode.Parse(buffer.ToArray()) as JsonObject ?? throw new InvalidDataException("服务响应结构不合法。"), response.Headers.ETag?.ToString() ?? "");
         } finally { pendingRequests--; }
     }
+    private async Task<(byte[] Data, string Mime)> RequestAsset(string id)
+    {
+        pendingRequests++;
+        try {
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(ValidateServer(State.Server), $"device/assets/{id}"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", State.Credential);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+            deadline.CancelAfter(TimeSpan.FromSeconds(8));
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) throw new DeviceAuthorizationException("设备授权已失效，请重新绑定。");
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength > 512 * 1024) throw new InvalidDataException("图片超过允许大小。");
+            await using var stream = await response.Content.ReadAsStreamAsync(deadline.Token);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[16384]; int count;
+            while ((count = await stream.ReadAsync(chunk.AsMemory(), deadline.Token)) > 0) {
+                if (buffer.Length + count > 512 * 1024) throw new InvalidDataException("图片超过允许大小。");
+                buffer.Write(chunk, 0, count);
+            }
+            return (buffer.ToArray(), response.Content.Headers.ContentType?.MediaType ?? "");
+        } finally { pendingRequests--; }
+    }
     public async Task RevokeForUninstall() => await Request("/device/uninstall", "POST");
     public async Task Pair(string server)
     {
@@ -100,7 +124,7 @@ public sealed class Engine : IDisposable
     public async Task<string> CheckVersion()
     {
         var result = (await Request("/client/version", authenticated: false)).Body!;
-        return result.Str("latestVersion") == AppPaths.Version ? $"当前已是 {AppPaths.Version}。升级由管理员安排，不自动替换或重启程序。" : $"当前 {AppPaths.Version}，可用 {result.Str("latestVersion")}。请管理员人工升级并保留本机数据目录。";
+        return Version.TryParse(result.Str("latestVersion"), out var latest) && Version.Parse(AppPaths.Version) >= latest ? $"当前已是 {AppPaths.Version}。升级由管理员安排，不自动替换或重启程序。" : $"当前 {AppPaths.Version}，可用 {result.Str("latestVersion")}。请管理员人工升级并保留本机数据目录。";
     }
     public void LocalPause(bool paused)
     {
@@ -145,6 +169,7 @@ public sealed class Engine : IDisposable
                     failures = 0; nextPoll = syncRequestSeq == startedRequest ? Utc + (State.BindingId.Length > 0 ? 10 : 2) : 0;
                 } catch (DeviceAuthorizationException) { Unbind(); }
                 catch (Exception e) when (e is HttpRequestException or OperationCanceledException or InvalidDataException or System.Text.Json.JsonException or InvalidOperationException) {
+                    Diagnostics.Failure("sync", e);
                     failures++; nextPoll = Utc + Math.Min(20, 5 * Math.Pow(2, Math.Min(failures - 1, 2))); State.Error = "同步未完成，保留最近完整缓存"; Save();
                 }
             }
@@ -152,6 +177,7 @@ public sealed class Engine : IDisposable
             if (State.Snapshot is not null && (changed || Utc >= nextRender)) {
                 try { await ApplyCurrent(); }
                 catch (Exception e) when (e is IOException or InvalidOperationException or System.Runtime.InteropServices.COMException or ArgumentException) {
+                    Diagnostics.Failure("render", e);
                     State.ApplyState = "error"; State.Error = "生成或设置画面失败，保留上个已应用版本"; Save();
                 }
                 nextRender = Utc + 5;
@@ -159,7 +185,7 @@ public sealed class Engine : IDisposable
             if (State.BindingId.Length > 0 && Utc >= nextHeartbeat) {
                 try { await Request("/device/heartbeat", "POST", Report()); nextHeartbeat = Utc + 30; }
                 catch (DeviceAuthorizationException) { Unbind(); }
-                catch (Exception e) when (e is HttpRequestException or OperationCanceledException) { nextHeartbeat = Utc + 10; }
+                catch (Exception e) when (e is HttpRequestException or OperationCanceledException) { Diagnostics.Failure("heartbeat", e); nextHeartbeat = Utc + 10; }
             }
             if (State.BindingId.Length > 0 && pendingDisplayRequest.Length > 0 && Utc >= nextDisplayUpload) {
                 try { await UploadDisplay(); pendingDisplayRequest = ""; }
@@ -178,7 +204,7 @@ public sealed class Engine : IDisposable
         var (snapshot, etag) = await Request("/device/snapshot", etag: requireFullSnapshot || State.ClockUncertain ? "" : State.ETag);
         State.LastContact = Utc;
         if (snapshot is null) { State.LastContentSync = Utc+State.ClockOffset; return; }
-        if (snapshot.Int("schema") != 1 || snapshot.Str("bindingId") != State.BindingId || snapshot.Str("syncEpoch") != State.SyncEpoch || snapshot["classroom"] is not JsonObject || snapshot["contents"] is not JsonArray)
+        if (snapshot.Int("schema") != Protocol.Schema || snapshot.Str("bindingId") != State.BindingId || snapshot.Str("syncEpoch") != State.SyncEpoch || snapshot["classroom"] is not JsonObject || snapshot["contents"] is not JsonArray)
             throw new InvalidDataException("快照结构、绑定或同步世代不匹配。");
         if (snapshot.Str("deviceId") != State.DeviceId || snapshot["classroom"].Str("id") != State.ClassId ||
             (snapshot["contents"] as JsonArray)!.Any(c => c.Str("classId") != State.ClassId || c.Str("state") != "published" || c.Str("body").EnumerateRunes().Count() > 500 ||
@@ -194,6 +220,7 @@ public sealed class Engine : IDisposable
         if (version < State.CachedVersion) return;
         double serverTime = snapshot.Num("serverTime");
         if (!double.IsFinite(serverTime) || serverTime < 946684800 || serverTime > 4102444800) throw new InvalidDataException("服务时间无效，保留缓存并暂停本次更新。");
+        await assets.ResolveAsync(incomingLayout, RequestAsset);
         State.ClockOffset = serverTime - Utc;
         State.ClockUncertain = false;
         // 保存完整快照后才推进缓存版本；应用版本在壁纸成功设置后单独推进。
@@ -375,6 +402,7 @@ public sealed class Engine : IDisposable
     }
     public void Unbind()
     {
+        assets.Clear();
         screenNotice.Dismiss();
         signals?.Dispose(); signals = null;
         pendingDisplayRequest = "";

@@ -13,7 +13,9 @@ router = APIRouter()
 
 
 @router.get("/devices/{device_id}/commands/by-key/{request_key}")
-def command_result(device_id: str, request_key: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def command_result(
+    device_id: str, request_key: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")
+):
     from .devices import command_view
 
     device = db.get(Device, device_id)
@@ -30,7 +32,7 @@ def command_result(device_id: str, request_key: str, user: User = Depends(actor)
 
 
 @router.get("/drafts/{draft_id}")
-def draft_detail(draft_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def draft_detail(draft_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     draft = db.get(Draft, draft_id)
     if not draft or draft.owner_id != user.id or draft.closed:
         fail(404, "draft_not_found", "草稿不存在或已关闭。")
@@ -38,7 +40,7 @@ def draft_detail(draft_id: str, user: User = Depends(actor), db: Session = Depen
 
 
 @router.get("/contents/{content_id}")
-def content_detail(content_id: str, user: User = Depends(actor), db: Session = Depends(get_db)):
+def content_detail(content_id: str, user: User = Depends(actor), db: Session = Depends(get_db, scope="function")):
     from .app import content_view
 
     content = db.get(Content, content_id)
@@ -59,7 +61,7 @@ def contents(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     user: User = Depends(actor),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     from .app import content_view
 
@@ -73,19 +75,17 @@ def contents(
         conditions.append(Content.data["subject"].as_string() == subject)
     if search:
         conditions.append(Content.data["body"].as_string().contains(search, autoescape=True))
-    timestamp = datetime.fromtimestamp(now(), UTC).isoformat()
+    timestamp = now()
     if state in ("published", "completed", "withdrawn"):
         conditions.append(Content.state == state)
     elif state in ("active", "scheduled", "ended"):
         conditions.append(Content.state == "published")
         if state == "scheduled":
-            conditions.append(Content.data["from"].as_string() > timestamp)
+            conditions.append(Content.display_from > timestamp)
         elif state == "ended":
-            conditions.append(Content.data["until"].as_string() <= timestamp)
+            conditions.append(Content.display_until <= timestamp)
         else:
-            conditions.extend(
-                [Content.data["from"].as_string() <= timestamp, Content.data["until"].as_string() > timestamp]
-            )
+            conditions.extend([Content.display_from <= timestamp, Content.display_until > timestamp])
     elif state:
         fail(422, "state_invalid", "状态筛选无效。")
     if date:
@@ -99,17 +99,13 @@ def contents(
 
         conditions.extend(
             [
-                Content.data["from"].as_string() < (start + timedelta(days=1)).astimezone(UTC).isoformat(),
-                Content.data["until"].as_string() > start.astimezone(UTC).isoformat(),
+                Content.display_from < (start + timedelta(days=1)).timestamp(),
+                Content.display_until > start.timestamp(),
             ]
         )
     total = db.scalar(select(func.count()).select_from(Content).where(*conditions))
     rows = db.scalars(
-        select(Content)
-        .where(*conditions)
-        .order_by(Content.data["created"].as_string().desc(), Content.id)
-        .offset(offset)
-        .limit(limit)
+        select(Content).where(*conditions).order_by(Content.created_at.desc(), Content.id).offset(offset).limit(limit)
     ).all()
     return {
         "items": [content_view(db, item, user.id) for item in rows],
