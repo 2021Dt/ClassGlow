@@ -1,4 +1,5 @@
 import base64
+import json
 from copy import deepcopy
 from io import BytesIO
 from uuid import uuid4
@@ -77,6 +78,10 @@ def test_canvas_delivery_idempotency_history_and_storage_retention(client):
     cid = classroom(c, headers)
     did, device_headers, _ = paired(c, headers, cid)
     canvas = design()
+    output = BytesIO()
+    Image.effect_noise((640, 480), 80).convert("RGB").save(output, "JPEG", quality=55)
+    canvas["elements"][1]["image"] = "data:image/jpeg;base64," + base64.b64encode(output.getvalue()).decode()
+    assert 131072 < len(json.dumps(canvas).encode()) < 524288
     notice = {"mode": "canvas", "message": "自由画布提醒", "duration": 60, "canvas": canvas}
 
     def send(revision=0, key=None):
@@ -113,3 +118,15 @@ def test_canvas_delivery_idempotency_history_and_storage_retention(client):
         assert "canvas" not in db.get(Command, command_id).data["notice"]
         assert db.get(Command, newer).data["notice"]["canvas"] == canvas
         assert clean_records(db)["过期提醒画布"] == 0
+
+
+def test_notice_body_limit_also_bounds_streaming_uploads(client):
+    c, _ = client
+    response = c.post(
+        "/devices/unknown/commands",
+        content=iter([b" " * 300001, b" " * 300001]),
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 413
+    # 普通业务接口没有因画布支持而放宽大小限制。
+    assert c.post("/classes", content=b" " * 131073).status_code == 413

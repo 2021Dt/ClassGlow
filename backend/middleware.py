@@ -4,6 +4,9 @@ from starlette.responses import JSONResponse
 def body_limit(path: str, method: str) -> int:
     if method == "POST" and path == "/device/display":
         return 600000
+    # 提醒画布最大 512 KiB，额外保留外层指令及 JSON 空白的空间。
+    if method == "POST" and path.startswith("/devices/") and path.endswith("/commands"):
+        return 600000
     # 自由画布可包含压缩背景与图片组件；其他业务接口仍保持 128 KiB。
     return 2 * 1024 * 1024 if method == "PUT" and path.startswith("/classes/") and path.endswith("/layout") else 131072
 
