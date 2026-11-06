@@ -16,6 +16,7 @@ public partial class ClassroomToolsPanel : System.Windows.Controls.UserControl
     {
         this.engine = engine; InitializeComponent();
         RosterInput.Text = savedText = string.Join(Environment.NewLine, engine.Tools.Roster);
+        Results.Text = engine.Tools.Roster.Count > 0 ? "准备好，开始抽取" : "先保存一份名单";
         ready = true; Refresh();
         timer.Tick += (_, _) => RefreshTimer();
         IsVisibleChanged += (_, _) => { if (IsVisible) { RefreshTimer(); timer.Start(); } else timer.Stop(); };
