@@ -65,7 +65,7 @@ public sealed partial class Renderer
         Brush text = highContrast ? SystemColors.WindowTextBrush : BrushOf(dark ? "#F1F3F7" : "#252A32");
         Brush muted = highContrast ? text : BrushOf(dark ? "#C4CBD5" : "#565F6D");
         Brush accent = highContrast ? text : BrushOf(dark ? "#A6D9BE" : "#316B59");
-        bool expired = state.ClockUncertain || state.LastContact > 0 && clock.ToUnixTimeSeconds() - state.ClockOffset - state.LastContact > 72 * 3600;
+        bool expired = state.ClockUncertain || state.LastContact > 0 && ContactAge(state, clock) > 72 * 3600;
         var contents = (snapshot["contents"] as JsonArray ?? new()).Where(n => n is not null && n.Str("state") == "published" &&
             DateTimeOffset.TryParse(n.Str("from"), out var start) && DateTimeOffset.TryParse(n.Str("until"), out var end) && start <= clock && clock < end && !expired).Select(n => n!).ToList();
         var courses = Periods(classroom, clock, out bool configured, out int currentCourse, out _);

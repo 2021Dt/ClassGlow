@@ -7,6 +7,25 @@ from backend.db import Device, Membership, User
 from backend.realtime import updates
 
 
+def test_unchanged_snapshot_still_returns_current_server_clock(client, monkeypatch):
+    c, _ = client
+    owner, _ = user(c)
+    cid = classroom(c, owner)
+    _, credential, _ = paired(c, owner, cid)
+    from backend.db import now
+
+    timestamp = now()
+    monkeypatch.setattr("backend.devices.now", lambda: timestamp)
+    first = c.get("/device/snapshot", headers=credential)
+    assert first.status_code == 200
+    assert float(first.headers["X-ClassGlow-Time"]) == first.json()["serverTime"] == timestamp
+    timestamp += 30
+    unchanged = c.get("/device/snapshot", headers={**credential, "If-None-Match": first.headers["ETag"]})
+    assert unchanged.status_code == 304 and not unchanged.content
+    assert unchanged.headers["ETag"] == first.headers["ETag"]
+    assert float(unchanged.headers["X-ClassGlow-Time"]) == timestamp
+
+
 def test_device_name_permissions_and_free_sync(client):
     c, engine = client
     owner, owner_id = user(c)

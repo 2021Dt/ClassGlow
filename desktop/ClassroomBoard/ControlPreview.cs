@@ -60,10 +60,9 @@ public static class ControlPreview
         panel.Children.Add(new Border { CornerRadius = new CornerRadius(14), ClipToBounds = true, Child = image });
         var window = new AppWindow("看板联调预览（隔离）", 1280, 860); window.SetBody(panel);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        bool ticking = false, closing = false;
+        bool closing = false;
         timer.Tick += async (_, _) => {
-            if (ticking || closing) return;
-            ticking = true;
+            if (closing) return;
             try {
                 if (File.Exists(System.IO.Path.Combine(directory, "stop"))) { window.Close(); return; }
                 await engine.Tick();
@@ -73,7 +72,6 @@ public static class ControlPreview
                 string path = System.IO.Path.Combine(directory, "status.json");
                 File.WriteAllText(path + ".tmp", report.ToJsonString()); File.Move(path + ".tmp", path, true);
             } catch (Exception e) { File.WriteAllText(System.IO.Path.Combine(directory, "error.txt"), e.ToString()); status.Text = "联调失败，请检查隔离目录中的 error.txt。"; }
-            finally { ticking = false; }
         };
         window.Loaded += async (_, _) => {
             try {

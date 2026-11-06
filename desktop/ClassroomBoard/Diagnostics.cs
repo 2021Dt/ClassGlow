@@ -15,10 +15,14 @@ public static class Diagnostics
         ["applyState"] = state.ApplyState, ["localPaused"] = state.LocalPaused, ["remotePaused"] = state.RemotePaused,
         ["lastContact"] = state.LastContact, ["lastContentSync"] = state.LastContentSync,
         ["clockOffset"] = state.ClockOffset, ["clockUncertain"] = state.ClockUncertain,
+        ["lastDisplayTick"] = state.LastDisplayTick, ["renderedAt"] = state.RenderedAt,
+        ["lastClockSync"] = state.LastClockSync, ["lastRenderDurationMs"] = state.LastRenderDurationMs,
+        ["displayBlockReason"] = state.DisplayBlockReason,
         ["reduceEffects"] = state.ReduceEffects, ["monitorIndex"] = state.MonitorIndex,
         ["page"] = state.Page, ["pageCount"] = state.PageCount,
         ["effectiveTheme"] = state.EffectiveTheme, ["effectiveMaterial"] = state.EffectiveMaterial,
     };
     public static void Write(ClientState state, string file) => File.WriteAllText(file, Create(state).ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-    public static void Failure(string phase, Exception error) => AppPaths.QuietLog("runtime.log", $"phase={phase};type={error.GetType().Name};code=0x{error.HResult:X8}");
+    public static void Failure(string phase, Exception error, string? directory = null) => AppPaths.QuietLog("runtime.log", $"phase={phase};type={error.GetType().Name};code=0x{error.HResult:X8}", directory);
+    public static void Event(string name, string? directory = null) => AppPaths.QuietLog("runtime.log", $"event={name}", directory);
 }

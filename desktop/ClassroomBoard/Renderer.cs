@@ -119,6 +119,7 @@ public sealed partial class Renderer(string directory)
         bool expired = until > 0 && (state.ClockUncertain || clock.ToUnixTimeSeconds() >= until);
         return expired && classroom["basicLayout"] is JsonObject basic ? basic : classroom["layout"]!;
     }
+    public static double ContactAge(ClientState state, DateTimeOffset clock) => state.SecondsSinceContact ?? Math.Max(0, clock.ToUnixTimeSeconds() - state.ClockOffset - state.LastContact);
     public Frame Render(ClientState state, DateTimeOffset clock, int width, int height, int requestedPage = 0)
     {
         var snapshot = state.Snapshot ?? throw new InvalidDataException("没有可用快照。");
@@ -145,7 +146,7 @@ public sealed partial class Renderer(string directory)
             return new Rect(left + 24 + x * (total - 48 + 28) / 12, 224 + y * 688 / 12, w * (total - 48 + 28) / 12 - 28, h * 688 / 12 - 28);
         }
         var jobRect = ModuleRect("homework", 0, 0, 7, 12); var todoRect = ModuleRect("todo", 7, 0, 5, 5); var tableRect = ModuleRect("timetable", 7, 5, 5, 7);
-        bool offlineExpired = state.ClockUncertain || state.LastContact > 0 && (clock.ToUnixTimeSeconds() - state.ClockOffset - state.LastContact) > 72 * 3600;
+        bool offlineExpired = state.ClockUncertain || state.LastContact > 0 && ContactAge(state, clock) > 72 * 3600;
         var contents = (snapshot["contents"] as JsonArray ?? new()).Where(n => n is not null && n.Str("state") == "published" &&
             DateTimeOffset.TryParse(n.Str("from"), out var start) && DateTimeOffset.TryParse(n.Str("until"), out var end) && start <= clock && clock < end && !offlineExpired).Select(n => n!).ToList();
         var jobs = Paginate(modules.Flag("homework") ? contents.Where(c => c.Str("kind") == "homework") : [], fontSize, jobRect.Width - 206, Math.Max(1, (jobRect.Height - 126) / (fontSize * 1.55)));
@@ -226,7 +227,7 @@ public sealed partial class Renderer(string directory)
             }
             if (offlineExpired) DrawText(dc, state.ClockUncertain ? "系统时间异常，时效内容已暂停，请现场校时" : "设备离线超过 72 小时，等待重新连接", left + 40, 290, 36, text);
             string lastSync = state.LastContentSync > 0 ? DateTimeOffset.FromUnixTimeSeconds((long)state.LastContentSync).ToOffset(TimeSpan.FromHours(8)).ToString("M月d日 HH:mm") : "尚未同步";
-            bool offline = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - state.LastContact > 90;
+            bool offline = ContactAge(state, clock) > 90;
             DrawText(dc, $"内容同步 {lastSync} · 画面生成 {clock:MM月dd日 HH:mm}" + (offline ? " · 离线" : ""), left + 56, syncY, 22, muted, total - 328);
             DrawText(dc, $"第 {page} / {count} 页", 1920 - right - 244, 958, 26, muted);
             dc.Pop();

@@ -16,7 +16,8 @@ public sealed class GlassMaterial(string directory)
     private const string Host = "classglow-render.invalid";
     private string memoryKey = "";
     private BitmapSource? bitmap;
-    private DateTime retryAfter;
+    private long retryAfter;
+    private Task? pendingCreation;
     public string Reason { get; private set; } = "";
     public int Generations { get; private set; }
     private string Cache => Path.Combine(directory, "glass-material.png");
@@ -49,16 +50,17 @@ public sealed class GlassMaterial(string directory)
                 try { bitmap = ReadImage(Cache, width, height); memoryKey = key; return bitmap; }
                 catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException) { /* 中断写入或旧尺寸缓存视为未命中，重新生成。 */ }
             }
-            if (DateTime.UtcNow < retryAfter) { Reason = "暂用兼容材质"; return null; }
+            if (Environment.TickCount64 < retryAfter || pendingCreation is { IsCompleted: false }) { Reason = "暂用兼容材质"; return null; }
             await CaptureAsync(appearance, width, height, cancellation);
             bitmap = ReadImage(Cache, width, height); memoryKey = key;
             File.WriteAllText(KeyFile, key); Generations++;
             return bitmap;
         } catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
-        catch (Exception error) when (error is COMException or WebView2RuntimeNotFoundException or IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or TimeoutException or ArgumentException or NotSupportedException) {
+        catch (Exception error) when (error is COMException or WebView2RuntimeNotFoundException or IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or TimeoutException or OperationCanceledException or ArgumentException or NotSupportedException) {
             // 某些教室没有 WebView2 或图形驱动不兼容，正文和同步继续使用既有原生绘制。
             // 不自动安装运行时、不反复启动失败的浏览器，也不缓存失败画面。
-            retryAfter = DateTime.UtcNow.AddMinutes(10);
+            retryAfter = Environment.TickCount64 + 600_000;
+            Diagnostics.Failure("material", error, directory);
             Reason = "玻璃材质暂不可用，已使用兼容材质";
             return null;
         }
@@ -76,6 +78,8 @@ public sealed class GlassMaterial(string directory)
 
     private async Task CaptureAsync(JsonObject layout, int width, int height, CancellationToken cancellation)
     {
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        budget.CancelAfter(TimeSpan.FromSeconds(10)); cancellation = budget.Token;
         string assets = Path.Combine(AppContext.BaseDirectory, "Renderer");
         if (!File.Exists(Path.Combine(assets, "desktop.html"))) throw new FileNotFoundException("离线材质资源不存在。");
         Directory.CreateDirectory(directory);
@@ -85,7 +89,8 @@ public sealed class GlassMaterial(string directory)
         var options = new CoreWebView2EnvironmentOptions("--disable-gpu --disable-background-networking --disable-component-update --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows") {
             AllowSingleSignOnUsingOSPrimaryAccount = false, IsCustomCrashReportingEnabled = true
         };
-        var environment = await CoreWebView2Environment.CreateAsync(null, profile, options);
+        var environmentTask = CoreWebView2Environment.CreateAsync(null, profile, options); pendingCreation = environmentTask;
+        var environment = await WaitForCreation(environmentTask, cancellation, directory: directory);
         cancellation.ThrowIfCancellationRequested();
         var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         // 退出事件只通知当前绘制任务，避免旧事件延迟到达时删掉下一轮正在使用的缓存。
@@ -97,7 +102,8 @@ public sealed class GlassMaterial(string directory)
         CoreWebView2Controller? controller = null;
         try {
             var controllerOptions = environment.CreateCoreWebView2ControllerOptions(); controllerOptions.IsInPrivateModeEnabled = true;
-            controller = await environment.CreateCoreWebView2ControllerAsync(host.Handle, controllerOptions);
+            var controllerTask = environment.CreateCoreWebView2ControllerAsync(host.Handle, controllerOptions); pendingCreation = controllerTask;
+            controller = await WaitForCreation(controllerTask, cancellation, late => late.Close(), directory);
             cancellation.ThrowIfCancellationRequested();
             controller.ShouldDetectMonitorScaleChanges = false; controller.RasterizationScale = 1;
             controller.Bounds = new System.Drawing.Rectangle(0, 0, width, height); controller.ZoomFactor = 1; controller.IsVisible = true;
@@ -139,6 +145,19 @@ public sealed class GlassMaterial(string directory)
             // 生成后释放浏览器、渲染和 GPU 子进程。下次正文刷新直接使用 PNG。
             if (controller is not null) await Task.WhenAny(exited.Task, Task.Delay(3000));
             try { CleanupProfile(directory); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* 运行时仍在收尾时，退出或卸载再次清理。 */ }
+        }
+    }
+
+    internal static async Task<T> WaitForCreation<T>(Task<T> pending, CancellationToken cancellation, Action<T>? releaseLate = null, string? directory = null)
+    {
+        try { return await pending.WaitAsync(cancellation); }
+        catch {
+            // COM 创建本身不可取消；观察迟到结果，并关闭迟到的控制器，不能继续使用已销毁的宿主。
+            _ = ReleaseLate(); throw;
+        }
+        async Task ReleaseLate() {
+            try { var value = await pending; releaseLate?.Invoke(value); }
+            catch (Exception error) { Diagnostics.Failure("material-late-create", error, directory); }
         }
     }
 

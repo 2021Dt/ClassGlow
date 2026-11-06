@@ -23,6 +23,7 @@ public static class Program
         if (args.Contains("--render-preview")) return PreviewExport.Run(args);
         if (args.Contains("--self-test")) return SelfTest.Run(args);
         if (args.Contains("--reliability-check")) return ReliabilityChecks.Run(args);
+        if (args.Contains("--clock-check")) return ClockChecks.Run(args);
         if (args.Contains("--network-self-test")) return SelfTest.Network(args).GetAwaiter().GetResult();
         if (args.Contains("--pairing-check")) return SelfTest.Pairing(args).GetAwaiter().GetResult();
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
@@ -125,7 +126,14 @@ public static class Program
         timer.Start();
         // 网络、唤醒、显示和系统材质变化只触发后台重算，不弹窗或改变前台。
         System.Net.NetworkInformation.NetworkAvailabilityChangedEventHandler networkChanged = (_, e) => { if (e.IsAvailable) app.Dispatcher.BeginInvoke(engine.RequestSync); };
-        Microsoft.Win32.PowerModeChangedEventHandler powerChanged = (_, e) => { if (e.Mode == Microsoft.Win32.PowerModes.Resume) app.Dispatcher.BeginInvoke(engine.RequestSync); };
+        Microsoft.Win32.PowerModeChangedEventHandler powerChanged = (_, e) => { if (e.Mode == Microsoft.Win32.PowerModes.Resume) app.Dispatcher.BeginInvoke(engine.Resume); };
+        EventHandler timeChanged = (_, _) => app.Dispatcher.BeginInvoke(engine.RequestSync);
+        Microsoft.Win32.SessionSwitchEventHandler sessionChanged = (_, e) => {
+            if (e.Reason is Microsoft.Win32.SessionSwitchReason.SessionLock or Microsoft.Win32.SessionSwitchReason.ConsoleDisconnect or Microsoft.Win32.SessionSwitchReason.RemoteDisconnect)
+                app.Dispatcher.BeginInvoke(() => engine.SessionChanged(true));
+            else if (e.Reason is Microsoft.Win32.SessionSwitchReason.SessionUnlock or Microsoft.Win32.SessionSwitchReason.ConsoleConnect or Microsoft.Win32.SessionSwitchReason.RemoteConnect)
+                app.Dispatcher.BeginInvoke(() => engine.SessionChanged(false));
+        };
         EventHandler displayChanged = (_, _) => app.Dispatcher.BeginInvoke(engine.RequestSync);
         Microsoft.Win32.UserPreferenceChangedEventHandler preferenceChanged = (_, e) => {
             // 设置壁纸本身也产生 Desktop 通知，忽略该类别，防止触发自我重绘循环。
@@ -133,6 +141,8 @@ public static class Program
         };
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += networkChanged;
         Microsoft.Win32.SystemEvents.PowerModeChanged += powerChanged;
+        Microsoft.Win32.SystemEvents.TimeChanged += timeChanged;
+        Microsoft.Win32.SystemEvents.SessionSwitch += sessionChanged;
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += displayChanged;
         Microsoft.Win32.SystemEvents.UserPreferenceChanged += preferenceChanged;
         // 手动打开可查看状态；开机启动不弹窗打断教学。
@@ -142,6 +152,8 @@ public static class Program
         showListener.Unregister(null);
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= networkChanged;
         Microsoft.Win32.SystemEvents.PowerModeChanged -= powerChanged;
+        Microsoft.Win32.SystemEvents.TimeChanged -= timeChanged;
+        Microsoft.Win32.SystemEvents.SessionSwitch -= sessionChanged;
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= displayChanged;
         Microsoft.Win32.SystemEvents.UserPreferenceChanged -= preferenceChanged;
         engine.Dispose(); return exitCode;

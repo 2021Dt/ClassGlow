@@ -230,7 +230,7 @@ def snapshot(
     display = db.get(DeviceDisplay, d.id)
     display_request = pending_display(display)
     if if_none_match == etag and not commands and not display_request:
-        return Response(status_code=304, headers={"ETag": etag})
+        return Response(status_code=304, headers={"ETag": etag, "X-ClassGlow-Time": str(now())})
     from .app import content_view, layout_default
 
     basic = layout_default()
@@ -266,7 +266,7 @@ def snapshot(
             ensure_ascii=False,
         ),
         media_type="application/json",
-        headers={"ETag": etag},
+        headers={"ETag": etag, "X-ClassGlow-Time": str(now())},
     )
 
 

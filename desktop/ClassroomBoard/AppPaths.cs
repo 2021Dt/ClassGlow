@@ -22,11 +22,12 @@ public static class AppPaths
     public static string ShowEventName => "Local\\" + ProductId + ".ShowRequested";
     public const string StartupKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    public static void QuietLog(string name, string diagnostic)
+    public static void QuietLog(string name, string diagnostic, string? directory = null)
     {
         try {
-            Directory.CreateDirectory(DataDirectory);
-            string file = Path.Combine(DataDirectory, name);
+            directory ??= DataDirectory;
+            Directory.CreateDirectory(directory);
+            string file = Path.Combine(directory, name);
             // 调用方只传入不含用户数据的诊断字段；日志轮转，不记录正文、网址或凭证。
             if (File.Exists(file) && new FileInfo(file).Length >= 128 * 1024) File.Move(file, file + ".old", true);
             File.AppendAllText(file, $"{DateTimeOffset.Now:O} {diagnostic}\n");

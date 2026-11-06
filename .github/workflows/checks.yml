@@ -50,3 +50,4 @@ jobs:
       - run: dotnet build desktop/ClassroomBoard/ClassroomBoard.csproj -c Release --no-restore --runtime win-x64
       - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --self-test --output .qa/desktop
       - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --reliability-check --output .qa/reliability
+      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --clock-check --output .qa/clock

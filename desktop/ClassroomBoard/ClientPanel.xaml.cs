@@ -106,7 +106,9 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         BackButton.IsEnabled = !pairing;
         StatusText.Text = Bound ? (state.Error.Length > 0 || state.EnableWallpaper ? engine.Status : "桌面展示已关闭")
             : hasCode ? "等待确认绑定" : "未绑定";
-        TechnicalStatus.Text = $"ClassGlow {AppPaths.Version}\n已接收 v{state.CachedVersion} / 已展示 v{state.AppliedVersion}\n内容第 {state.Page} / {state.PageCount} 页\n{state.MaterialReason}";
+        static string TimeLabel(double value) => double.IsFinite(value) && value > 0 && value < 4102444800
+            ? DateTimeOffset.FromUnixTimeSeconds((long)value).ToOffset(TimeSpan.FromHours(8)).ToString("MM-dd HH:mm:ss") : "尚无";
+        TechnicalStatus.Text = $"ClassGlow {AppPaths.Version}\n已接收 v{state.CachedVersion} / 已展示 v{state.AppliedVersion}\n画面生成 {TimeLabel(state.RenderedAt)}\n最近校时 {TimeLabel(state.LastClockSync)}\n内容第 {state.Page} / {state.PageCount} 页\n{state.MaterialReason}";
         HomePrimary.Content = Bound ? "立即同步" : "继续绑定班级";
         PauseButton.Visibility = Bound ? Visibility.Visible : Visibility.Collapsed;
         PauseButton.Content = state.LocalPaused ? "恢复展示" : "暂停展示";

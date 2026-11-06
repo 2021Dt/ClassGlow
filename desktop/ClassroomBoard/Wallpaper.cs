@@ -21,6 +21,7 @@ public interface IWallpaper
 {
     (string Id, NativeRect Rect, string Original) Read(int index);
     bool SafeToApply();
+    bool SafeToApply(int monitorIndex) => SafeToApply();
     void Set(string monitor, string path);
     string Current(string monitor);
     bool HasConflict(bool refresh = false) => false;
@@ -60,7 +61,8 @@ public sealed class Wallpaper : IWallpaper
             return (id, rect, original);
         } finally { Marshal.FinalReleaseComObject(api); }
     }
-    public bool SafeToApply()
+    public bool SafeToApply() => SafeToApply(-1);
+    public bool SafeToApply(int monitorIndex)
     {
         // 本程序的设置窗口也允许同步壁纸，首次启用后无需手动关闭窗口。
         // 设置壁纸本身不切换窗口或抢占焦点，只有全屏课件等场景需要延后。
@@ -76,8 +78,11 @@ public sealed class Wallpaper : IWallpaper
         var screen = System.Windows.Forms.Screen.FromHandle(hwnd).Bounds;
         bool fullScreen = rect.Left <= screen.Left + 2 && rect.Top <= screen.Top + 2
             && rect.Right >= screen.Right - 2 && rect.Bottom >= screen.Bottom - 2;
-        return !fullScreen;
+        if (!fullScreen) return true;
+        // 前台全屏在另一块屏幕时，仍允许更新可见的目标桌面。
+        return monitorIndex >= 0 && !CoversMonitor(rect, Read(monitorIndex).Rect);
     }
+    internal static bool CoversMonitor(NativeRect window, NativeRect monitor) => window.Left <= monitor.Left + 2 && window.Top <= monitor.Top + 2 && window.Right >= monitor.Right - 2 && window.Bottom >= monitor.Bottom - 2;
     public void Set(string monitor, string path)
     {
         if (path.Length > 0 && !File.Exists(path)) throw new FileNotFoundException("待应用画面不存在。", path);

@@ -47,6 +47,12 @@ public sealed class ClientState
     public double ClockOffset { get; set; }
     public bool ClockUncertain { get; set; }
     public double RenderedAt { get; set; }
+    public double LastDisplayTick { get; set; }
+    public double LastClockSync { get; set; }
+    public double LastRenderDurationMs { get; set; }
+    public string DisplayBlockReason { get; set; } = "";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double? SecondsSinceContact { get; set; }
     public string EffectiveTheme { get; set; } = "mica_light";
     public string EffectiveMaterial { get; set; } = "solid";
     public string MaterialReason { get; set; } = "";
