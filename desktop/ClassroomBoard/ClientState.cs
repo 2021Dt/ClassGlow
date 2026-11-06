@@ -59,6 +59,7 @@ public sealed class ClientState
     public string ApplyState { get; set; } = "waiting";
     public string Error { get; set; } = "";
     public List<string> LocalRoster { get; set; } = new();
+    public ClassroomWorkspace LocalWorkspace { get; set; } = new();
     public Dictionary<string, JsonObject> Results { get; set; } = new();
     public Dictionary<string, int> GroupSeq { get; set; } = new();
 }

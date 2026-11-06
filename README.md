@@ -20,6 +20,8 @@ curl -fsSL https://raw.githubusercontent.com/2021Dt/ClassGlow/main/deploy/instal
 
 ## 启动管理端与服务
 
+Windows 0.4.18 的离线课堂工具箱包含多班名单、Excel / CSV / TXT 导入、临时缺席、点名与分组、本地倒计时、积分板、批注白板、聚光灯、答案遮挡、截图钉图、座位编排和任务轮值。名单及课堂记录在本机加密保存，工具数据不上传；完整入口与覆盖安装方法见 [课堂工具说明](docs/USAGE.md#0418-离线课堂工具箱)。
+
 需要 Python 3.13、uv、Node.js 22.18 或更新版本。以下命令在项目根目录执行：
 
 ```powershell

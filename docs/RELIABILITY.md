@@ -1,6 +1,16 @@
 # 可靠性、验证与发布
 
-当前版本由根目录 `release.json` 定义。0.4.17 增加本地课堂工具，保留 0.4.16 的桌面时钟修复及此前的数据、事务、缓存和发布优化。现场验收保持单独记录。
+当前版本由根目录 `release.json` 定义。0.4.18 扩展本地课堂工具箱，保留原有计时器、点名及 0.4.16 的桌面时钟修复。现场验收保持单独记录。
+
+## 多班与屏幕工具（0.4.18）
+
+本机班级、名单、积分、座位和轮值统一保存在 DPAPI 状态文件。变更先复制并校验，存储成功后才替换内存对象和刷新页面；保存失败不会损坏当前名单或推进轮次。30 班、每班 500 人、50 个积分队伍、100 步积分撤销、600 个座位及 20 项轮值均有边界检查。抽签轮次和临时缺席按班隔离，退出重置，座位始终包含完整名单。
+
+文件导入在后台读取并预览，不依赖 Office。支持 UTF-8、UTF-16、GB18030 文本，CSV 引号、多工作表、Excel 共享/富文本、稀疏列和纯零学号格式。只读缓存值，不执行公式；缺少缓存的公式明确拒绝，避免静默丢人。文件、ZIP 展开大小、XML 字符数、行列均有限制，禁止 DTD、外部实体与外部工作表。单元格类型依据 [Microsoft Open XML 文档](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.cellvalue)。
+
+屏幕工具由现场操作打开；锁屏、显示器配置变化和退出统一关闭。截图只在确认选区后读取区域，等待框选层隐藏再捕获，关闭或锁屏取消迟到捕获，不自动上传、保存或复制。批注复用 [WPF InkCanvas](https://learn.microsoft.com/en-us/dotnet/api/system.windows.controls.inkcanvas.editingmode?view=windowsdesktop-10.0)。透明窗口使用极低非零 alpha 接收鼠标，避免 Windows 将 alpha=0 区域的点击传给课件；该行为见 [Windows 分层窗口说明](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features)。
+
+本版没有新增网络接口、数据库迁移或第三方依赖。隐私说明更新至 `2026-11-06.1`，覆盖安装保留旧名单和绑定，由现场人员手动确认说明。
 
 ## 本地课堂工具（0.4.17）
 

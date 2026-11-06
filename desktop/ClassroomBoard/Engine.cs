@@ -14,7 +14,9 @@ public sealed class DeviceAuthorizationException(string message) : Exception(mes
 public sealed class Engine : IDisposable
 {
     public ClientState State { get; }
-    public LocalClassroomTools Tools { get; }
+    public LocalClassroomTools Tools { get; private set; }
+    public ClassroomBook Book { get; }
+    public LocalScreenTools ScreenTools { get; } = new();
     public bool LocalCountdownActive => screenNotice.ActiveId.StartsWith("local-countdown:", StringComparison.Ordinal);
     public bool HasWallpaperConflict(bool refresh = false) => wallpaper.HasConflict(refresh);
     public string Status => State.EnableWallpaper && !State.LocalPaused && !State.RemotePaused && HasWallpaperConflict() ? "请先退出 Wallpaper Engine" : State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => sessionLocked ? "等待解锁后更新" : "等待全屏课件结束或桌面恢复后更新", _ => "等待同步或启用展示" };
@@ -56,7 +58,22 @@ public sealed class Engine : IDisposable
         store = stateStore; this.listenForSignals = listenForSignals;
         http = new(transport ?? new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(8) };
         wallpaper = desktop ?? new Wallpaper(); screenNotice = notices ?? new ScreenNotice(); State = initial ?? store.Load();
-        Tools = new(State.LocalRoster);
+        Book = new(State.LocalWorkspace, State.LocalRoster, next => {
+            if (stopping) throw new InvalidOperationException("程序正在退出。");
+            var previous = State.LocalWorkspace; var oldRoster = State.LocalRoster;
+            State.LocalWorkspace = next; State.LocalRoster = next.Classes.Single(c => c.Id == next.ActiveId).Members.ToList();
+            try { Save(); } catch { State.LocalWorkspace = previous; State.LocalRoster = oldRoster; throw; }
+        });
+        State.LocalWorkspace = Book.Data;
+        Tools = new(Book.Active.Members);
+        var classDraws = new Dictionary<string, LocalClassroomTools> { [Book.Active.Id] = Tools };
+        Book.Changed += () => {
+            foreach (var id in classDraws.Keys.Where(id => !Book.Data.Classes.Any(c => c.Id == id)).ToArray()) classDraws.Remove(id);
+            if (!classDraws.TryGetValue(Book.Active.Id, out var draws)) classDraws[Book.Active.Id] = draws = new(Book.Active.Members);
+            Tools = draws;
+            if (!Tools.Roster.SequenceEqual(Book.Active.Members)) Tools.Replace(Book.Active.Members);
+            Tools.SetExcluded(Book.Absent);
+        };
         clock = new(timeProvider ?? TimeProvider.System, State.ClockOffset);
         contactAge = State.LastContact > 0 ? Math.Max(0, Utc - State.LastContact) : double.PositiveInfinity;
         State.ClockUncertain = IsTimeUncertain(Utc, State.LastContact); renderer = new(store.DirectoryPath); glass = new(store.DirectoryPath);
@@ -68,6 +85,7 @@ public sealed class Engine : IDisposable
     {
         stopping = true; shutdown.Cancel();
         screenNotice.Dismiss();
+        ScreenTools.CloseAll();
         if (signals is not null) { signals.Dispose(); await signals.Completion; signals = null; }
         // 卸载先取消并等待在途请求，避免清理后异步续写 state.bin。
         while (busy || displayBusy || pendingRequests > 0) await Task.Delay(25);
@@ -155,7 +173,7 @@ public sealed class Engine : IDisposable
     public void SessionChanged(bool locked)
     {
         sessionLocked = locked;
-        if (locked) screenNotice.Dismiss();
+        if (locked) { screenNotice.Dismiss(); ScreenTools.CloseAll(); }
         else Resume();
     }
     public async Task<string> CheckVersion()
@@ -337,10 +355,7 @@ public sealed class Engine : IDisposable
     public void SaveLocalRoster(string text)
     {
         if (stopping) throw new InvalidOperationException("程序正在退出。");
-        string[] parsed = LocalClassroomTools.Parse(text);
-        var previous = State.LocalRoster; State.LocalRoster = parsed.ToList();
-        try { Save(); } catch { State.LocalRoster = previous; throw; }
-        Tools.Replace(parsed);
+        Book.SaveRoster(text); Tools.ResetRound();
     }
     public void StartLocalCountdown(int seconds, string label, bool card = true)
     {
@@ -536,5 +551,5 @@ public sealed class Engine : IDisposable
         State.Page = State.PageCount = 1; State.ManualUntil = 0; State.StateReportSeq = 0; State.LocalControlEpoch = 0;
         State.LocalPaused = State.RemotePaused = false; State.Results.Clear(); State.GroupSeq.Clear(); State.Error = restoreError.Length>0 ? restoreError : "设备未绑定，请重新取得绑定码"; Save();
     }
-    public void Dispose() { shutdown.Cancel(); signals?.Dispose(); screenNotice.Dispose(); http.Dispose(); shutdown.Dispose(); }
+    public void Dispose() { shutdown.Cancel(); signals?.Dispose(); screenNotice.Dispose(); ScreenTools.Dispose(); http.Dispose(); shutdown.Dispose(); }
 }

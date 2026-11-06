@@ -100,7 +100,8 @@ public static class Program
         var stopListener = ThreadPool.RegisterWaitForSingleObject(stopRequest, (_, _) => app.Dispatcher.BeginInvoke(() => Quit(true)), null, Timeout.Infinite, false);
         var showListener = ThreadPool.RegisterWaitForSingleObject(showRequest, (_, _) => app.Dispatcher.BeginInvoke(statusWindow.Open), null, Timeout.Infinite, false);
         menu.Items.Add("打开班级看板", null, (_, _) => statusWindow.Open());
-        menu.Items.Add("课堂工具（点名 / 分组 / 倒计时）", null, (_, _) => toolsWindow.Open());
+        menu.Items.Add("课堂工具（名单 / 积分 / 屏幕工具）", null, (_, _) => toolsWindow.Open());
+        menu.Items.Add("关闭课堂浮层与钉图", null, (_, _) => engine.ScreenTools.CloseAll());
         menu.Items.Add("立即同步", null, (_, _) => engine.RequestSync());
         menu.Items.Add("关闭醒目提醒", null, (_, _) => engine.DismissNotice());
         menu.Items.Add("本机暂停展示", null, (_, _) => engine.LocalPause(true));
@@ -138,7 +139,7 @@ public static class Program
             else if (e.Reason is Microsoft.Win32.SessionSwitchReason.SessionUnlock or Microsoft.Win32.SessionSwitchReason.ConsoleConnect or Microsoft.Win32.SessionSwitchReason.RemoteConnect)
                 app.Dispatcher.BeginInvoke(() => engine.SessionChanged(false));
         };
-        EventHandler displayChanged = (_, _) => app.Dispatcher.BeginInvoke(engine.RequestSync);
+        EventHandler displayChanged = (_, _) => app.Dispatcher.BeginInvoke(() => { engine.ScreenTools.CloseAll(); engine.RequestSync(); });
         Microsoft.Win32.UserPreferenceChangedEventHandler preferenceChanged = (_, e) => {
             // 设置壁纸本身也产生 Desktop 通知，忽略该类别，防止触发自我重绘循环。
             if(e.Category is Microsoft.Win32.UserPreferenceCategory.Accessibility or Microsoft.Win32.UserPreferenceCategory.Color or Microsoft.Win32.UserPreferenceCategory.General or Microsoft.Win32.UserPreferenceCategory.VisualStyle) app.Dispatcher.BeginInvoke(engine.RequestSync);
@@ -169,7 +170,7 @@ public static class Program
     }
     internal static Window ToolsWindow(Engine engine)
     {
-        var window = new AppWindow("课堂工具", 880, 780) { ReduceMaterial = engine.State.ReduceEffects };
+        var window = new AppWindow("课堂工具", 1040, 840) { ReduceMaterial = engine.State.ReduceEffects };
         window.SetBody(new ClassroomToolsPanel(engine)); return window;
     }
 

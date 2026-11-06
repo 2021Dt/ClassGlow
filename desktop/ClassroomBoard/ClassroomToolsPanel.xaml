@@ -6,7 +6,14 @@
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <StackPanel Margin="0,0,0,18">
    <TextBlock Text="课堂工具" Style="{StaticResource GlowHeading}" FontSize="26"/>
-   <TextBlock Text="点名、抽签、分组，和随手可开的倒计时。" Style="{StaticResource GlowHint}" Margin="0,6,0,0"/>
+   <TextBlock Text="名单、课堂活动与讲课工具，离线也能使用。" Style="{StaticResource GlowHint}" Margin="0,6,0,0"/>
+   <WrapPanel Margin="0,10,0,0">
+    <ComboBox x:Name="ClassSelector" Width="210" DisplayMemberPath="Name" SelectedValuePath="Id" SelectionChanged="ClassSelector_Changed" Margin="0,0,10,0" AutomationProperties.Name="当前本地班级名单"/>
+    <ui:Button Content="新增班级" Click="AddClass_Click" Style="{StaticResource GlowQuiet}"/>
+    <ui:Button Content="改名" Click="RenameClass_Click" Style="{StaticResource GlowQuiet}"/>
+    <ui:Button Content="删除班级" Click="DeleteClass_Click" Style="{StaticResource GlowQuiet}"/>
+    <ui:Button Content="本次缺席" Click="Absence_Click" Style="{StaticResource GlowSecondary}"/>
+   </WrapPanel>
   </StackPanel>
   <TabControl x:Name="ToolTabs" Grid.Row="1" Background="Transparent" BorderThickness="0" Padding="0,14,0,0">
    <TabItem Header="抽签与分组">
@@ -16,8 +23,9 @@
       <StackPanel>
        <TextBlock Text="名单或签条" Style="{StaticResource GlowLabel}" FontWeight="SemiBold"/>
        <TextBlock Text="一行一项，可填写姓名、学号或题目。同名学生请附学号；完全相同的条目会合并。" Style="{StaticResource GlowHint}" Margin="0,8,0,10"/>
-       <TextBox x:Name="RosterInput" Height="240" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Padding="12" MaxLength="30500" AutomationProperties.Name="名单或签条，一行一项" TextChanged="RosterInput_Changed"/>
+       <TextBox x:Name="RosterInput" Height="210" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Padding="12" MaxLength="30500" AutomationProperties.Name="名单或签条，一行一项" TextChanged="RosterInput_Changed"/>
        <WrapPanel Margin="0,12,0,4">
+        <ui:Button Content="导入文件…" Style="{StaticResource GlowSecondary}" Click="ImportRoster_Click"/>
         <ui:Button x:Name="SaveRosterButton" Content="保存并使用" Style="{StaticResource GlowPrimary}" Click="SaveRoster_Click"/>
         <ui:Button Content="清空名单" Style="{StaticResource GlowQuiet}" Click="ClearRoster_Click"/>
        </WrapPanel>
@@ -45,14 +53,15 @@
         <TextBlock Text="组" Style="{StaticResource GlowLabel}" VerticalAlignment="Center" Margin="8,0,12,0"/>
         <ui:Button x:Name="GroupButton" Content="生成分组" Style="{StaticResource GlowSecondary}" Click="Group_Click"/>
        </WrapPanel>
-       <TextBlock Text="使用完整名单，每组人数最多相差 1 人，不影响抽签轮次。" Style="{StaticResource GlowHint}" Margin="0,8,0,10"/>
+       <TextBlock Text="跳过本次缺席，每组人数最多相差 1 人，不影响抽签轮次。" Style="{StaticResource GlowHint}" Margin="0,8,0,10"/>
        <Border Style="{StaticResource GlowCard}" Padding="16">
         <StackPanel>
          <TextBlock x:Name="ResultTitle" Text="抽取和分组结果" Style="{StaticResource GlowHint}" Margin="0,0,0,8"/>
-         <TextBox x:Name="Results" Text="先保存一份名单" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="180" FontSize="28" Background="Transparent" BorderThickness="0" Padding="0" AutomationProperties.Name="抽取和分组结果"/>
+         <TextBox x:Name="Results" Text="先保存一份名单" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Height="140" FontSize="28" Background="Transparent" BorderThickness="0" Padding="0" AutomationProperties.Name="抽取和分组结果"/>
         </StackPanel>
        </Border>
        <ui:Button x:Name="CopyButton" Content="复制结果" Style="{StaticResource GlowQuiet}" HorizontalAlignment="Left" IsEnabled="False" Margin="0,8,0,0" Click="Copy_Click"/>
+       <ui:Button x:Name="SendGroupsButton" Content="将分组送到积分板" Style="{StaticResource GlowSecondary}" HorizontalAlignment="Left" IsEnabled="False" Click="SendGroups_Click"/>
       </StackPanel>
      </Grid>
     </ScrollViewer>

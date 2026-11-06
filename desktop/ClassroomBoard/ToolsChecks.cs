@@ -9,11 +9,12 @@ using Color = System.Windows.Media.Color;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using TextBox = System.Windows.Controls.TextBox;
+using Brushes = System.Windows.Media.Brushes;
 
 namespace ClassroomBoard;
 
 /// <summary>名单、抽取不变量与实际面板操作；所有数据和输出均在隔离目录。</summary>
-public static class ToolsChecks
+public static partial class ToolsChecks
 {
     private static void Require(bool condition, string detail) { if (!condition) throw new InvalidOperationException(detail); }
     private static void Reject(Action action) { try { action(); } catch (ArgumentException) { return; } throw new InvalidOperationException("无效输入没有被拒绝"); }
@@ -173,7 +174,7 @@ public static class ToolsChecks
         string output = Path.GetFullPath(args.SkipWhile(a => a != "--output").Skip(1).FirstOrDefault() ?? Path.Combine(Path.GetTempPath(), "ClassGlow-tools-check")); Directory.CreateDirectory(output);
         var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown }; AppWindow.InitializeTheme();
         app.Dispatcher.InvokeAsync(async () => {
-            var results = new JsonArray(); await Cases(output, results); bool passed = results.All(c => c.Flag("passed"));
+            var results = new JsonArray(); await Cases(output, results); await ToolkitCases(output, results); bool passed = results.All(c => c.Flag("passed"));
             File.WriteAllText(Path.Combine(output, "result.json"), new JsonObject { ["passed"] = passed, ["cases"] = results, ["physicalWallpaperModified"] = false, ["realUserStateModified"] = false }.ToJsonString(new() { WriteIndented = true })); app.Shutdown(passed ? 0 : 1);
         });
         return app.Run();
@@ -184,7 +185,8 @@ public static class ToolsChecks
         var app = new System.Windows.Application(); AppWindow.InitializeTheme();
         using var fixture = new Fixture(output, "preview");
         fixture.Engine.SaveLocalRoster("林同学 01\n林同学 02\n陈同学 03\n王同学 04\n周同学 05\n许同学 06\n郑同学 07\n何同学 08");
-        var window = new AppWindow("课堂工具 · 隔离预览", 880, 780) { ReduceMaterial = true };
+        fixture.Engine.ScreenTools.Capture = _ => ToolUi.Render(new System.Windows.Controls.Border { Background = Brushes.White, Child = new System.Windows.Controls.TextBlock { Text = "隔离测试画面 · 没有读取桌面\n1 + 2 = 3", FontSize = 36, Foreground = Brushes.RoyalBlue, Padding = new Thickness(40) } }, 640, 360);
+        var window = new AppWindow("课堂工具 · 隔离预览", 1040, 840) { ReduceMaterial = true };
         window.SetBody(new ClassroomToolsPanel(fixture.Engine)); return app.Run(window);
     }
 }

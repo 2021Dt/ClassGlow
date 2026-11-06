@@ -7,8 +7,11 @@ public sealed class LocalClassroomTools
 {
     private string[] roster = [];
     private readonly HashSet<string> drawn = new(StringComparer.Ordinal);
+    private HashSet<string> excluded = new(StringComparer.Ordinal);
     public IReadOnlyList<string> Roster => Array.AsReadOnly(roster);
-    public int Remaining => roster.Length - drawn.Count;
+    public int Remaining => roster.Count(s => !drawn.Contains(s) && !excluded.Contains(s));
+    public int PresentCount => roster.Count(s => !excluded.Contains(s));
+    public void SetExcluded(IEnumerable<string> names) => excluded = names.ToHashSet(StringComparer.Ordinal);
     public LocalClassroomTools(IEnumerable<string>? entries = null) => Replace(entries ?? []);
 
     public static string[] Parse(string text)
@@ -24,7 +27,7 @@ public sealed class LocalClassroomTools
         ResetRound();
     }
     public void ResetRound() => drawn.Clear();
-    private static void Shuffle(string[] values)
+    internal static void Shuffle(string[] values)
     {
         for (int i = values.Length - 1; i > 0; i--) {
             int other = RandomNumberGenerator.GetInt32(i + 1);
@@ -33,7 +36,7 @@ public sealed class LocalClassroomTools
     }
     public string[] Draw(int count, bool noRepeat)
     {
-        var available = roster.Where(s => !noRepeat || !drawn.Contains(s)).ToArray();
+        var available = roster.Where(s => !excluded.Contains(s) && (!noRepeat || !drawn.Contains(s))).ToArray();
         if (count < 1 || count > 50) throw new ArgumentException("每次可抽取 1–50 项。");
         if (count > available.Length) throw new ArgumentException(noRepeat ? $"本轮剩余 {available.Length} 项，请减少数量或开始新一轮。" : $"名单只有 {available.Length} 项，请减少抽取数量。");
         Shuffle(available);
@@ -43,8 +46,8 @@ public sealed class LocalClassroomTools
     }
     public string[][] Group(int count)
     {
-        if (count < 2 || count > 50 || count > roster.Length) throw new ArgumentException("组数须为 2–50，且不能超过名单人数。");
-        var shuffled = roster.ToArray(); Shuffle(shuffled);
+        if (count < 2 || count > 50 || count > PresentCount) throw new ArgumentException("组数须为 2–50，且不能超过到场人数。");
+        var shuffled = roster.Where(s => !excluded.Contains(s)).ToArray(); Shuffle(shuffled);
         var groups = Enumerable.Range(0, count).Select(_ => new List<string>()).ToArray();
         for (int i = 0; i < shuffled.Length; i++) groups[i % count].Add(shuffled[i]);
         return groups.Select(g => g.ToArray()).ToArray();
