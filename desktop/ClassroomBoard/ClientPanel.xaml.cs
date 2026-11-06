@@ -13,15 +13,16 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
 {
     private readonly Engine engine;
     private readonly bool preview;
+    private readonly Action? openTools;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private bool pairing, setup, preferencesLoaded;
     private string page = "", displayedQr = "";
     private sealed record MonitorOption(int Index, string Label);
     private bool Bound => engine.State.BindingId.Length > 0;
 
-    public ClientPanel(Engine engine, bool preview = false)
+    public ClientPanel(Engine engine, bool preview = false, Action? openTools = null)
     {
-        this.engine = engine; this.preview = preview; setup = !Bound || engine.State.SetupCompleted == false;
+        this.engine = engine; this.preview = preview; this.openTools = openTools; setup = !Bound || engine.State.SetupCompleted == false;
         InitializeComponent();
         ServerInput.Text = engine.State.Server;
         ShowPage(setup ? Bound ? "display" : "connect" : "home");
@@ -197,6 +198,7 @@ public partial class ClientPanel : System.Windows.Controls.UserControl
         engine.RequestSync(); Tell("已请求同步");
     }
     private void Settings_Click(object sender, RoutedEventArgs e) { setup = false; ShowPage("display"); }
+    private void Tools_Click(object sender, RoutedEventArgs e) { if (!PreviewOnly()) openTools?.Invoke(); }
     private void Binding_Click(object sender, RoutedEventArgs e) { setup = !Bound; ShowPage("connect"); }
     private void Pause_Click(object sender, RoutedEventArgs e)
     {

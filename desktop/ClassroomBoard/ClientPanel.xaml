@@ -72,6 +72,7 @@
       </StackPanel>
      </Border>
      <WrapPanel HorizontalAlignment="Center" Margin="0,14,0,0">
+      <ui:Button Content="课堂工具" Style="{StaticResource GlowSecondary}" Click="Tools_Click" />
       <ui:Button Content="展示设置" Style="{StaticResource GlowQuiet}" Click="Settings_Click" />
       <ui:Button Content="绑定信息" Style="{StaticResource GlowQuiet}" Click="Binding_Click" />
       <ui:Button Content="隐私说明" Style="{StaticResource GlowQuiet}" Click="Privacy_Click" />

@@ -14,6 +14,8 @@ public sealed class DeviceAuthorizationException(string message) : Exception(mes
 public sealed class Engine : IDisposable
 {
     public ClientState State { get; }
+    public LocalClassroomTools Tools { get; }
+    public bool LocalCountdownActive => screenNotice.ActiveId.StartsWith("local-countdown:", StringComparison.Ordinal);
     public bool HasWallpaperConflict(bool refresh = false) => wallpaper.HasConflict(refresh);
     public string Status => State.EnableWallpaper && !State.LocalPaused && !State.RemotePaused && HasWallpaperConflict() ? "请先退出 Wallpaper Engine" : State.Error.Length > 0 ? State.Error : State.ApplyState switch { "applied" => "看板运行中", "paused" => "看板已暂停", "deferred" => sessionLocked ? "等待解锁后更新" : "等待全屏课件结束或桌面恢复后更新", _ => "等待同步或启用展示" };
     private const string ConflictMessage = "其他壁纸软件正在运行，请在教室电脑退出后恢复展示";
@@ -54,6 +56,7 @@ public sealed class Engine : IDisposable
         store = stateStore; this.listenForSignals = listenForSignals;
         http = new(transport ?? new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(8) };
         wallpaper = desktop ?? new Wallpaper(); screenNotice = notices ?? new ScreenNotice(); State = initial ?? store.Load();
+        Tools = new(State.LocalRoster);
         clock = new(timeProvider ?? TimeProvider.System, State.ClockOffset);
         contactAge = State.LastContact > 0 ? Math.Max(0, Utc - State.LastContact) : double.PositiveInfinity;
         State.ClockUncertain = IsTimeUncertain(Utc, State.LastContact); renderer = new(store.DirectoryPath); glass = new(store.DirectoryPath);
@@ -162,7 +165,7 @@ public sealed class Engine : IDisposable
     }
     public void LocalPause(bool paused)
     {
-        if (paused) screenNotice.Dismiss();
+        if (paused && !LocalCountdownActive) screenNotice.Dismiss();
         State.LocalControlEpoch++; State.LocalPaused = paused;
         State.ManualUntil=0; State.AutoPageStartedAt=Clock.ToUnixTimeSeconds();
         if (!paused) State.RemotePaused = false;
@@ -188,7 +191,7 @@ public sealed class Engine : IDisposable
         displayBusy = true;
         try {
             State.LastDisplayTick = Utc;
-            if (!State.EnableWallpaper || State.LocalPaused || State.RemotePaused || sessionLocked) screenNotice.Dismiss();
+            if (sessionLocked || !LocalCountdownActive && (!State.EnableWallpaper || State.LocalPaused || State.RemotePaused)) screenNotice.Dismiss();
             if (reportedNotice != screenNotice.ActiveId) { reportedNotice = screenNotice.ActiveId; nextHeartbeat = 0; }
             if (State.PendingRestore && State.EnableWallpaper && SafeToApply() && renderGate.CurrentCount > 0) {
                 try { RestoreWallpaper(); State.PendingRestore = false; Save(); }
@@ -331,6 +334,35 @@ public sealed class Engine : IDisposable
         report["availability"] = availability; report["imageBase64"] = image;
         await Request("/device/display", "POST", report);
     }
+    public void SaveLocalRoster(string text)
+    {
+        if (stopping) throw new InvalidOperationException("程序正在退出。");
+        string[] parsed = LocalClassroomTools.Parse(text);
+        var previous = State.LocalRoster; State.LocalRoster = parsed.ToList();
+        try { Save(); } catch { State.LocalRoster = previous; throw; }
+        Tools.Replace(parsed);
+    }
+    public void StartLocalCountdown(int seconds, string label, bool card = true)
+    {
+        if (stopping || sessionLocked) throw new InvalidOperationException("请在解锁后启动倒计时。");
+        if (seconds is < 1 or > 3600) throw new ArgumentException("倒计时须为 1 秒至 60 分钟。");
+        string message = string.IsNullOrWhiteSpace(label) ? "专注完成当前任务" : label.Trim();
+        if (message.Length > 60 || message.Any(char.IsControl)) throw new ArgumentException("任务说明最多 60 个字符，不能包含换行或制表符。");
+        var monitor = wallpaper.Read(State.MonitorIndex);
+        var now = Clock;
+        long previousEpoch = State.LocalControlEpoch; State.LocalControlEpoch++;
+        try { Save(); } catch { State.LocalControlEpoch = previousEpoch; throw; }
+        screenNotice.Show(new JsonObject {
+            ["id"] = "local-countdown:" + Guid.NewGuid().ToString("N"),
+            ["notice"] = new JsonObject {
+                ["mode"] = "countdown", ["message"] = message, ["tone"] = "blue",
+                ["endsAt"] = now.ToUnixTimeMilliseconds() / 1000d + seconds,
+                ["style"] = new JsonObject { ["surface"] = card ? "card" : "fullscreen", ["position"] = "center" }
+            }
+        }, monitor.Rect, now);
+        nextHeartbeat = 0;
+    }
+    public void StopLocalCountdown() { if (LocalCountdownActive) DismissNotice(); }
     public void DismissNotice() { screenNotice.Dismiss(); State.LocalControlEpoch++; nextHeartbeat = 0; Save(); }
     private string Group(string action) => action == "sync" ? "sync" : action is "pause" or "resume" ? "pause" : action is "notice" or "stop_notice" ? "notice" : "page";
     private async Task Execute(JsonObject command)
@@ -363,7 +395,7 @@ public sealed class Engine : IDisposable
                 // 写入执行意图后再产生物理效果；崩溃后不重复开始同一命令。
                 State.GroupSeq[group] = sequence; Save();
                 if (action == "notice") screenNotice.Show(command, wallpaper.Read(State.MonitorIndex).Rect, Clock);
-                else if (action == "stop_notice" || action == "pause") screenNotice.Dismiss();
+                else if (action is "stop_notice" or "pause" && !LocalCountdownActive) screenNotice.Dismiss();
                 if (action == "pause") { bool previous = State.RemotePaused; State.RemotePaused = true; try { RestoreWallpaper(); } catch { State.RemotePaused = previous; throw; } State.ApplyState = "paused"; State.ManualUntil=0; }
                 else if (action == "resume") {
                     bool oldRemotePause = State.RemotePaused;
@@ -476,7 +508,7 @@ public sealed class Engine : IDisposable
             ["pageSetId"] = State.PageSetId, ["page"] = State.Page, ["pageCount"] = State.PageCount, ["manualUntil"] = State.ManualUntil,
             ["effectiveTheme"] = State.EffectiveTheme, ["effectiveMaterial"] = State.EffectiveMaterial, ["materialReason"] = State.MaterialReason,
             ["renderedAt"] = State.RenderedAt, ["error"] = State.Error,
-            ["activeNoticeId"] = screenNotice.ActiveId, ["noticeEndsAt"] = screenNotice.EndsAt };
+            ["activeNoticeId"] = LocalCountdownActive ? "" : screenNotice.ActiveId, ["noticeEndsAt"] = LocalCountdownActive ? 0 : screenNotice.EndsAt };
     }
     public void RestoreWallpaper()
     {

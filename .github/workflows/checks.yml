@@ -51,3 +51,4 @@ jobs:
       - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --self-test --output .qa/desktop
       - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --reliability-check --output .qa/reliability
       - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --clock-check --output .qa/clock
+      - run: dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/win-x64/ClassroomBoard.dll --tools-check --output .qa/tools

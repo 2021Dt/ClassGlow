@@ -24,6 +24,8 @@ public static class Program
         if (args.Contains("--self-test")) return SelfTest.Run(args);
         if (args.Contains("--reliability-check")) return ReliabilityChecks.Run(args);
         if (args.Contains("--clock-check")) return ClockChecks.Run(args);
+        if (args.Contains("--tools-check")) return ToolsChecks.Run(args);
+        if (args.Contains("--tools-preview")) return ToolsChecks.Preview(args);
         if (args.Contains("--network-self-test")) return SelfTest.Network(args).GetAwaiter().GetResult();
         if (args.Contains("--pairing-check")) return SelfTest.Pairing(args).GetAwaiter().GetResult();
         if (args.Contains("--integration-test")) return SelfTest.Integration(args).GetAwaiter().GetResult();
@@ -77,7 +79,8 @@ public static class Program
         using var trayIcon = AppWindow.TrayIcon();
         using var tray = new Forms.NotifyIcon { Icon = trayIcon, Text = "班级看板", Visible = true };
         using var menu = new Forms.ContextMenuStrip();
-        using var statusWindow = new TrayWindowHost(() => StatusWindow(engine));
+        using var toolsWindow = new TrayWindowHost(() => ToolsWindow(engine));
+        using var statusWindow = new TrayWindowHost(() => StatusWindow(engine, toolsWindow.Open));
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         bool exiting = false, exitingWithError = false;
         async void Quit(bool forUninstall)
@@ -90,13 +93,14 @@ public static class Program
                 try { engine.RestoreWallpaper(); }
                 catch (Exception e) when (e is IOException or System.Runtime.InteropServices.COMException or UnauthorizedAccessException) { AppPaths.QuietLog("runtime.log", e.GetType().Name); }
             }
-            tray.Visible = false; statusWindow.Dispose(); app.Shutdown(exitingWithError ? 1 : 0);
+            tray.Visible = false; statusWindow.Dispose(); toolsWindow.Dispose(); app.Shutdown(exitingWithError ? 1 : 0);
         }
         stopAfterUiFailure = () => { exitingWithError = true; Quit(false); };
         using var stopRequest = new EventWaitHandle(false, EventResetMode.AutoReset, AppPaths.StopEventName);
         var stopListener = ThreadPool.RegisterWaitForSingleObject(stopRequest, (_, _) => app.Dispatcher.BeginInvoke(() => Quit(true)), null, Timeout.Infinite, false);
         var showListener = ThreadPool.RegisterWaitForSingleObject(showRequest, (_, _) => app.Dispatcher.BeginInvoke(statusWindow.Open), null, Timeout.Infinite, false);
         menu.Items.Add("打开班级看板", null, (_, _) => statusWindow.Open());
+        menu.Items.Add("课堂工具（点名 / 分组 / 倒计时）", null, (_, _) => toolsWindow.Open());
         menu.Items.Add("立即同步", null, (_, _) => engine.RequestSync());
         menu.Items.Add("关闭醒目提醒", null, (_, _) => engine.DismissNotice());
         menu.Items.Add("本机暂停展示", null, (_, _) => engine.LocalPause(true));
@@ -158,10 +162,15 @@ public static class Program
         Microsoft.Win32.SystemEvents.UserPreferenceChanged -= preferenceChanged;
         engine.Dispose(); return exitCode;
     }
-    private static Window StatusWindow(Engine engine)
+    private static Window StatusWindow(Engine engine, Action openTools)
     {
         var window = new AppWindow("教室电脑") { ReduceMaterial = engine.State.ReduceEffects };
-        window.SetBody(new ClientPanel(engine)); return window;
+        window.SetBody(new ClientPanel(engine, openTools: openTools)); return window;
+    }
+    internal static Window ToolsWindow(Engine engine)
+    {
+        var window = new AppWindow("课堂工具", 880, 780) { ReduceMaterial = engine.State.ReduceEffects };
+        window.SetBody(new ClassroomToolsPanel(engine)); return window;
     }
 
 }

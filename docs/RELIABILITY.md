@@ -1,6 +1,12 @@
 # 可靠性、验证与发布
 
-当前版本由根目录 `release.json` 定义。0.4.16 补充桌面时钟修复；此前的数据、事务、缓存和发布优化继续保留。现场验收保持单独记录。
+当前版本由根目录 `release.json` 定义。0.4.17 增加本地课堂工具，保留 0.4.16 的桌面时钟修复及此前的数据、事务、缓存和发布优化。现场验收保持单独记录。
+
+## 本地课堂工具（0.4.17）
+
+随机点名、批量抽签、均衡分组直接在客户端运行。名单经过空行、重复项与大小校验，按现有 DPAPI 状态存储；失败保存不会推进内存名单。不重复抽签在候选不足时拒绝操作，不自动重开轮次；分组使用完整名单，保持每人恰好一组、人数差不超过一，不改变抽签轮次。名单不进入心跳、快照回传或诊断。
+
+本地倒计时复用既有 `ScreenNotice`，补充首页和托盘入口。它可在未绑定、离线、关闭壁纸或暂停壁纸时启动，不改写壁纸。本机计时不作为服务器命令回报；本地与远程的停止入口各自处理自己的提醒，锁屏和退出统一清理。新提醒会替换已有提醒窗口，现场启动也推进本机操作世代，使旧的远程命令无法随后覆盖现场意图。
 
 ## 桌面时钟（0.4.16）
 
@@ -74,6 +80,7 @@ dotnet build desktop/ClassroomBoard/ClassroomBoard.csproj -c Release
 dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --self-test --output .qa/desktop
 dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --reliability-check --output .qa/reliability
 dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --clock-check --output .qa/clock
+dotnet desktop/ClassroomBoard/bin/Release/net10.0-windows/ClassroomBoard.dll --tools-check --output .qa/tools
 uv run python -m scripts.verify_client
 uv run python -m scripts.load_check
 ```
