@@ -16,7 +16,7 @@
 | --- | --- |
 | 入口 | `https://teacher.dgplus.vip/`；客户端服务地址 `https://teacher.dgplus.vip/api/` |
 | 服务器与代码 | `106.53.47.8`；`/opt/classglow`；跟踪 GitHub `main` |
-| 最近应用发布记录 | 0.4.17，本地课堂工具与倒计时入口，包含 0.4.16 时钟修复；稳定标签 `v0.4.17`，应用提交 `2b64e9e`，准确部署记录通过 `sudo classglow status` 查看 |
+| 最近应用发布记录 | 0.4.18，离线课堂工具箱，保留既有本地倒计时和时钟修复；稳定标签 `v0.4.18`，应用提交 `42e803c`，准确部署记录通过 `sudo classglow status` 查看 |
 | 请求链路 | 宿主机 Nginx HTTPS → `127.0.0.1:18080` → Web 容器 Caddy → 内网 API |
 | 数据 | SQLite `/app/data/kanban.db`，位于 `classroom-board_app_data` 卷 |
 | 配置 | `/opt/classglow/deploy/.env`，由 root 管理，权限 0600，不进入 Git |
@@ -24,9 +24,19 @@
 | Git 网络 | 仅本仓库 `.git/config` 的 `http.proxy` 使用服务器现有 `http://127.0.0.1:7890`；直连 GitHub 超时，现有代理可正常读取 main |
 | 镜像构建 | 使用 Docker 官方 ECR 镜像；`KANBAN_BUILD_NETWORK=host` 仅用于构建，运行时仍为隔离网络 |
 | HTTPS | 沿用宿主机 Certbot；本次证书到期日 2027-02-01，续期由原有定时器处理 |
-| Windows 发布 | 0.4.17 当前用户安装包，位于 `.deploy/downloads`，下载与校验值见下方本次发布记录 |
+| Windows 发布 | 0.4.18 当前用户安装包，位于 `.deploy/downloads`，下载与校验值见下方本次发布记录 |
 
 本次发布已验证首页、健康接口、客户端版本接口及安装包下载；无效凭证访问设备卸载接口返回 401。没有为生产环境创建默认管理员或演示数据。首次管理员由服务器菜单创建，网站不展示注册或安装入口。
+
+### 0.4.18 更新记录
+
+2026-11-06 北京时间 15:55，106 更新到稳定标签 `v0.4.18`、应用提交 `42e803ca1b8a04cfe94939dfe8af076cbf07150c`。Windows 与 Web/API 的 [远端 CI](https://github.com/2021Dt/ClassGlow/actions/runs/42183642325) 全部通过后发布。本版增加本地多班名单与文件导入、缺席排除、积分板、批注白板、聚光灯、遮挡、钉图、座位编排和任务轮值。服务端仅更新发布与下载信息，没有新增接口、数据库迁移或后台服务。
+
+在线备份为 `/app/data/backups/backup-before-deploy-20261106T075222Z-fbe197e7.db`，停写备份为 `/app/data/backups/backup-before-deploy-20261106T075454Z-78295a5a.db`，均为 0600、520,192 字节；配置备份为 `/opt/classglow/.deploy/env-before-0.4.18-20261106`。结构仍为 `f4859e63cb27`；账号 2、班级 1、成员关系 1、正式内容 3、修订 4、草稿 23、设备 4，与更新前一致。设备绑定及凭证摘要、同步世代保持；完整性、外键、API 健康、Nginx、自动更新和每日维护定时器检查通过。
+
+公网首页、版本接口、静态资源、未登录接口保护、Range 下载、390px 下载页和登录页检查通过，无页面错误。下载接口同时报告 `latestVersion=0.4.18`、`serverVersion=0.4.18`。Windows x64 [0.4.18 安装包](https://teacher.dgplus.vip/downloads/ClassGlow-0.4.18-win-x64-setup.exe) 大小 53,822,265 字节，SHA-256 为 `871f049a3f436d0e891a7ba1fb06082633c061618713169da834ee5b5a0e817d`；本地、服务器、发布清单和公网完整下载一致。
+
+现场人员先退出旧版托盘，覆盖安装到原目录，再手动打开并确认隐私说明 `2026-11-06.1`；旧名单、绑定和设置保留，不要先卸载。新版入口为客户端首页/托盘“课堂工具”。发布后客户设备仍为 0.4.11，展示状态 deferred；后续观察到快照 304 与心跳 200，无服务端 5xx。服务器升级不等于现场客户端升级，也不能替代现场时钟、多屏、触控和长期运行验收。
 
 ### 0.4.17 更新记录
 
